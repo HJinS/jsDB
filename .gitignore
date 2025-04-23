@@ -1,0 +1,10 @@
+# exclude .dSYM
+*.dSYM
+
+# include gitignore, cpp files
+!.gitignore
+!*.cpp
+
+main
+
+build
