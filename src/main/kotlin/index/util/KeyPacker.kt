@@ -10,46 +10,54 @@ import java.time.ZoneOffset
 import java.util.UUID
 
 /*
-* page로 넘어가게 되면 page 크기를 기준으로 고정 크기 buffer 사용 할 것
+* page 로 넘어가게 되면 page 크기를 기준으로 고정 크기 buffer 사용 할 것
 * */
 class KeyPacker {
-    private fun packKeyItem(key: Any?): ByteArray{
-        return when (key){
-            null -> byteArrayOf(0x00)
-            is Boolean -> byteArrayOf(0x01) + byteArrayOf(if (key) 1 else 0)
+    private fun packKeyItem(key: Any?, column: Column): ByteArray{
+        if(key == null) return byteArrayOf(0x00)
+        val packedKey = when (column.type){
+            ColumnType.BOOLEAN -> byteArrayOf(if (key as Boolean) 1 else 0)
 
-            is Byte -> byteArrayOf(0x01) + byteArrayOf(key)
+            ColumnType.BYTE -> byteArrayOf(key as Byte)
 
-            is Short -> byteArrayOf(0x01) + ByteBuffer.allocate(2).putShort(key).array()
-            is Int -> byteArrayOf(0x01) + ByteBuffer.allocate(4).putInt(key).array()
-            is Long -> byteArrayOf(0x01) + ByteBuffer.allocate(8).putLong(key).array()
+            ColumnType.SHORT -> ByteBuffer.allocate(2).putShort(key as Short).array()
+            ColumnType.INT -> encodeVarInt(key as Int)
+            ColumnType.LONG -> ByteBuffer.allocate(8).putLong(key as Long).array()
 
-            is Float -> byteArrayOf(0x01) + ByteBuffer.allocate(4).putFloat(key).array()
-            is Double -> byteArrayOf(0x01) + ByteBuffer.allocate(8).putDouble(key).array()
+            ColumnType.FLOAT -> ByteBuffer.allocate(4).putFloat(key as Float).array()
+            ColumnType.DOUBLE -> ByteBuffer.allocate(8).putDouble(key as Double).array()
 
-            is String -> {
-                val bytes = key.toByteArray(StandardCharsets.UTF_8)
-                byteArrayOf(0x01) + ByteBuffer.allocate(2).putShort(bytes.size.toShort()).array() + bytes
+            ColumnType.STRING -> {
+                val rawString = key as String
+                val bytes = column.collation?.getCollationKey(rawString)?.toByteArray() ?: rawString.toByteArray(StandardCharsets.UTF_8)
+                encodeVarInt(bytes.size) + bytes
             }
 
-            is LocalDate -> byteArrayOf(0x01) + ByteBuffer.allocate(4).putInt(key.toEpochDay().toInt()).array()
-            is LocalDateTime -> byteArrayOf(0x01) + ByteBuffer.allocate(8).putLong(key.toEpochSecond(ZoneOffset.UTC)).array()
-            is Instant -> byteArrayOf(0x01) + ByteBuffer.allocate(8).putLong(key.epochSecond).array()
+            ColumnType.LOCAL_DATE -> encodeVarInt((key as LocalDate).toEpochDay().toInt())
+            ColumnType.LOCAL_DATE_TIME -> ByteBuffer.allocate(8)
+                .putLong((key as LocalDateTime).toEpochSecond(ZoneOffset.UTC)).array()
+            ColumnType.INSTANT -> ByteBuffer.allocate(8).putLong((key as Instant).epochSecond).array()
 
-            is UUID -> byteArrayOf(0x01) + ByteBuffer.allocate(16)
-                .putLong(key.mostSignificantBits)
+            ColumnType.UUID -> ByteBuffer.allocate(16)
+                .putLong((key as UUID).mostSignificantBits)
                 .putLong(key.leastSignificantBits)
                 .array()
-            is ByteArray -> byteArrayOf(0x01) + ByteBuffer.allocate(4).putInt(key.size).array() + key
-            else -> throw java.lang.IllegalArgumentException("Unsupported type: ${key::class.simpleName}")
+            ColumnType.BYTES -> {
+                val bytes = key as ByteArray
+                encodeVarInt(bytes.size) + bytes
+            }
         }
+        return (byteArrayOf(0x01) + packedKey).invert(column.descending)
     }
-    fun pack(keyList: List<Any?>): ByteArray{
-        val buffer = ByteArrayOutputStream()
-        for (key in keyList){
-            val packed = packKeyItem(key)
-            buffer.write(packed)
-        }
-        return buffer.toByteArray()
+
+    fun pack(keyList: List<Any?>, schema: KeySchema): ByteArray{
+        require(keyList.size == schema.columns.size) { "Key values and schema column count mismatch" }
+        return buildList{
+            for (idx in keyList.indices){
+                val packed = packKeyItem(keyList[idx], schema.columns[idx])
+                addAll(packed.toList())
+            }
+        }.toByteArray()
     }
+
 }
