@@ -10,16 +10,12 @@ package index.btree
 * */
 class BTree (val name: String, val targetTable: String){
 
-    fun <T> insert(key: List<Any>){
-        ...
-    }
+    fun <T> insert(key: List<Any>) = 0
 
     /**
     * find node by keyIndex, value.
     * key from index metadata.
     * */
-    fun find(key): LeafNode {
-
-    }
+    fun find() = 0
 
 }

@@ -24,17 +24,20 @@ fun encodeVarInt(value: Int): ByteArray{
  * encode 역함수
  * shl: bit 값을 왼쪽으로 이동
  * */
-fun decodeVarInt(bytes: ByteArray, offset: Int = 0): Pair<Int, Int> {
+fun decodeVarInt(bytes: ByteArray, offset: Int = 0, descending: Boolean = false): Pair<Int, Int> {
     var result = 0
     var shift = 0
     var pos = offset
 
-    while (pos < bytes.size) {
-        val b = bytes[pos].toInt()
-        result = result or ((b and 0x7F) shl shift)
+    while (true) {
+        var byte = bytes[pos]
+        if (descending){
+            byte = (byte.toInt() xor 0xFF).toByte()
+        }
+        result = result or ((byte.toInt() and 0x7F) shl shift)
         shift += 7
         pos++
-        if (b and 0x80 == 0) break
+        if ((byte.toInt() and 0x80) == 0) break
     }
     return result to (pos - offset)
 }

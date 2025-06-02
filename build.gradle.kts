@@ -1,8 +1,15 @@
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    kotlin("jvm") version "1.8.10"
+    val kotlinVersion = "2.1.20"
+    kotlin("jvm") version kotlinVersion
     application
+}
+
+java {
+    toolchain{
+        languageVersion.set(JavaLanguageVersion.of(22))
+    }
 }
 
 group = "js.db"
@@ -13,16 +20,31 @@ repositories {
 }
 
 dependencies {
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:2.1.20")
+    implementation("org.slf4j:slf4j-api:2.0.13")
+    implementation("org.slf4j:slf4j-simple:2.0.13")
+    implementation("io.github.microutils:kotlin-logging:3.0.5")
     testImplementation(kotlin("test"))
+    testImplementation("org.junit.jupiter", "junit-jupiter", "5.6.2")
+    testImplementation("org.assertj", "assertj-core", "3.16.1")
 }
 
 tasks.test {
     useJUnitPlatform()
 }
 
-tasks.withType<KotlinCompile> {
-    kotlinOptions.jvmTarget = "1.8"
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_22)
+        // Optional: 자주 사용하는 설정 예시
+        freeCompilerArgs.addAll(
+            "-Xcontext-receivers",
+            "-Xjvm-default=all",
+        )
+    }
 }
+
+
 
 application {
     mainClass.set("MainKt")
