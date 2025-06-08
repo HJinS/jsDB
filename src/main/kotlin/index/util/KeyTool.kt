@@ -1,5 +1,6 @@
 package index.util
 
+import mu.KotlinLogging
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.time.Instant
@@ -12,6 +13,7 @@ import java.util.UUID
 * page 로 넘어가게 되면 page 크기를 기준으로 고정 크기 buffer 사용 할 것
 * */
 object KeyTool {
+    private val log = KotlinLogging.logger {}
     private fun packKeyItem(key: Any?, column: Column): ByteArray{
         if(key == null) return byteArrayOf(0x00)
         val packedKey = when (column.type){
@@ -54,66 +56,93 @@ object KeyTool {
         var offset = 0
 
         for (column in schema.columns){
-            if (offset >= bytes.size) break
-
-            if(bytes[offset++] == 0x00.toByte()) {
-                unpackedKeys.add(null)
-                continue
-            }
-
-            val raw = mutableListOf<Byte>()
-            while (offset < bytes.size && unpackedKeys.size < schema.columns.size){
-                raw.add(bytes[offset++])
-                if(
-                    column.type != ColumnType.BYTES &&
-                    column.type != ColumnType.STRING &&
-                    column.type != ColumnType.INT &&
-                    column.type != ColumnType.LOCAL_DATE
-                ) break // fixed-width types
-                // for VarInt-based, decode below
-            }
-
-            val restored = raw.toByteArray().invert(column.descending)
-
-            val value = when (column.type){
-                ColumnType.BOOLEAN -> restored[0] != 0.toByte()
-                ColumnType.BYTE -> restored[0]
-                ColumnType.SHORT -> ByteBuffer.wrap(restored).short
-                ColumnType.INT -> decodeVarInt(restored).first
-                ColumnType.LONG -> ByteBuffer.wrap(restored).long
-                ColumnType.FLOAT -> ByteBuffer.wrap(restored).float
-                ColumnType.DOUBLE -> ByteBuffer.wrap(restored).double
-
-                ColumnType.STRING -> {
-                    val (len, lenBytes) = decodeVarInt(restored)
-                    val strBytes = restored.copyOfRange(lenBytes, lenBytes + len)
-                    strBytes.toString(StandardCharsets.UTF_8)
-                }
-
-                ColumnType.LOCAL_DATE -> {
-                    val (days, _) = decodeVarInt(restored)
-                    LocalDate.ofEpochDay(days.toLong())
-                }
-
-                ColumnType.LOCAL_DATE_TIME -> {
-                    val seconds = ByteBuffer.wrap(restored).long
-                    LocalDateTime.ofEpochSecond(seconds, 0, ZoneOffset.UTC)
-                }
-
-                ColumnType.INSTANT -> Instant.ofEpochSecond(ByteBuffer.wrap(restored).long)
-
-                ColumnType.UUID -> {
-                    val bb = ByteBuffer.wrap(restored)
-                    UUID(bb.long, bb.long)
-                }
-                ColumnType.BYTES -> {
-                    val (len, lenBytes) = decodeVarInt(restored)
-                    restored.copyOfRange(lenBytes, lenBytes + len)
-                }
-            }
+            val (value, consumed) = unpackKeyItem(bytes, offset, column)
             unpackedKeys.add(value)
+            offset += consumed
+            log.info { "unpacked keys: $unpackedKeys" }
         }
         return unpackedKeys
+    }
+
+    fun unpackKeyItem(bytes: ByteArray, offset: Int, column: Column): Pair<Any?, Int> {
+        var position = offset
+        val nullFlag = bytes[position++]
+        if (nullFlag.toInt() == 0x00) return null to 1
+
+        val descending = column.descending
+        val columnType = column.type
+
+        fun readBytes(length: Int): ByteArray {
+            val slice = bytes.copyOfRange(position, position + length)
+            position += length
+            return slice.invert(descending)
+        }
+
+        val result: Any? = when (columnType){
+            ColumnType.BOOLEAN -> bytes[position++].toInt() != 0
+            ColumnType.BYTE -> bytes[position++]
+            ColumnType.SHORT -> {
+                val array = readBytes(2)
+                ByteBuffer.wrap(array).short
+            }
+            ColumnType.INT -> {
+                val (value, size) = decodeVarInt(bytes, position)
+                position += size
+                value
+            }
+            ColumnType.LONG -> {
+                val array = readBytes(8)
+                ByteBuffer.wrap(array).long
+            }
+            ColumnType.FLOAT -> {
+                val array = readBytes(4)
+                ByteBuffer.wrap(array).float
+            }
+            ColumnType.DOUBLE -> {
+                val array = readBytes(8)
+                ByteBuffer.wrap(array).double
+            }
+
+            ColumnType.STRING -> {
+                val (len, lenBytes) = decodeVarInt(bytes, position)
+                position += lenBytes
+                val strBytes = readBytes(len)
+
+                if (column.collation != null){
+                    "[CollationKey(${strBytes.joinToString(" ")})]"
+                } else{
+                    strBytes.toString(StandardCharsets.UTF_8)
+                }
+            }
+
+            ColumnType.LOCAL_DATE -> {
+                val (epochDay, lenBytes) = decodeVarInt(bytes, position)
+                position += lenBytes
+                LocalDate.ofEpochDay(epochDay.toLong())
+            }
+
+            ColumnType.LOCAL_DATE_TIME -> {
+                val array = readBytes(8)
+                LocalDateTime.ofEpochSecond(ByteBuffer.wrap(array).long, 0, ZoneOffset.UTC)
+            }
+
+            ColumnType.INSTANT -> {
+                val array = readBytes(8)
+                Instant.ofEpochSecond(ByteBuffer.wrap(array).long)
+            }
+
+            ColumnType.UUID -> {
+                val array = readBytes(16)
+                val bb = ByteBuffer.wrap(array)
+                UUID(bb.long, bb.long)
+            }
+            ColumnType.BYTES -> {
+                val (len, lenBytes) = decodeVarInt(bytes, position)
+                position += lenBytes
+                readBytes(len)
+            }
+        }
+        return result to (position - offset)
     }
 
     fun pack(keyList: List<Any?>, schema: KeySchema): ByteArray{
