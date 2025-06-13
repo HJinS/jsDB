@@ -1,12 +1,27 @@
 package index.util
 
+import mu.KotlinLogging
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.util.UUID
 
+
+/**
+ * Compare key of this, other
+ * this < other -> result < 0
+ * this == other -> result = 0
+ * this > other -> result > 0
+ * if descending=True -> result = result * (-1)
+ * */
 fun List<Any?>.compareUnpackedKey(otherKey: List<Any?>, schema: KeySchema): Int{
     for(idx in schema.columns.indices){
         val column = schema.columns[idx]
         val value1 = this[idx]
-        val value2 = otherKey[idx]
+        val value2 = otherKey.getOrNull(idx)
 
+        val logger = KotlinLogging.logger {}
+        logger.info { "value1: $value1 value2: $value2 classValue1: ${value1!!::class} classValue2: ${value2!!::class}" }
         val comparison = when{
             value1 == null && value2 == null -> 0
             value1 == null -> -1
@@ -23,7 +38,17 @@ fun List<Any?>.compareUnpackedKey(otherKey: List<Any?>, schema: KeySchema): Int{
                         val byte2 = value2 as ByteArray
                         byte1.zip(byte2).map { it.first.compareTo(it.second) }.firstOrNull { it != 0 } ?: (byte1.size-byte2.size)
                     }
-                    else -> (value1 as Comparable<Any>).compareTo(value2 as  Comparable<Any>)
+                    ColumnType.INT -> (value1 as Int).compareTo(value2 as Int)
+                    ColumnType.BYTE -> (value1 as Byte).compareTo(value2 as Byte)
+                    ColumnType.LONG -> (value1 as Long).compareTo(value2 as Long)
+                    ColumnType.LOCAL_DATE -> (value1 as LocalDate).compareTo(value2 as LocalDate)
+                    ColumnType.LOCAL_DATE_TIME -> (value1 as LocalDateTime).compareTo(value2 as LocalDateTime)
+                    ColumnType.UUID -> (value1 as UUID).compareTo(value2 as UUID)
+                    ColumnType.INSTANT -> (value1 as Instant).compareTo(value2 as Instant)
+                    ColumnType.FLOAT -> (value1 as Float).compareTo(value2 as Float)
+                    ColumnType.SHORT -> (value1 as Short).compareTo(value2 as Short)
+                    ColumnType.DOUBLE -> (value1 as Double).compareTo(value2 as Double)
+                    ColumnType.BOOLEAN -> (value1 as Boolean).compareTo(value2 as Boolean)
                 }
             }
         }
@@ -44,20 +69,21 @@ operator fun ByteArray.compareTo(other: ByteArray): Int {
 }
 
 fun ByteArray.comparePackedKey(other: ByteArray, schema: KeySchema): Int{
+    val logger = KotlinLogging.logger {}
     var offset1 = 0
     var offset2 = 0
     for (column in schema.columns){
         val byte1 = this[offset1]
-        val byte2 = other[offset2]
+        val byte2 = other.getOrElse(offset2) { it -> 0x00.toByte()}
 
         val isNull1 = byte1 == 0x00.toByte()
         val isNull2 = byte2 == 0x00.toByte()
         if (isNull1 && isNull2){
             offset1++
             offset2++
+            logger.info("log null && null: $offset1 $offset2")
             continue
         }
-
         if (isNull1 && !isNull2) return if (column.descending) 1 else -1
         if (!isNull1 && isNull2) return if (column.descending) -1 else 1
         offset1++
@@ -65,6 +91,8 @@ fun ByteArray.comparePackedKey(other: ByteArray, schema: KeySchema): Int{
 
         val (cmp, consumed1, consumed2) = comparePackedItem(this, offset1, other, offset2, column)
         if (cmp != 0) return cmp
+        logger.info("consumed = $consumed1 $consumed2")
+        logger.info("offset = $offset1 $offset2")
         offset1 += consumed1
         offset2 += consumed2
     }
@@ -78,9 +106,9 @@ fun comparePackedItem(bytes1: ByteArray, offset1: Int, bytes2: ByteArray, offset
 
     return when (column.type){
         ColumnType.INT -> {
-            val (value1, length1) = decodeVarInt(bytes1, offset1, column.descending)
-            val (value2, length2) = decodeVarInt(bytes2, offset2, column.descending)
-            Triple(value1.compareTo(value2), length1, length2)
+            val (_, length1) = decodeVarInt(bytes1, offset1, column.descending)
+            val (_, length2) = decodeVarInt(bytes2, offset2, column.descending)
+            Triple(bytes1.compareTo(bytes2), length1, length2)
         }
         ColumnType.STRING, ColumnType.BYTES -> {
             val (len1, lenBytes1) = decodeVarInt(bytes1, offset1, column.descending)
@@ -107,14 +135,12 @@ fun comparePackedItem(bytes1: ByteArray, offset1: Int, bytes2: ByteArray, offset
             val extractedBytes2 = extractBytes(bytes2, offset2, len)
             Triple(extractedBytes1.compareTo(extractedBytes2), len, len)
         }
-
         ColumnType.BOOLEAN, ColumnType.BYTE -> {
             val len = 1
             val extractedBytes1 = extractBytes(bytes1, offset1, len)
             val extractedBytes2 = extractBytes(bytes2, offset2, len)
             Triple(extractedBytes1.compareTo(extractedBytes2), len, len)
         }
-
         ColumnType.LOCAL_DATE -> {
             val (value1, length1) = decodeVarInt(bytes1, offset1, column.descending)
             val (value2, length2) = decodeVarInt(bytes2, offset2, column.descending)

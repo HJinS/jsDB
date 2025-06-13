@@ -1,6 +1,5 @@
 package index.util
 
-import mu.KotlinLogging
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -15,8 +14,6 @@ import java.util.*
 * INT, LONG, STRING, BOOLEAN, BYTE, SHORT, FLOAT, DOUBLE, LOCAL_DATE, LOCAL_DATE_TIME, INSTANT, UUID, BYTES
 * */
 class BTreeKeyPackingTest {
-    private val log = KotlinLogging.logger {}
-
     @Test
     @DisplayName("Given `field(int)`, when do pack and unpack, Then result will be same")
     fun `테스트_packing_unpacking_int`(){
@@ -296,7 +293,6 @@ class BTreeKeyPackingTest {
     @DisplayName("Given `field(boolean, float, uuid)`, when do pack and unpack, Then result will be same")
     fun `테스트_packing_unpacking_boolean_float_uuid`(){
         val value = listOf(true, 10.0f, UUID.randomUUID())
-        val collatorInstance = Collator.getInstance(Locale.US)
         val schema = KeySchema(
             listOf(
                 Column("isActive", ColumnType.BOOLEAN, descending = false),

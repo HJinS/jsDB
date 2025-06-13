@@ -29,15 +29,12 @@ fun decodeVarInt(bytes: ByteArray, offset: Int = 0, descending: Boolean = false)
     var shift = 0
     var pos = offset
 
-    while (true) {
-        var byte = bytes[pos]
-        if (descending){
-            byte = (byte.toInt() xor 0xFF).toByte()
-        }
-        result = result or ((byte.toInt() and 0x7F) shl shift)
+    while (pos < bytes.size) {
+        var byte = bytes[pos].toInt() and 0xFF
+        result = result or ((byte and 0x7F) shl shift)
+        pos ++
+        if ((byte and 0x80) == 0) break
         shift += 7
-        pos++
-        if ((byte.toInt() and 0x80) == 0) break
     }
     return result to (pos - offset)
 }
