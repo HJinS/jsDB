@@ -108,7 +108,7 @@ object KeyTool {
         }
     }
 
-    fun unpackKeyItem(bytes: ByteArray, offset: Int, column: Column): Pair<Any?, Int> {
+    private fun unpackKeyItem(bytes: ByteArray, offset: Int, column: Column): Pair<Any?, Int> {
         var position = offset
         val nullFlag = try { bytes[position++] } catch( exception: IndexOutOfBoundsException ) { throw exception}
         if (nullFlag.toInt() == 0x00) return null to 1
@@ -130,7 +130,7 @@ object KeyTool {
                 ByteBuffer.wrap(array).short
             }
             ColumnType.INT -> {
-                val (value, size) = decodeVarInt(bytes, position)
+                val (value, size) = decodeVarInt(bytes, position, descending = column.descending)
                 position += size
                 value
             }
@@ -160,7 +160,7 @@ object KeyTool {
             }
 
             ColumnType.LOCAL_DATE -> {
-                val (epochDay, lenBytes) = decodeVarInt(bytes, position)
+                val (epochDay, lenBytes) = decodeVarInt(bytes, position, descending = column.descending)
                 position += lenBytes
                 LocalDate.ofEpochDay(epochDay.toLong())
             }
