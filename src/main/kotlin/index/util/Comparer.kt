@@ -20,8 +20,6 @@ fun List<Any?>.compareUnpackedKey(otherKey: List<Any?>, schema: KeySchema): Int{
         val value1 = this[idx]
         val value2 = otherKey.getOrNull(idx)
 
-        val logger = KotlinLogging.logger {}
-        logger.info { "value1: $value1 value2: $value2 classValue1: ${value1!!::class} classValue2: ${value2!!::class}" }
         val comparison = when{
             value1 == null && value2 == null -> 0
             value1 == null -> -1
@@ -57,19 +55,21 @@ fun List<Any?>.compareUnpackedKey(otherKey: List<Any?>, schema: KeySchema): Int{
     return 0
 }
 
-// 사전식 정렬을 위한 바이트 배열 비교 (unsigned)
-operator fun ByteArray.compareTo(other: ByteArray): Int {
+/**
+ * 사전식 정렬을 위한 바이트 배열 비교 (unsigned)
+ * 0xFF: 0b11111111
+ * */
+fun ByteArray.compareTo(other: ByteArray, descending: Boolean=false): Int {
     val minLen = minOf(this.size, other.size)
     for (i in 0 until minLen) {
         val a = this[i].toInt() and 0xFF
         val b = other[i].toInt() and 0xFF
         if (a != b) return if (a < b) -1 else 1
     }
-    return this.size.compareTo(other.size)
+    return if(!descending) this.size.compareTo(other.size) else -this.size.compareTo(other.size)
 }
 
 fun ByteArray.comparePackedKey(other: ByteArray, schema: KeySchema): Int{
-    val logger = KotlinLogging.logger {}
     var offset1 = 0
     var offset2 = 0
     for (column in schema.columns){
@@ -81,7 +81,6 @@ fun ByteArray.comparePackedKey(other: ByteArray, schema: KeySchema): Int{
         if (isNull1 && isNull2){
             offset1++
             offset2++
-            logger.info("log null && null: $offset1 $offset2")
             continue
         }
         if (isNull1 && !isNull2) return if (column.descending) 1 else -1
@@ -91,8 +90,6 @@ fun ByteArray.comparePackedKey(other: ByteArray, schema: KeySchema): Int{
 
         val (cmp, consumed1, consumed2) = comparePackedItem(this, offset1, other, offset2, column)
         if (cmp != 0) return cmp
-        logger.info("consumed = $consumed1 $consumed2")
-        logger.info("offset = $offset1 $offset2")
         offset1 += consumed1
         offset2 += consumed2
     }
@@ -101,10 +98,8 @@ fun ByteArray.comparePackedKey(other: ByteArray, schema: KeySchema): Int{
 
 fun comparePackedItem(bytes1: ByteArray, offset1: Int, bytes2: ByteArray, offset2: Int, column: Column): Triple<Int, Int, Int>{
     fun extractBytes(bytes: ByteArray, offset: Int, length: Int): ByteArray{
-        logger.info { "offset: $offset length: $length bytes: $bytes" }
         return bytes.copyOfRange(offset, offset + length)
     }
-    logger.info { "columnType: ${column.type}" }
     return when (column.type){
         ColumnType.INT -> {
             val (_, length1) = decodeVarInt(bytes1, offset1, descending = column.descending)
@@ -116,7 +111,7 @@ fun comparePackedItem(bytes1: ByteArray, offset1: Int, bytes2: ByteArray, offset
             val (len2, lenBytes2) = decodeVarInt(bytes2, offset2)
             val extractedBytes1 = extractBytes(bytes1, offset1 + lenBytes1, len1)
             val extractedBytes2 = extractBytes(bytes2, offset2 + lenBytes2, len2)
-            Triple(extractedBytes1.compareTo(extractedBytes2), lenBytes1 + len1, lenBytes2 + len2)
+            Triple(extractedBytes1.compareTo(extractedBytes2, descending=column.descending), lenBytes1 + len1, lenBytes2 + len2)
         }
         ColumnType.LONG, ColumnType.DOUBLE, ColumnType.LOCAL_DATE_TIME, ColumnType.INSTANT -> {
             val len = 8
@@ -145,8 +140,8 @@ fun comparePackedItem(bytes1: ByteArray, offset1: Int, bytes2: ByteArray, offset
         ColumnType.LOCAL_DATE -> {
             val (value1, length1) = decodeVarInt(bytes1, offset1, descending = column.descending)
             val (value2, length2) = decodeVarInt(bytes2, offset2, descending = column.descending)
-            logger.info { "LocalDate: values: $value1 $value2 lengths: $length1 $length2" }
-            Triple(value1.compareTo(value2), length1, length2)
+            val result = value1.compareTo(value2)
+            Triple(if (!column.descending) result else -result , length1, length2)
         }
         ColumnType.UUID -> {
             val len = 16
