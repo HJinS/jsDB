@@ -1,5 +1,5 @@
 package index.btree
 
-class InternalNode(private val t: Int): Node(t) {
-    var pChild: MutableList<Node> = mutableListOf();
-}
+class InternalNode(
+    internal val children: MutableList<Node>
+): Node(false, mutableListOf())

@@ -16,3 +16,6 @@ data class Column(
 enum class ColumnType {
     INT, LONG, STRING, BOOLEAN, BYTE, SHORT, FLOAT, DOUBLE, LOCAL_DATE, LOCAL_DATE_TIME, INSTANT, UUID, BYTES
 }
+
+// degree = maxKeys
+val MAX_KEYS = 64

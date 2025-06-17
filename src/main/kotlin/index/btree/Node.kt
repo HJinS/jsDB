@@ -1,14 +1,13 @@
 package index.btree
 
+import index.util.MAX_KEYS
+
 /**
-* @param t: max degree(최대 자식 수)
-* @pra
-*
-* max key -> t - 1
+* @param keys: 노드의 키
 * */
-abstract class Node(
-    private val t: Int
+sealed class Node(
+    val isLeaf: Boolean,
+    private val keys: MutableList<ByteArray>
 ){
-    private var keys: MutableList<ByteArray> = mutableListOf()
-    fun isFull(): Boolean = keys.size > (t - 1)
+    fun isFull(): Boolean = keys.size > MAX_KEYS
 }

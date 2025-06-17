@@ -1,6 +1,7 @@
 package index.btree
 
-class LeafNode(private val t: Int): Node(t) {
-    var leftSibling: Node? = null
-    var rightSibling: Node? = null
-}
+class LeafNode(
+    internal val values: MutableList<Any?>,
+    internal var next: LeafNode? = null,
+    internal var prev: LeafNode? = null
+): Node(true, mutableListOf())
