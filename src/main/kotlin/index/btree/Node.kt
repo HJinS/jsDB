@@ -13,10 +13,11 @@ sealed class Node(
 
     fun insert(key: ByteArray, comparator: Comparator<ByteArray>){
         val idx = search(key, comparator)
-        keys.add(if(idx >= 0) idx else -(idx + 1), key)
+        keys.add(idx, key)
     }
 
     fun search(key: ByteArray, comparator: Comparator<ByteArray>): Int{
-        return keys.binarySearch(key, comparator)
+        val idx = keys.binarySearch(key, comparator)
+        return if(idx >= 0) idx else -(idx + 1)
     }
 }

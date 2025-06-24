@@ -7,6 +7,6 @@ class LeafNode(
 ): Node(true, mutableListOf()){
     fun insert(key: ByteArray, originalData: List<Any?> , comparator: Comparator<ByteArray>){
         val idx = search(key, comparator)
-        values.add(if(idx >= 0) idx else -(idx + 1), originalData)
+        values.add(idx, originalData)
     }
 }

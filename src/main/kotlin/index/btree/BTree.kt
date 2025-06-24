@@ -21,8 +21,23 @@ class BTree (val name: String, val targetTable: String, private val schema: KeyS
 
     /**
     * find node by keyIndex, value.
-    * key from index metadata.
+    * p1: k1 <= key < k2
+    * p2: k2 <= key < k3
+    * key <= nodeKey 인 첫 nodeKey 를 찾고 그 왼쪽 자식으로 간다
+    * 즉 searchKey 가 노드의 key 보다 작거나 같아야 한다.
+    * 왼쪽으로 가야(더 작은범위부터 찾아야) 모든 범위를 찾을 수 있다.
+    * 1, 5, 10 -> 3을 찾을 경우 5의 idx가 필요함
+    * 1, 5, 10 -> 5를 찾을 경우 5의 idx가 필요함
     * */
-    fun find() = 0
+    fun search(start: Node, key: ByteArray): LeafNode {
+        var node: Node = start
+        if(node.isLeaf) return node as LeafNode
+        do {
+            val searchResult = start.search(key, comparator)
+            node = node as InternalNode
+            node = node.moveToChild(searchResult)
+        } while(!node.isLeaf)
+        return node as LeafNode
+    }
 
 }

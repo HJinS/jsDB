@@ -6,4 +6,6 @@ package index.btree
  * */
 class InternalNode(
     private val children: MutableList<Node>
-): Node(false, mutableListOf())
+): Node(false, mutableListOf()) {
+    fun moveToChild(index: Int): Node = children[index]
+}
