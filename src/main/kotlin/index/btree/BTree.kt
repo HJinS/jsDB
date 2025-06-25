@@ -31,6 +31,13 @@ class BTree (
      * 3. split 이 필요한 경우에는 split 진행
      *  - leaf split 시에는 linked list 관리 필요
      *  - root split 시에는 높이 증가
+     *
+     * split
+     *  - 노드 둘로 쪼개기
+     *  - 부모의 자식 pointer upudate, promote key 찾아서 부모 노드로 승진
+     *  - promote key도 자식 노드에 그대로 남음(leaf노드에서 split 한 경우)
+     *  - internal node에서 split 한 경우에는 다름
+     *  - 부모 노드는 stack을 이용한 경로 추적
      * */
     fun insert(key: List<Any>) {
         val packedKey: ByteArray = KeyTool.pack(key, schema)
