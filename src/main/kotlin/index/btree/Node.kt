@@ -1,15 +1,16 @@
 package index.btree
 
-import index.util.MAX_KEYS
-
 /**
-* @param keys: 노드의 키
+ * @param isLeaf: leaf 노드 여부
+ * @param keys: 노드의 키
+ * @param maxKeys: 노드가 가질 수 있는 최대 key 개수
 * */
 sealed class Node(
     val isLeaf: Boolean,
-    private val keys: MutableList<ByteArray>
+    internal val keys: MutableList<ByteArray>,
+    internal val maxKeys: Int
 ){
-    fun isFull(): Boolean = keys.size > MAX_KEYS
+    fun isFull(): Boolean = keys.size > maxKeys
 
     fun insert(key: ByteArray, comparator: Comparator<ByteArray>){
         val idx = search(key, comparator)

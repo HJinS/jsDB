@@ -18,4 +18,4 @@ enum class ColumnType {
 }
 
 // degree = maxKeys
-val MAX_KEYS = 64
+const val MAX_KEYS = 64
