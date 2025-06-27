@@ -10,7 +10,7 @@ sealed class Node(
     internal val keys: MutableList<ByteArray>,
     internal val maxKeys: Int
 ){
-    fun isFull(): Boolean = keys.size > maxKeys
+    fun isOverflow(): Boolean = keys.size > maxKeys
 
     fun insert(key: ByteArray, comparator: Comparator<ByteArray>){
         val idx = search(key, comparator)
