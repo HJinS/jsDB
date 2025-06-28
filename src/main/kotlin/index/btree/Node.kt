@@ -1,5 +1,7 @@
 package index.btree
 
+import kotlin.math.floor
+
 /**
  * @param isLeaf: leaf 노드 여부
  * @param keys: 노드의 키
@@ -21,4 +23,15 @@ sealed class Node(
         val idx = keys.binarySearch(key, comparator)
         return if(idx >= 0) idx else -(idx + 1)
     }
+
+    internal fun splitKey(): MutableList<ByteArray>{
+        val keySize = keys.size
+        val promotionKeyIdx = promotionKeyIdx()
+        val splitKeys =  keys.takeLast(keySize - promotionKeyIdx - 1).toMutableList()
+        keys.subList(promotionKeyIdx+1, keySize).clear()
+        return splitKeys
+    }
+
+    fun promotionKeyIdx() = floor(keys.size.toDouble() / 2.0).toInt()
+    fun promotionKey() = keys[promotionKeyIdx()]
 }

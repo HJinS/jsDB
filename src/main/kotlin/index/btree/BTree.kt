@@ -7,6 +7,7 @@ import index.util.comparePackedKey
 import java.util.EmptyStackException
 import java.util.Stack
 import kotlin.math.ceil
+import kotlin.math.floor
 
 
 /**
@@ -37,11 +38,8 @@ class BTree (
      *  - root split 시에는 높이 증가
      *
      * split
-     *  - 노드 둘로 쪼개기(0 ~ upper(len/2), upper(len/2)+1 ~ (len-1))
-     *  - 부모의 자식 pointer update, promote key 찾아서 부모 노드로 승진
-     *  - promote key도 자식 노드에 그대로 남음(leaf 노드에서 split 한 경우)
-     *  - internal node 에서 split 한 경우에는 다름
-     *  - 부모 노드는 stack을 이용한 경로 추적
+     * - 부모의 자식 pointer update, promote key 찾아서 부모 노드로 승진
+     * - 부모 노드는 stack 을 이용한 경로 추적
      * */
     fun insert(key: List<Any>) {
         val packedKey: ByteArray = KeyTool.pack(key, schema)
@@ -49,33 +47,37 @@ class BTree (
             val leafNode = search(it, packedKey)
             leafNode.insert(packedKey, key, comparator)
             if(leafNode.isOverflow()){
-                val (currentNode, currentNodeIdx) = try {
-                    traceNode.pop()
-                } catch (_: EmptyStackException) {
-                    throw IllegalStateException("Unexpected node trace data invalid")
-                }
-                // parentNode의 parentNodeIdx 정보는 나중에 parentNode split 할 때 필요함
-                val (parentNode, parentNodeIdx) = try {
-                    traceNode.peek()
-                } catch (_: EmptyStackException) {
-                    throw IllegalStateException("Unexpected node trace data invalid")
-                }
 
-                val sizeOfCurrentNodeKey = currentNode.keys.size
-                val dividePoint: Int = ceil(sizeOfCurrentNodeKey.toDouble() / 2.0).toInt() + 1
-                val splitedCurrentNodeKeys = currentNode.keys.takeLast((sizeOfCurrentNodeKey -1) - dividePoint + 1)
-                // value split
-                // parent key, value 삽입(currentNodeIdx 바로 옆에)
-
-                currentNode.keys.subList(dividePoint, sizeOfCurrentNodeKey).clear()
-
-
-
-                // do some split
             }
             traceNode.clear()
             // check overflow and do split
         } ?: LeafNode(mutableListOf(packedKey), maxKeys, mutableListOf(key))
+    }
+
+    fun split(){
+        // rootNode 를 split 해야하는 경우 생각해야함
+        while(traceNode.isEmpty()){
+            // parentNode 의 parentNodeIdx 정보는 나중에 parentNode split 할 때 필요함 -> peek 사용
+            val (currentNode, currentNodeIdx) = try {traceNode.pop()} catch (_: EmptyStackException) { throw IllegalStateException("Unexpected node trace data invalid")}
+            var (parentNode, _) = try {traceNode.peek()} catch (_: EmptyStackException) { throw IllegalStateException("Unexpected node trace data invalid")}
+            parentNode = parentNode as InternalNode
+            val promotionKey = currentNode.promotionKey()
+            val newNode = when(currentNode){
+                is LeafNode -> {
+                    val (splitKeys, splitValues) = currentNode.split()
+                    val newNodeTemp = LeafNode(splitKeys, maxKeys, splitValues)
+                    currentNode.linkNewSiblingNode(newNodeTemp)
+                    newNodeTemp
+                }
+                is InternalNode -> {
+                    val (splitKeys, splitChildren) = currentNode.split()
+                    InternalNode(splitKeys, maxKeys, splitChildren)
+                }
+            }
+
+            // parent key, value 삽입(leafNodeIdx 바로 오른쪽에)
+            parentNode.updateNode(currentNodeIdx+1, promotionKey, newNode)
+        }
     }
 
     /**
