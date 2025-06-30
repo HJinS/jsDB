@@ -53,12 +53,8 @@ class BTree (
     }
 
     fun split(){
-        // rootNode 를 split 해야하는 경우 생각해야함
         while(traceNode.isEmpty()){
-            // parentNode 의 parentNodeIdx 정보는 나중에 parentNode split 할 때 필요함 -> peek 사용
             val (currentNode, currentNodeIdx) = try {traceNode.pop()} catch (_: EmptyStackException) { throw IllegalStateException("Unexpected node trace data invalid")}
-            var (parentNode, _) = try {traceNode.peek()} catch (_: EmptyStackException) { throw IllegalStateException("Unexpected node trace data invalid")}
-            parentNode = parentNode as InternalNode
             val promotionKey = currentNode.promotionKey()
             val newNode = when(currentNode){
                 is LeafNode -> {
@@ -72,9 +68,16 @@ class BTree (
                     InternalNode(splitKeys, maxKeys, splitChildren)
                 }
             }
-
-            // parent key, value 삽입(leafNodeIdx 바로 오른쪽에)
-            parentNode.updateNode(currentNodeIdx+1, promotionKey, newNode)
+            var parentNode: InternalNode
+            if(traceNode.isEmpty()){
+                parentNode = InternalNode(keys = mutableListOf(promotionKey), maxKeys, mutableListOf(currentNode, newNode))
+                root = parentNode
+            } else {
+                // parentNode 의 parentNodeIdx 정보는 나중에 parentNode split 할 때 필요함 -> peek 사용
+                parentNode = traceNode.peek().first as InternalNode
+                // parent key, value 삽입(leafNodeIdx 바로 오른쪽에)
+                parentNode.updateNode(currentNodeIdx+1, promotionKey, newNode)
+            }
         }
     }
 
