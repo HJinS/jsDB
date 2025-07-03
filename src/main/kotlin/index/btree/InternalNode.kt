@@ -11,7 +11,7 @@ class InternalNode(
 ): Node(false, keys, maxKeys) {
     fun moveToChild(index: Int): Node = children[index]
 
-    fun updateNode(idx: Int, promotionKey: ByteArray, childNode: Node) {
+    fun insert(idx: Int, promotionKey: ByteArray, childNode: Node) {
         children.add(idx, childNode)
         keys.add(idx, promotionKey)
     }

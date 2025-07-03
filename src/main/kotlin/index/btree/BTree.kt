@@ -44,8 +44,8 @@ class BTree (
         root?.let {
             val leafNode = search(it, packedKey)
             leafNode.insert(packedKey, key, comparator)
-            if(leafNode.isOverflow()){
-
+            if(leafNode.isOverflow){
+                split()
             }
             traceNode.clear()
             // check overflow and do split
@@ -76,7 +76,7 @@ class BTree (
                 // parentNode 의 parentNodeIdx 정보는 나중에 parentNode split 할 때 필요함 -> peek 사용
                 parentNode = traceNode.peek().first as InternalNode
                 // parent key, value 삽입(leafNodeIdx 바로 오른쪽에)
-                parentNode.updateNode(currentNodeIdx+1, promotionKey, newNode)
+                parentNode.insert(currentNodeIdx+1, promotionKey, newNode)
             }
         }
     }
@@ -104,5 +104,33 @@ class BTree (
             traceNode.push(node to searchResult)
         } while(!node.isLeaf)
         return node as LeafNode
+    }
+
+    fun traverse(): List<Pair<List<Any?>, List<Any?>>>{
+        val result = mutableListOf<Pair<List<Any?>, List<Any?>>>()
+        var currentNode: Node? = findLeftMostLeaf() ?: throw java.lang.IllegalStateException("Empty tree")
+        while(currentNode != null){
+            currentNode = currentNode as LeafNode
+            val keys = currentNode.keyView
+            for(i in keys.indices){
+                val key: List<Any?> = KeyTool.unpack(keys[i], schema)
+                val value: List<Any?> = currentNode.values[i]
+                result += key to value
+            }
+            currentNode = currentNode.next
+        }
+        return result
+    }
+
+    fun findLeftMostLeaf(): LeafNode?{
+        var currentNode = root ?: return null
+        while(true){
+            when(currentNode){
+                is InternalNode -> {
+                    currentNode = currentNode.moveToChild(0)
+                }
+                is LeafNode -> return currentNode
+            }
+        }
     }
 }

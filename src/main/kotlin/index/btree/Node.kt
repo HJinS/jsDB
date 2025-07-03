@@ -1,5 +1,6 @@
 package index.btree
 
+import java.util.Collections
 import kotlin.math.floor
 
 /**
@@ -12,12 +13,12 @@ sealed class Node(
     internal val keys: MutableList<ByteArray>,
     internal val maxKeys: Int
 ){
-    fun isOverflow(): Boolean = keys.size > maxKeys
 
-    fun insert(key: ByteArray, comparator: Comparator<ByteArray>){
-        val idx = search(key, comparator)
-        keys.add(idx, key)
-    }
+    val keyView: List<ByteArray>
+        get() = Collections.unmodifiableList(keys)
+
+    val isOverflow: Boolean
+        get() = keys.size > maxKeys
 
     fun search(key: ByteArray, comparator: Comparator<ByteArray>): Int{
         val idx = keys.binarySearch(key, comparator)
