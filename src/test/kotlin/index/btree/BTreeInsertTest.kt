@@ -25,7 +25,10 @@ class BTreeInsertTest {
             listOf<Number>(5, 50L),
             listOf<Number>(3, 4L),
             listOf<Number>(4, 1032L),
-            listOf<Number>(2, 12342L)
+            listOf<Number>(2, 12342L),
+            listOf<Number>(5, 123932L),
+            listOf<Number>(3, 12342L),
+            listOf<Number>(4, 23276L)
         )
 
         for (key in keys) {

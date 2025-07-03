@@ -49,7 +49,9 @@ class BTree (
             }
             traceNode.clear()
             // check overflow and do split
-        } ?: LeafNode(mutableListOf(packedKey), maxKeys, mutableListOf(key))
+        } ?: run {
+            root = LeafNode(mutableListOf(packedKey), maxKeys, mutableListOf(key))
+        }
     }
 
     fun split(){
