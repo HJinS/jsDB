@@ -51,25 +51,3 @@ class BTreeInsertTest {
         btree.printTree()
     }
 }
-
-
-/**
- * [Test worker] INFO index.btree.BTree - Root node is null. Make new root node key: [1, 10]
- * [Test worker] INFO index.btree.BTree - Root node is not null key: [5, 50]
- * [Test worker] INFO index.btree.BTree - Root node is not null key: [3, 4]
- * [Test worker] INFO index.btree.BTree - split node
- * [Test worker] INFO index.btree.BTree - split root node
- * [Test worker] INFO index.btree.BTree - Root node is not null key: [4, 1032]
- * [Test worker] INFO index.btree.BTree - Root node is not null key: [2, 12342]
- * [Test worker] INFO index.btree.BTree - split node
- * [Test worker] INFO index.btree.BTree - split leaf node
- * [Test worker] INFO index.btree.BTree - Root node is not null key: [5, 123932]
- * [Test worker] INFO index.btree.BTree - split node
- *                                                 (2, 12342) (3, 4) (5, 50)
- *                                  (1, 10) (2, 12342)   (3, 4)    (4, 1032) (5, 50)     (5, 123932)
- *
- *
- *
- *
- *
- * */
