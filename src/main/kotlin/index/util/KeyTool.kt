@@ -38,7 +38,6 @@ object KeyTool {
             }
             unpackedKeys.add(value)
             offset += consumed
-            log.info { "unpacked keys: $unpackedKeys" }
         }
         return unpackedKeys
     }

@@ -4,10 +4,12 @@ import index.util.KeySchema
 import index.util.KeyTool
 import index.util.MAX_KEYS
 import index.util.comparePackedKey
+import mu.KotlinLogging
 import java.util.EmptyStackException
 import java.util.Stack
+import kotlin.collections.plusAssign
 
-
+val logger = KotlinLogging.logger {}
 /**
  * 모든 데이터는 leaf node 에만 저장
  * 정렬된 키 배열을 유지
@@ -42,43 +44,58 @@ class BTree (
     fun insert(key: List<Any>) {
         val packedKey: ByteArray = KeyTool.pack(key, schema)
         root?.let {
+            logger.info { "Root node is not null key: $key" }
             val leafNode = search(it, packedKey)
             leafNode.insert(packedKey, key, comparator)
             if(leafNode.isOverflow){
-                split()
+                logger.info { "split node" }
+                try{
+                    split()
+                } catch (e: Exception) {
+                    throw e
+                }
+
             }
             traceNode.clear()
             // check overflow and do split
         } ?: run {
+            logger.info { "Root node is null. Make new root node key: $key" }
             root = LeafNode(mutableListOf(packedKey), maxKeys, mutableListOf(key))
         }
+        printTree()
     }
 
     fun split(){
-        while(traceNode.isEmpty()){
+        while(traceNode.isNotEmpty()){
             val (currentNode, currentNodeIdx) = try {traceNode.pop()} catch (_: EmptyStackException) { throw IllegalStateException("Unexpected node trace data invalid")}
-            val promotionKey = currentNode.promotionKey()
-            val newNode = when(currentNode){
-                is LeafNode -> {
-                    val (splitKeys, splitValues) = currentNode.split()
-                    val newNodeTemp = LeafNode(splitKeys, maxKeys, splitValues)
-                    currentNode.linkNewSiblingNode(newNodeTemp)
-                    newNodeTemp
+            if(currentNode.isOverflow){
+                logger.info { "Node overflow split node $currentNodeIdx" }
+                val promotionKey = currentNode.promotionKey()
+                val newNode = when(currentNode){
+                    is LeafNode -> {
+                        val (splitKeys, splitValues) = currentNode.split()
+                        val newNodeTemp = LeafNode(splitKeys, maxKeys, splitValues)
+                        currentNode.linkNewSiblingNode(newNodeTemp)
+                        newNodeTemp
+                    }
+                    is InternalNode -> {
+                        val (splitKeys, splitChildren) = currentNode.split()
+                        InternalNode(splitKeys, maxKeys, splitChildren)
+                    }
                 }
-                is InternalNode -> {
-                    val (splitKeys, splitChildren) = currentNode.split()
-                    InternalNode(splitKeys, maxKeys, splitChildren)
+                var parentNode: InternalNode
+
+                if(traceNode.isEmpty()){
+                    parentNode = InternalNode(keys = mutableListOf(promotionKey), maxKeys, mutableListOf(currentNode, newNode))
+                    root = parentNode
+                    logger.info { "split root node" }
+                } else {
+                    // parentNode 의 parentNodeIdx 정보는 나중에 parentNode split 할 때 필요함 -> peek 사용
+                    parentNode = traceNode.peek().first as InternalNode
+                    // parent key, value 삽입(leafNodeIdx 바로 오른쪽에)
+                    parentNode.insert(currentNodeIdx, promotionKey, newNode)
+                    logger.info { "split leaf node" }
                 }
-            }
-            var parentNode: InternalNode
-            if(traceNode.isEmpty()){
-                parentNode = InternalNode(keys = mutableListOf(promotionKey), maxKeys, mutableListOf(currentNode, newNode))
-                root = parentNode
-            } else {
-                // parentNode 의 parentNodeIdx 정보는 나중에 parentNode split 할 때 필요함 -> peek 사용
-                parentNode = traceNode.peek().first as InternalNode
-                // parent key, value 삽입(leafNodeIdx 바로 오른쪽에)
-                parentNode.insert(currentNodeIdx+1, promotionKey, newNode)
             }
         }
     }
@@ -100,7 +117,7 @@ class BTree (
         traceNode.push(node to -1)
         if(node.isLeaf) return node as LeafNode
         do {
-            val searchResult = start.search(key, comparator)
+            val searchResult = node.search(key, comparator)
             node = node as InternalNode
             node = node.moveToChild(searchResult)
             traceNode.push(node to searchResult)
@@ -134,5 +151,44 @@ class BTree (
                 is LeafNode -> return currentNode
             }
         }
+    }
+
+    /**
+     * Test use only
+     * */
+    fun printTree(){
+        val start = root ?: return
+        val queue = ArrayDeque<Triple<Node, Int, Boolean>>()
+        queue.addLast(Triple(start, 0, start is LeafNode))
+        var prevLevel = 0
+        while(queue.isNotEmpty()){
+            var (node, level, isLeaf) = queue.removeFirst()
+            if(prevLevel != level){
+                print("\n")
+            }
+            printNode(node)
+            if(!isLeaf){
+                node = node as InternalNode
+                for(idx in 0..(node.childCount-1)){
+                    val childNode = node.moveToChild(idx)
+                    queue.addLast(Triple(childNode, level + 1, childNode is LeafNode))
+                }
+            }
+            prevLevel = level
+        }
+        println("\n======================================")
+    }
+
+    fun printNode(node: Node){
+        val keys = node.keyView
+        val viewBuilder = StringBuilder()
+        for(idx in keys.indices){
+            val key: List<Any?> = KeyTool.unpack(keys[idx], schema)
+            for(keyItem in key){
+                viewBuilder.append("$keyItem|")
+            }
+            viewBuilder.append(" ")
+        }
+        print(viewBuilder.toString())
     }
 }

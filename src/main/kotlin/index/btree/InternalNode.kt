@@ -9,10 +9,14 @@ class InternalNode(
     maxKeys: Int,
     private val children: MutableList<Node>
 ): Node(false, keys, maxKeys) {
+
+    val childCount: Int
+        get() = children.size
+
     fun moveToChild(index: Int): Node = children[index]
 
     fun insert(idx: Int, promotionKey: ByteArray, childNode: Node) {
-        children.add(idx, childNode)
+        children.add(idx+1, childNode)
         keys.add(idx, promotionKey)
     }
 

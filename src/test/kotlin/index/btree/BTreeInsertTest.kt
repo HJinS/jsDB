@@ -5,11 +5,12 @@ import index.util.ColumnType
 import index.util.KeySchema
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import kotlin.test.assertTrue
 
 
 class BTreeInsertTest {
     @Test
-    @DisplayName("")
+    @DisplayName("Given field(int(desc), Long), when insert keys, then traverse result will be lexicographic and packedKey result should be same")
     fun `insert keys and verify sorted order`() {
         val schema = KeySchema(
             listOf(
@@ -18,7 +19,7 @@ class BTreeInsertTest {
             )
         )
 
-        val btree = BTree("test", "test table", schema, 3, true)
+        val btree = BTree("test", "test table", schema, 2, true)
 
         val keys = listOf(
             listOf<Number>(1, 10L),
@@ -36,7 +37,39 @@ class BTreeInsertTest {
         }
 
         val allKeys = btree.traverse()
-        print("Test End")
-        print(allKeys)
+        val expectedResults = listOf(
+            listOf<Number>(1, 10L),
+            listOf<Number>(2, 12342L),
+            listOf<Number>(3, 4L),
+            listOf<Number>(3, 12342L),
+            listOf<Number>(4, 1032L),
+            listOf<Number>(4, 23276L),
+            listOf<Number>(5, 50L),
+            listOf<Number>(5, 123932L)
+        )
+        assertTrue { expectedResults == allKeys.toList().map{ it.second } }
+        btree.printTree()
     }
 }
+
+
+/**
+ * [Test worker] INFO index.btree.BTree - Root node is null. Make new root node key: [1, 10]
+ * [Test worker] INFO index.btree.BTree - Root node is not null key: [5, 50]
+ * [Test worker] INFO index.btree.BTree - Root node is not null key: [3, 4]
+ * [Test worker] INFO index.btree.BTree - split node
+ * [Test worker] INFO index.btree.BTree - split root node
+ * [Test worker] INFO index.btree.BTree - Root node is not null key: [4, 1032]
+ * [Test worker] INFO index.btree.BTree - Root node is not null key: [2, 12342]
+ * [Test worker] INFO index.btree.BTree - split node
+ * [Test worker] INFO index.btree.BTree - split leaf node
+ * [Test worker] INFO index.btree.BTree - Root node is not null key: [5, 123932]
+ * [Test worker] INFO index.btree.BTree - split node
+ *                                                 (2, 12342) (3, 4) (5, 50)
+ *                                  (1, 10) (2, 12342)   (3, 4)    (4, 1032) (5, 50)     (5, 123932)
+ *
+ *
+ *
+ *
+ *
+ * */
