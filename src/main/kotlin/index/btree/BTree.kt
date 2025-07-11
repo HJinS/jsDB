@@ -43,6 +43,7 @@ class BTree (
      * */
     fun insert(key: List<Any>) {
         val packedKey: ByteArray = KeyTool.pack(key, schema)
+        logger.info { "insert key: $key"}
         root?.let {
             logger.info { "Root node is not null key: $key" }
             val leafNode = search(it, packedKey)
@@ -157,21 +158,30 @@ class BTree (
      * Test use only
      * */
     fun printTree(){
+
+        data class QueueItem(
+            val node: Node,
+            val level: Int,
+            val isLeaf: Boolean,
+            val idx: Int
+        )
+
         val start = root ?: return
-        val queue = ArrayDeque<Triple<Node, Int, Boolean>>()
-        queue.addLast(Triple(start, 0, start is LeafNode))
+        val queue = ArrayDeque<QueueItem>()
+        queue.addLast(QueueItem(start, 0, start is LeafNode, 0))
         var prevLevel = 0
         while(queue.isNotEmpty()){
-            var (node, level, isLeaf) = queue.removeFirst()
+            val item = queue.removeFirst()
+            var (node, level, isLeaf, idx) = item
             if(prevLevel != level){
                 print("\n")
             }
-            printNode(node)
+            printNode(node, idx)
             if(!isLeaf){
                 node = node as InternalNode
                 for(idx in 0..(node.childCount-1)){
                     val childNode = node.moveToChild(idx)
-                    queue.addLast(Triple(childNode, level + 1, childNode is LeafNode))
+                    queue.addLast(QueueItem(childNode, level + 1, childNode is LeafNode, idx))
                 }
             }
             prevLevel = level
@@ -179,9 +189,10 @@ class BTree (
         println("\n======================================")
     }
 
-    fun printNode(node: Node){
+    fun printNode(node: Node, idx: Int){
         val keys = node.keyView
         val viewBuilder = StringBuilder()
+        viewBuilder.append("[$idx] ")
         for(idx in keys.indices){
             val key: List<Any?> = KeyTool.unpack(keys[idx], schema)
             for(keyItem in key){
@@ -189,6 +200,7 @@ class BTree (
             }
             viewBuilder.append(" ")
         }
+        viewBuilder.insert(0, "  ")
         print(viewBuilder.toString())
     }
 }

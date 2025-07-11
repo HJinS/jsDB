@@ -19,7 +19,16 @@ class InternalNode(
         children.add(idx+1, childNode)
         keys.add(idx, promotionKey)
     }
-
+/*
+*
+* < Grace|2020-01-30|
+*
+*
+* Grace|2020-01-30| <= <  Faith|2022-01-18|
+*
+* <= Faith|2022-01-18|
+*
+* */
     /**
      * internal node
      *  - mid(promote key) 값을 floor(len / 2)로 지정
@@ -33,6 +42,14 @@ class InternalNode(
         val splitChildren = splitChildPointer(promotionKeyIdx)
         keys.removeLast()
         return splitKeys to splitChildren
+    }
+
+    private fun splitKey(): MutableList<ByteArray>{
+        val keySize = keys.size
+        val promotionKeyIdx = promotionKeyIdx()
+        val splitKeys =  keys.takeLast(keySize - promotionKeyIdx - 1).toMutableList()
+        keys.subList(promotionKeyIdx+1, keySize).clear()
+        return splitKeys
     }
 
     private fun splitChildPointer(promotionKeyIdx: Int): MutableList<Node>{
