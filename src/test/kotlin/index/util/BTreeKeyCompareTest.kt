@@ -16,7 +16,7 @@ class BTreeKeyCompareTest {
     private val logger = KotlinLogging.logger {}
     @Test
     @DisplayName("Given `field(int, long), when compare keys, Then result will be lexicographic and packedKey result should be same`")
-    fun `테스트_compare_key_int_long`() {
+    fun `테스트 compare key int long`() {
         val value = listOf<Number>(10, 5230L)
         val findKey = listOf(10)
         val schema = KeySchema(
@@ -56,7 +56,7 @@ class BTreeKeyCompareTest {
 
     @Test
     @DisplayName("Given `field(int(desc), Long), when compare keys, Then result will be lexicographic and packedKey result should be same`")
-    fun `테스트_compare_key_int_desc_long`() {
+    fun `테스트 compare key int desc long`() {
         val value = listOf<Number>(10, 5230L)
         val findKey = listOf(11)
         val schema = KeySchema(
@@ -96,7 +96,7 @@ class BTreeKeyCompareTest {
 
     @Test
     @DisplayName("Given `field(string, boolean), when compare keys, Then result will be lexicographic and packedKey result should be same`")
-    fun `테스트_compare_key_string_boolean`() {
+    fun `테스트 compare key string boolean`() {
         val value = listOf("Alice", true)
         val findKey = listOf("Alice")
         val schema = KeySchema(
@@ -157,7 +157,7 @@ class BTreeKeyCompareTest {
 
     @Test
     @DisplayName("Given `field(string(desc), boolean(desc)), when compare keys, Then result will be lexicographic and packedKey result should be same`")
-    fun `테스트_compare_key_string_desc_boolean_desc`() {
+    fun `테스트 compare key string desc boolean desc`() {
         val value = listOf("Alice", true)
         val findKey = listOf("Alice")
         val schema = KeySchema(
@@ -218,7 +218,7 @@ class BTreeKeyCompareTest {
 
     @Test
     @DisplayName("Given `field(byte, short), when compare keys, Then result will be lexicographic and packedKey result should be same`")
-    fun `테스트_compare_key_byte_short`() {
+    fun `테스트 compare key byte short`() {
         val value = listOf(10.toByte(), 100.toShort())
         val findKey = listOf(10.toByte())
         val schema = KeySchema(
@@ -272,7 +272,7 @@ class BTreeKeyCompareTest {
 
     @Test
     @DisplayName("Given `field(byte(desc), short(desc)), when compare keys, Then result will be lexicographic and packedKey result should be same`")
-    fun `테스트_compare_key_byte_desc_short_desc`() {
+    fun `테스트 compare key byte desc short desc`() {
         val value = listOf(10.toByte(), 100.toShort())
         val findKey = listOf(10.toByte())
         val schema = KeySchema(
@@ -326,7 +326,7 @@ class BTreeKeyCompareTest {
 
     @Test
     @DisplayName("Given `field(float, double), when compare keys, Then result will be lexicographic and packedKey result should be same`")
-    fun `테스트_compare_key_float_double`() {
+    fun `테스트 compare key float double`() {
         val value = listOf(10.0F, 100.0)
         val findKey = listOf(10.0F)
         val schema = KeySchema(
@@ -380,7 +380,7 @@ class BTreeKeyCompareTest {
 
     @Test
     @DisplayName("Given `field(float(desc), double(desc)), when compare keys, Then result will be lexicographic and packedKey result should be same`")
-    fun `테스트_compare_key_float_desc_double_desc`() {
+    fun `테스트 compare key float desc double desc`() {
         val value = listOf(10.0F, 100.0)
         val findKey = listOf(10.0F)
         val schema = KeySchema(
@@ -434,7 +434,7 @@ class BTreeKeyCompareTest {
 
     @Test
     @DisplayName("Given `field(localDate, localDateTime), when compare keys, Then result will be lexicographic and packedKey result should be same`")
-    fun `테스트_compare_key_local_date_local_date_time`() {
+    fun `테스트 compare key local date local date time`() {
         val value = listOf(LocalDate.of(2024, 1, 1), LocalDateTime.of(2024,1,1,23,0,0))
         val findKey = listOf(LocalDate.of(2024, 1, 1))
         val schema = KeySchema(
@@ -488,7 +488,7 @@ class BTreeKeyCompareTest {
 
     @Test
     @DisplayName("Given `field(localDate(desc), localDateTime(desc)), when compare keys, Then result will be lexicographic and packedKey result should be same`")
-    fun `테스트_compare_key_local_date_desc_local_date_time_desc`() {
+    fun `테스트 compare key local date desc local date time desc`() {
         val value = listOf(LocalDate.of(2024, 1, 1), LocalDateTime.of(2024,1,1,23,0,0))
         val findKey = listOf(LocalDate.of(2024, 1, 1))
         val schema = KeySchema(
@@ -542,7 +542,7 @@ class BTreeKeyCompareTest {
 
     @Test
     @DisplayName("Given `field(instant, bytes), when compare keys, Then result will be lexicographic and packedKey result should be same`")
-    fun `테스트_compare_key_instant_bytes`() {
+    fun `테스트 compare key instant bytes`() {
         val value = listOf(Instant.ofEpochSecond(100), ByteBuffer.allocate(2).putShort(10).array())
         val findKey = listOf(Instant.ofEpochSecond(100))
         val schema = KeySchema(
@@ -606,7 +606,7 @@ class BTreeKeyCompareTest {
 
     @Test
     @DisplayName("Given `field(instant(desc), bytes(desc)), when compare keys, Then result will be lexicographic and packedKey result should be same`")
-    fun `테스트_compare_key_instant_desc_bytes_desc`() {
+    fun `테스트 compare key instant desc bytes desc`() {
         val value = listOf(Instant.ofEpochSecond(100), ByteBuffer.allocate(2).putShort(10).array())
         val findKey = listOf(Instant.ofEpochSecond(100))
         val schema = KeySchema(

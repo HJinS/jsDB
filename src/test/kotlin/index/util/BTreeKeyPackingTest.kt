@@ -16,7 +16,7 @@ import java.util.*
 class BTreeKeyPackingTest {
     @Test
     @DisplayName("Given `field(int)`, when do pack and unpack, Then result will be same")
-    fun `테스트_packing_unpacking_int`(){
+    fun `테스트 packing unpacking int`(){
         val value = listOf(10)
         val schema = KeySchema(
             listOf(
@@ -32,7 +32,7 @@ class BTreeKeyPackingTest {
 
     @Test
     @DisplayName("Given `field(long)`, when do pack and unpack, Then result will be same")
-    fun `테스트_packing_unpacking_long`(){
+    fun `테스트 packing unpacking long`(){
         val value = listOf(10L)
         val schema = KeySchema(
             listOf(
@@ -48,7 +48,7 @@ class BTreeKeyPackingTest {
 
     @Test
     @DisplayName("Given `field(string)`, when do pack and unpack, Then result will be same")
-    fun `테스트_packing_unpacking_string`(){
+    fun `테스트 packing unpacking string`(){
         val value = listOf("Test Code")
         val schema = KeySchema(
             listOf(
@@ -64,7 +64,7 @@ class BTreeKeyPackingTest {
 
     @Test
     @DisplayName("Given `field(boolean)`, when do pack and unpack, Then result will be same")
-    fun `테스트_packing_unpacking_boolean`(){
+    fun `테스트 packing unpacking boolean`(){
         val value = listOf(true)
         val schema = KeySchema(
             listOf(
@@ -80,7 +80,7 @@ class BTreeKeyPackingTest {
 
     @Test
     @DisplayName("Given `field(byte)`, when do pack and unpack, Then result will be same")
-    fun `테스트_packing_unpacking_byte`(){
+    fun `테스트 packing unpacking byte`(){
         val value = listOf(1.toByte())
         val schema = KeySchema(
             listOf(
@@ -96,7 +96,7 @@ class BTreeKeyPackingTest {
 
     @Test
     @DisplayName("Given `field(short)`, when do pack and unpack, Then result will be same")
-    fun `테스트_packing_unpacking_short`(){
+    fun `테스트 packing unpacking short`(){
         val value = listOf(10.toShort())
         val schema = KeySchema(
             listOf(
@@ -112,7 +112,7 @@ class BTreeKeyPackingTest {
 
     @Test
     @DisplayName("Given `field(float)`, when do pack and unpack, Then result will be same")
-    fun `테스트_packing_unpacking_float`(){
+    fun `테스트 packing unpacking float`(){
         val value = listOf(10.0f)
         val schema = KeySchema(
             listOf(
@@ -128,7 +128,7 @@ class BTreeKeyPackingTest {
 
     @Test
     @DisplayName("Given `field(double)`, when do pack and unpack, Then result will be same")
-    fun `테스트_packing_unpacking_double`(){
+    fun `테스트 packing unpacking double`(){
         val value = listOf(10.0)
         val schema = KeySchema(
             listOf(
@@ -144,7 +144,7 @@ class BTreeKeyPackingTest {
 
     @Test
     @DisplayName("Given `field(local date)`, when do pack and unpack, Then result will be same")
-    fun `테스트_packing_unpacking_local_date`(){
+    fun `테스트 packing unpacking local date`(){
         val value = listOf(LocalDate.of(2025, 1, 1))
         val schema = KeySchema(
             listOf(
@@ -160,7 +160,7 @@ class BTreeKeyPackingTest {
 
     @Test
     @DisplayName("Given `field(local date time)`, when do pack and unpack, Then result will be same")
-    fun `테스트_packing_unpacking_local_date_time`(){
+    fun `테스트 packing unpacking local date time`(){
         val value = listOf(LocalDateTime.of(2025, 1, 1, 12, 0, 0))
         val schema = KeySchema(
             listOf(
@@ -176,7 +176,7 @@ class BTreeKeyPackingTest {
 
     @Test
     @DisplayName("Given `field(instant)`, when do pack and unpack, Then result will be same")
-    fun `테스트_packing_unpacking_instant`(){
+    fun `테스트 packing unpacking instant`(){
         val value = listOf(Instant.ofEpochSecond(100))
         val schema = KeySchema(
             listOf(
@@ -192,7 +192,7 @@ class BTreeKeyPackingTest {
 
     @Test
     @DisplayName("Given `field(uuid)`, when do pack and unpack, Then result will be same")
-    fun `테스트_packing_unpacking_uuid`(){
+    fun `테스트 packing unpacking uuid`(){
         val value = listOf(UUID.randomUUID())
         val schema = KeySchema(
             listOf(
@@ -208,7 +208,7 @@ class BTreeKeyPackingTest {
 
     @Test
     @DisplayName("Given `field(bytes)`, when do pack and unpack, Then result will be same")
-    fun `테스트_packing_unpacking_bytes`(){
+    fun `테스트 packing unpacking bytes`(){
         val value: List<Any?> = listOf(ByteBuffer.allocate(2).putShort(10).array())
         val schema = KeySchema(
             listOf(
@@ -225,7 +225,7 @@ class BTreeKeyPackingTest {
 
     @Test
     @DisplayName("Given `field(int, string, date)`, when do pack and unpack, Then result will be same")
-    fun `테스트_packing_unpacking_int_string_date`(){
+    fun `테스트 packing unpacking int string date`(){
         val value = listOf(10, "Alice", LocalDate.of(2025, 5, 10))
         val schema = KeySchema(
             listOf(
@@ -243,7 +243,7 @@ class BTreeKeyPackingTest {
 
     @Test
     @DisplayName("Given `field(int, string(collation), date)`, when do pack and unpack, Then result will be same")
-    fun `테스트_packing_unpacking_int_string_collation_date`(){
+    fun `테스트 packing unpacking int string collation date`(){
         val value = listOf(10, "Alice", LocalDate.of(2025, 5, 10))
         val collatorInstance = Collator.getInstance(Locale.US)
         val schema = KeySchema(
@@ -268,7 +268,7 @@ class BTreeKeyPackingTest {
 
     @Test
     @DisplayName("Given `field(Instant, string, Bytes)`, when do pack and unpack, Then result will be same")
-    fun `테스트_packing_unpacking_instant_string_bytes`(){
+    fun `테스트 packing unpacking instant string bytes`(){
         val value = listOf(Instant.ofEpochSecond(100), "Alice", ByteBuffer.allocate(2).putShort(10).array())
         val schema = KeySchema(
             listOf(
@@ -291,7 +291,7 @@ class BTreeKeyPackingTest {
 
     @Test
     @DisplayName("Given `field(boolean, float, uuid)`, when do pack and unpack, Then result will be same")
-    fun `테스트_packing_unpacking_boolean_float_uuid`(){
+    fun `테스트 packing unpacking boolean float uuid`(){
         val value = listOf(true, 10.0f, UUID.randomUUID())
         val schema = KeySchema(
             listOf(
