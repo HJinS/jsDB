@@ -23,10 +23,14 @@ class LeafNode(
     val values: List<List<Any?>>
         get() = Collections.unmodifiableList(_values)
 
-    fun insert(key: ByteArray, originalData: List<Any?>, comparator: Comparator<ByteArray>){
-        val idx = search(key, comparator)
+    fun insert(idx: Int, key: ByteArray, originalData: List<Any?>){
         keys.add(idx, key)
         _values.add(idx, originalData)
+    }
+
+    fun delete(keyIdx: Int){
+        keys.removeAt(keyIdx)
+        _values.removeAt(keyIdx)
     }
 
     /**

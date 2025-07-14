@@ -15,20 +15,11 @@ class InternalNode(
 
     fun moveToChild(index: Int): Node = children[index]
 
-    fun insert(idx: Int, promotionKey: ByteArray, childNode: Node) {
+    fun insert(idx: Int, key: ByteArray, childNode: Node) {
         children.add(idx+1, childNode)
-        keys.add(idx, promotionKey)
+        keys.add(idx, key)
     }
-/*
-*
-* < Grace|2020-01-30|
-*
-*
-* Grace|2020-01-30| <= <  Faith|2022-01-18|
-*
-* <= Faith|2022-01-18|
-*
-* */
+
     /**
      * internal node
      *  - mid(promote key) 값을 floor(len / 2)로 지정

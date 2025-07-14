@@ -46,8 +46,8 @@ class BTree (
         logger.info { "insert key: $key"}
         root?.let {
             logger.info { "Root node is not null key: $key" }
-            val leafNode = search(it, packedKey)
-            leafNode.insert(packedKey, key, comparator)
+            val (leafNode, idx, _) = search(packedKey)
+            leafNode.insert(idx, packedKey, key)
             if(leafNode.isOverflow){
                 logger.info { "split node" }
                 try{
@@ -55,7 +55,6 @@ class BTree (
                 } catch (e: Exception) {
                     throw e
                 }
-
             }
             traceNode.clear()
             // check overflow and do split
@@ -69,21 +68,44 @@ class BTree (
 
     /**
      * delete
-     * - key의 최소 개수는 ceil(maxKeys/2) 이상 이어야함.
+     * key의 최소 개수는 ceil(maxKeys/2) 이상 이어야함.
      *
      * 1. 삭제할 key 를 찾아 leafNode 로 내려감
      * 2. key <= nodeKey 기준으로 검색(기준은 기존과 동일)
      * 3. underflow 검사
      * 4. Rebalancing
-     *   4-1. 빌려오기
-     *      4-1-1. 왼쪽(오른쪽)에서 빌릴 수 있는경우(> ceil(maxKeys/2))
-     *      4-1-2. 형데한테 key를 빌려오고 부모의 separator key 갱신
-     *   4-2. merge
-     *      4-2-1. 형제 노드와 합체
-     *      4-2-2. 부모의 separator key 도 제거됨.
-     *      4-2-3. 상위 노드까지 확인해서 게속적으로 rebalancing 필요.
+     *
+     *     4-1. 빌려오기
+     *
+     *         4-1-1. 왼쪽(오른쪽)에서 빌릴 수 있는경우(> ceil(maxKeys/2))
+     *         4-1-2. 형데한테 key를 빌려오고 부모의 separator key 갱신
+     *
+     *     4-2. merge
+     *
+     *         4-2-1. 형제 노드와 합체
+     *         4-2-2. 부모의 separator key 도 제거됨.
+     *         4-2-3. 상위 노드까지 확인해서 게속적으로 rebalancing 필요.
+     *
      * */
-    fun delete(){
+    fun delete(key: List<Any>){
+        val packedKey: ByteArray = KeyTool.pack(key, schema)
+        val (leafNode, keyIdx, isExist) = search(packedKey)
+        if(isExist){
+            leafNode.delete(keyIdx)
+            print("delete key")
+
+            val prevSibling: LeafNode? = leafNode.prev
+            val nextSibling: LeafNode? = leafNode.next
+            if(prevSibling == null && nextSibling == null){
+                print("should be root")
+            } else if(nextSibling == null){
+                print("left most child")
+            } else if(prevSibling == null){
+                print("right most child")
+            }else{
+                print("middle child")
+            }
+        }
 
     }
 
@@ -134,17 +156,26 @@ class BTree (
      *
      * 경로를 보관할 stack이 필요
     * */
-    fun search(start: Node, key: ByteArray): LeafNode {
-        var node: Node = start
+    fun search(key: ByteArray): Triple<LeafNode, Int, Boolean> {
+        var node: Node = root ?: throw IllegalStateException("No root node")
         traceNode.push(node to -1)
-        if(node.isLeaf) return node as LeafNode
+        if(node.isLeaf){
+            val (searchResult, isExist) = node.search(key, comparator)
+            return Triple(node as LeafNode, searchResult, isExist)
+        }
+        var searchIdx: Int
+        var isExist: Boolean
         do {
-            val searchResult = node.search(key, comparator)
+            val result = node.search(key, comparator)
+            searchIdx = result.first
             node = node as InternalNode
-            node = node.moveToChild(searchResult)
-            traceNode.push(node to searchResult)
+            node = node.moveToChild(searchIdx)
+            traceNode.push(node to searchIdx)
         } while(!node.isLeaf)
-        return node as LeafNode
+        val result = node.search(key, comparator)
+        searchIdx = result.first
+        isExist = result.second
+        return Triple(node as LeafNode, searchIdx, isExist)
     }
 
     fun traverse(): List<Pair<List<Any?>, List<Any?>>>{

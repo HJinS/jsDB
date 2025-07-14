@@ -1,6 +1,7 @@
 package index.btree
 
 import java.util.Collections
+import kotlin.math.ceil
 import kotlin.math.floor
 
 /**
@@ -20,9 +21,12 @@ sealed class Node(
     val isOverflow: Boolean
         get() = keys.size > maxKeys
 
-    fun search(key: ByteArray, comparator: Comparator<ByteArray>): Int{
+    val isUnderflow: Boolean
+        get() = keys.size < ceil(maxKeys / 2.0)
+
+    fun search(key: ByteArray, comparator: Comparator<ByteArray>): Pair<Int, Boolean>{
         val idx = keys.binarySearch(key, comparator)
-        return if(idx >= 0) idx else -(idx + 1)
+        return if(idx >= 0) idx to true else -(idx + 1) to false
     }
 
     fun promotionKeyIdx() = floor(keys.size.toDouble() / 2.0).toInt()
