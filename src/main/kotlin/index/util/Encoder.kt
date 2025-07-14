@@ -2,13 +2,20 @@ package index.util
 
 
 /**
- * 작은 수는 작은 공강네, 큰 수는 큰 공간에 저장하기 위함
+ * 작은 수는 작은 공강네, 큰 수는 큰 공간에 저장하기 위함(7 조각씩 자름)
  * 1 -> 0x01
  * 300 -> 0xAC 0x02
  * Unsigned LEB128 기반
  * ushr: bit 오른쪽을 이동
  * 0x80: 0b10000000
  * 0x7F: 0b01111111
+ *
+ * * example)
+ *  * original value: 10101010 10101010 00000000
+ *  * first: 10000000
+ *  * second: 10000000 11010100
+ *  * third: 10000000 11010100 10101010
+ *  * third: 10000000 11010100 10101010 00000101
  * */
 fun encodeVarInt(value: Int): ByteArray{
     var v = value
@@ -28,6 +35,14 @@ fun encodeVarInt(value: Int): ByteArray{
  * 0xFF: 0b11111111
  * 0x80: 0b10000000
  * 0x7F: 0b01111111
+ *
+ * * example)
+ *  * original value: 10000000 11010100 10101010 00000101
+ *  * first: 0000000
+ *  * second: 1010100 0000000
+ *  * third: 0101010 1010100 0000000
+ *  * fourth: 0000101 0101010 1010100 0000000
+ *  * fifth: 10101010 10101010 00000000
  * */
 fun decodeVarInt(bytes: ByteArray, offset: Int = 0, descending: Boolean = false): Pair<Int, Int> {
     var result = 0
@@ -39,7 +54,7 @@ fun decodeVarInt(bytes: ByteArray, offset: Int = 0, descending: Boolean = false)
         byte = if (descending) {
             byte xor 0xFF // invert 처리
         } else {
-            byte and 0xFF // ByteArray에서 디코딩 대상 byte 가져옴
+            byte and 0xFF // ByteArray 에서 디코딩 대상 byte 가져옴
         }
         // 뒤 7bit를 가지교 와서 7칸 쉬프트(처음엔 0칸)한 후에 or로 저장
         // 인코딩 할 때 높은 자리 숫자가 배열 뒤쪽으로 오게 됨

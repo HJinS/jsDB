@@ -66,7 +66,28 @@ class BTree (
         printTree()
     }
 
-    fun split(){
+
+    /**
+     * delete
+     * - key의 최소 개수는 ceil(maxKeys/2) 이상 이어야함.
+     *
+     * 1. 삭제할 key 를 찾아 leafNode 로 내려감
+     * 2. key <= nodeKey 기준으로 검색(기준은 기존과 동일)
+     * 3. underflow 검사
+     * 4. Rebalancing
+     *   4-1. 빌려오기
+     *      4-1-1. 왼쪽(오른쪽)에서 빌릴 수 있는경우(> ceil(maxKeys/2))
+     *      4-1-2. 형데한테 key를 빌려오고 부모의 separator key 갱신
+     *   4-2. merge
+     *      4-2-1. 형제 노드와 합체
+     *      4-2-2. 부모의 separator key 도 제거됨.
+     *      4-2-3. 상위 노드까지 확인해서 게속적으로 rebalancing 필요.
+     * */
+    fun delete(){
+
+    }
+
+    private fun split(){
         while(traceNode.isNotEmpty()){
             val (currentNode, currentNodeIdx) = try {traceNode.pop()} catch (_: EmptyStackException) { throw IllegalStateException("Unexpected node trace data invalid")}
             if(currentNode.isOverflow){
@@ -142,7 +163,7 @@ class BTree (
         return result
     }
 
-    fun findLeftMostLeaf(): LeafNode?{
+    private fun findLeftMostLeaf(): LeafNode?{
         var currentNode = root ?: return null
         while(true){
             when(currentNode){
