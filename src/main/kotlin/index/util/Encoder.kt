@@ -15,7 +15,7 @@ package index.util
  *  * first: 10000000
  *  * second: 10000000 11010100
  *  * third: 10000000 11010100 10101010
- *  * third: 10000000 11010100 10101010 00000101
+ *  * fourth: 10000000 11010100 10101010 00000101
  * */
 fun encodeVarInt(value: Int): ByteArray{
     var v = value
