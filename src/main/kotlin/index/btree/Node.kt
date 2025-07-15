@@ -24,6 +24,9 @@ sealed class Node(
     val isUnderflow: Boolean
         get() = keys.size < ceil(maxKeys / 2.0)
 
+    val hasSurplusKey: Boolean
+        get() = keys.size > ceil(maxKeys / 2.0)
+
     fun search(key: ByteArray, comparator: Comparator<ByteArray>): Pair<Int, Boolean>{
         val idx = keys.binarySearch(key, comparator)
         return if(idx >= 0) idx to true else -(idx + 1) to false

@@ -75,13 +75,19 @@ class BTree (
      * 3. underflow 검사
      * 4. Rebalancing
      *
-     *     4-1. 빌려오기
+     *     4-1. Redistribution
      *
-     *         4-1-1. 왼쪽(오른쪽)에서 빌릴 수 있는경우(> ceil(maxKeys/2))
-     *         4-1-2. 형데한테 key를 빌려오고 부모의 separator key 갱신
+     *         더 오른쪽 노드의 새로운 minKey 를 부모의 key 로 업데이트
+     *         4-1-1. 왼쪽으로부터 가져오는 경우
+     *             4-1-1-1. 왼쪽 형제 노드의 가장 큰 키를 가지고옴
+     *             4-1-1-2. 기존의 구분키를 새로 가지고온 키로 업데이트
+     *         4-1-2. 오른쪽으로부터 가져오는 경우
+     *             4-1-2-1. 오른쪽 노드의 가장 작은 키를 가지고옴
+     *             4-2-2-2. 기존의 구분키를 오른쪽 형제의 새로운 최소 키로 업데이트
      *
-     *     4-2. merge
+     *     4-2. Merge
      *
+     *         오른쪽에 있는 노드가 왼쪽 노드에 합쳐짐
      *         4-2-1. 형제 노드와 합체
      *         4-2-2. 부모의 separator key 도 제거됨.
      *         4-2-3. 상위 노드까지 확인해서 게속적으로 rebalancing 필요.
@@ -93,20 +99,24 @@ class BTree (
         if(isExist){
             leafNode.delete(keyIdx)
             print("delete key")
+            if(leafNode.isUnderflow){
 
-            val prevSibling: LeafNode? = leafNode.prev
-            val nextSibling: LeafNode? = leafNode.next
-            if(prevSibling == null && nextSibling == null){
-                print("should be root")
-            } else if(nextSibling == null){
-                print("left most child")
-            } else if(prevSibling == null){
-                print("right most child")
-            }else{
-                print("middle child")
             }
         }
+    }
 
+    private fun handleUnderflow(node: LeafNode){
+        val prevSibling: LeafNode? = leafNode.prev
+        val nextSibling: LeafNode? = leafNode.next
+
+        val (_, keyIdx) = traceNode.pop()
+        val (parentNode, _) = traceNode.peek()
+        when {
+            prevSibling != null && prevSibling.hasSurplusKey -> print("redistribute left")
+            nextSibling != null && nextSibling.hasSurplusKey -> print("redistribute right")
+            prevSibling != null -> print("merge left")
+            nextSibling != null -> print("merge right")
+        }
     }
 
     private fun split(){
@@ -145,9 +155,10 @@ class BTree (
     }
 
     /**
+     * 부모 노드의 키 K를 기준으로, 왼쪽 서브트리(subtree)의 모든 값은 K보다 작고, 오른쪽 서브트리의 모든 값은 K보다 크거나 같다. (>=).
      * find node by keyIndex, value.
-     * p1: k1 <= key < k2
-     * p2: k2 <= key < k3
+     * p1: parentKey1 <= allChildNodeKeyOfPointer1 < parentKey2
+     * p2: parentKey2 <= allChildNodeKeyOfPointer2 < parentKey3
      * key <= nodeKey 인 첫 nodeKey 를 찾고 그 왼쪽 자식으로 간다
      * 즉 searchKey 가 노드의 key 보다 작거나 같아야 한다.
      * 왼쪽으로 가야(더 작은범위부터 찾아야) 모든 범위를 찾을 수 있다.
@@ -160,8 +171,8 @@ class BTree (
         var node: Node = root ?: throw IllegalStateException("No root node")
         traceNode.push(node to -1)
         if(node.isLeaf){
-            val (searchResult, isExist) = node.search(key, comparator)
-            return Triple(node as LeafNode, searchResult, isExist)
+            val (searchIdx, isExist) = node.search(key, comparator)
+            return Triple(node as LeafNode, searchIdx, isExist)
         }
         var searchIdx: Int
         var isExist: Boolean
