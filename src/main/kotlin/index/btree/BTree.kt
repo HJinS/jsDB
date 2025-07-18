@@ -100,22 +100,38 @@ class BTree (
             leafNode.delete(keyIdx)
             print("delete key")
             if(leafNode.isUnderflow){
-
+                handleUnderflow()
             }
         }
     }
 
-    private fun handleUnderflow(node: LeafNode){
-        val prevSibling: LeafNode? = leafNode.prev
-        val nextSibling: LeafNode? = leafNode.next
+    private fun handleUnderflow(){
+        var currentTrace = traceNode.pop()
+        var currentNode: Node = currentTrace.first
+        var keyIdx: Int = currentTrace.second
+        var isRoot: Boolean = traceNode.isEmpty()
 
-        val (_, keyIdx) = traceNode.pop()
-        val (parentNode, _) = traceNode.peek()
-        when {
-            prevSibling != null && prevSibling.hasSurplusKey -> print("redistribute left")
-            nextSibling != null && nextSibling.hasSurplusKey -> print("redistribute right")
-            prevSibling != null -> print("merge left")
-            nextSibling != null -> print("merge right")
+        while(!isRoot && currentNode.isUnderflow) {
+            val nextTrace = traceNode.peek()
+            val parentNode: InternalNode = nextTrace.first as InternalNode
+            val prevSibling = try { parentNode.moveToChild(keyIdx - 1) } catch (_: IndexOutOfBoundsException) { null }
+            val nextSibling = try { parentNode.moveToChild(keyIdx + 1) } catch (_: IndexOutOfBoundsException) { null }
+
+            when {
+                prevSibling != null && prevSibling.hasSurplusKey -> print("redistribute left")
+                nextSibling != null && nextSibling.hasSurplusKey -> print("redistribute right")
+                prevSibling != null -> print("merge left")
+                nextSibling != null -> print("merge right")
+            }
+
+            currentTrace = traceNode.pop()
+            currentNode = currentTrace.first
+            isRoot = traceNode.isEmpty()
+            keyIdx = currentTrace.second
+        }
+
+        if(isRoot && currentNode.isUnderflow){
+            print("handle root node underflow")
         }
     }
 
