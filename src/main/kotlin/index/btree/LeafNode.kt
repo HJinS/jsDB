@@ -1,5 +1,6 @@
 package index.btree
 
+import index.util.KeySchema
 import java.util.Collections
 
 class LeafNode(
@@ -32,6 +33,10 @@ class LeafNode(
         keys.removeAt(keyIdx)
         _values.removeAt(keyIdx)
     }
+
+    fun removeFirstValue() = _values.removeFirst()
+
+    fun removeLastValue() = _values.removeLast()
 
     /**
      * leaf node
@@ -69,5 +74,37 @@ class LeafNode(
         siblingNode._next = nextTemp
         siblingNode._prev = this
         _next = siblingNode
+    }
+
+    /**
+     * ### Leaf redistribution
+     * #### borrow from the left sibling
+     * separateKey - (keyIdx - 1)
+     * 1. Take the biggest key of the left sibling.
+     * 2. Take a right most value of the left sibling.
+     * 3. Insert key and value to me as the smallest one
+     * 4. Update the parent node's separator keys to the key of 3.
+     *
+     * #### borrow from the right sibling
+     * separateKey - (keyIdx)
+     * 1. Take the smallest key of the right sibling.
+     * 2. Take the left most value of the right sibling.
+     * 3. Insert key and value to me as the biggest one.
+     * 4. Update the parent node's separator keys to the new smallest key of the right sibling
+     * */
+    override fun redistribute(targetNode: Node, parentNode: InternalNode, keyIdx: Int, schema: KeySchema){
+        val node: LeafNode = targetNode as LeafNode
+        // borrow from right sibling
+        if(isLeft(targetNode, schema)){
+            val key = targetNode.removeFirstKey()
+            val value = targetNode.removeFirstValue()
+            node.insert(node.keys.size, key, value)
+            parentNode.keys[keyIdx] = node.keys[0]
+        } else{
+            val key = targetNode.removeLastKey()
+            val value = targetNode.removeLastValue()
+            node.insert(0, key, value)
+            parentNode.keys[keyIdx-1] = key
+        }
     }
 }
