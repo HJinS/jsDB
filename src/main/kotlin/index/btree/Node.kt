@@ -45,6 +45,8 @@ sealed class Node(
     // 오른쪽에서 빌려오는 경우는 부모의 keyIdx 업데이트
     abstract fun redistribute(targetNode: Node, parentNode: InternalNode, keyIdx: Int, schema: KeySchema)
 
+    abstract fun merge(targetNode: Node, parentNode: InternalNode, keyIdx: Int, schema: KeySchema)
+
     fun promotionKeyIdx() = floor(keys.size.toDouble() / 2.0).toInt()
     fun promotionKey() = keys[promotionKeyIdx()]
 }

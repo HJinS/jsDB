@@ -26,6 +26,8 @@ class InternalNode(
 
     fun removeLastChild() = children.removeLast()
 
+    internal fun removeChildrenAt(idx: Int) = children.removeAt(idx)
+
     /**
      * internal node
      *  - mid(promote key) 값을 floor(len / 2)로 지정
@@ -75,8 +77,6 @@ class InternalNode(
 
         // borrow from right sibling
         if(isLeft(targetNode, schema)){
-
-
             // 부모의 구분키 제거
             val removedParentKey = parentNode.keys.removeAt(keyIdx)
             // 자신의 키에 추가
@@ -107,5 +107,48 @@ class InternalNode(
             // 자신의 가장 왼쪽 childPoint 로 추가
             children.addFirst(siblingChild)
         }
+    }
+
+
+    /**
+     * Merge underflowNode with a sibling.
+     * The right node should be merged into the left node.
+     * Separation Key should be added to the left node.
+     * Separation Key:
+     * 1. keyIdx - 1 when merging with the left sibling.
+     * 2. keyIdx when merging with the right sibling.
+     * */
+    /**
+     *         30
+     *    10        50
+     *  p0 p1      p2 p3
+     *
+     *
+     *    10 30 50
+     *  p0 p1 p2 p3
+     *
+     * */
+    override fun merge(targetNode: Node, parentNode: InternalNode, keyIdx: Int, schema: KeySchema) {
+        val node: InternalNode = targetNode as InternalNode
+        val leftNode: InternalNode
+        val rightNode: InternalNode
+        val separationKey: Int
+        // merge with the right sibling.
+        if(isLeft(node, schema)){
+            leftNode = this
+            rightNode = node
+            separationKey = keyIdx
+        }else{
+            leftNode = node
+            rightNode = this
+            separationKey = keyIdx-1
+        }
+        val extractedKey = rightNode.keys
+
+        leftNode.keys.addLast(parentNode.keys[separationKey])
+        leftNode.keys.addAll(extractedKey)
+        leftNode.children.addAll(rightNode.children)
+        parentNode.keys.removeAt(separationKey)
+        parentNode.children.removeAt(separationKey+1)
     }
 }

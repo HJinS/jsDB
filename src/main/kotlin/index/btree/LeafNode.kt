@@ -95,16 +95,49 @@ class LeafNode(
     override fun redistribute(targetNode: Node, parentNode: InternalNode, keyIdx: Int, schema: KeySchema){
         val node: LeafNode = targetNode as LeafNode
         // borrow from right sibling
-        if(isLeft(targetNode, schema)){
-            val key = targetNode.removeFirstKey()
-            val value = targetNode.removeFirstValue()
-            node.insert(node.keys.size, key, value)
+        if(isLeft(node, schema)){
+            val key = node.removeFirstKey()
+            val value = node.removeFirstValue()
+            node.keys.addLast(key)
+            node._values.addLast(value)
             parentNode.keys[keyIdx] = node.keys[0]
         } else{
-            val key = targetNode.removeLastKey()
-            val value = targetNode.removeLastValue()
-            node.insert(0, key, value)
+            val key = node.removeLastKey()
+            val value = node.removeLastValue()
+            node.keys.addFirst(key)
+            node._values.addFirst(value)
             parentNode.keys[keyIdx-1] = key
         }
+    }
+
+    /**
+     * Merge underflowNode with a sibling.
+     * The right node should be merged into the left node.
+     * Separation Key should be removed.
+     * Parent's child pointer of separationKey + 1 should be removed.
+     * Separation Key:
+     * 1. keyIdx - 1 when merging with the left sibling.
+     * 2. keyIdx when merging with the right sibling.
+     * */
+    override fun merge(targetNode: Node, parentNode: InternalNode, keyIdx: Int, schema: KeySchema) {
+        val node: LeafNode = targetNode as LeafNode
+        val leftNode: LeafNode
+        val rightNode: LeafNode
+        val separationKey: Int
+        // merge with the right sibling.
+        if(isLeft(node, schema)){
+            leftNode = this
+            rightNode = node
+            separationKey = keyIdx
+        }else{
+            leftNode = node
+            rightNode = this
+            separationKey = keyIdx-1
+        }
+        val extractedKey = rightNode.keys
+        leftNode.keys.addAll(extractedKey)
+        leftNode._values.addAll(rightNode.values)
+        parentNode.keys.removeAt(separationKey)
+        parentNode.removeChildrenAt(separationKey+1)
     }
 }
