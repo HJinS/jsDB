@@ -68,7 +68,9 @@ class LeafNode(
         return splitValues
     }
 
-    // split 으로 생긴 오른쪽의 새로 생긴 노드를 연결
+    /**
+     * Link new node.
+     * */
     fun linkNewSiblingNode(siblingNode: LeafNode){
         val nextTemp = _next
         siblingNode._next = nextTemp
