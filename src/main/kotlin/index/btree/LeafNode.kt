@@ -110,34 +110,23 @@ class LeafNode(
         }
     }
 
-    /**
-     * Merge underflowNode with a sibling.
-     * The right node should be merged into the left node.
-     * Separation Key should be removed.
-     * Parent's child pointer of separationKey + 1 should be removed.
-     * Separation Key:
-     * 1. keyIdx - 1 when merging with the left sibling.
-     * 2. keyIdx when merging with the right sibling.
-     * */
     override fun merge(targetNode: Node, parentNode: InternalNode, keyIdx: Int, schema: KeySchema) {
         val node: LeafNode = targetNode as LeafNode
         val leftNode: LeafNode
         val rightNode: LeafNode
-        val separationKey: Int
-        // merge with the right sibling.
-        if(isLeft(node, schema)){
-            leftNode = this
-            rightNode = node
-            separationKey = keyIdx
-        }else{
-            leftNode = node
-            rightNode = this
-            separationKey = keyIdx-1
+        orderNode(node, keyIdx, schema).let {
+            (separationKey, lNode, rNode) ->
+            leftNode = lNode as LeafNode
+            rightNode = rNode as LeafNode
+            val extractedKey = rightNode.keys
+            val newNextNode = rightNode.next
+            leftNode.keys.addAll(extractedKey)
+            leftNode._values.addAll(rightNode.values)
+            parentNode.keys.removeAt(separationKey)
+            parentNode.removeChildrenAt(separationKey+1)
+
+            leftNode._next = newNextNode
+            newNextNode?._prev = leftNode
         }
-        val extractedKey = rightNode.keys
-        leftNode.keys.addAll(extractedKey)
-        leftNode._values.addAll(rightNode.values)
-        parentNode.keys.removeAt(separationKey)
-        parentNode.removeChildrenAt(separationKey+1)
     }
 }

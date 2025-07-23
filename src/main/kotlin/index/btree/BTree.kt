@@ -72,26 +72,7 @@ class BTree (
      *
      * 1. 삭제할 key 를 찾아 leafNode 로 내려감
      * 2. key <= nodeKey 기준으로 검색(기준은 기존과 동일)
-     * 3. underflow 검사
-     * 4. Rebalancing
-     *
-     *     4-1. Redistribution
-     *
-     *         더 오른쪽 노드의 새로운 minKey 를 부모의 key 로 업데이트
-     *         4-1-1. 왼쪽으로부터 가져오는 경우
-     *             4-1-1-1. 왼쪽 형제 노드의 가장 큰 키를 가지고옴
-     *             4-1-1-2. 기존의 구분키를 새로 가지고온 키로 업데이트
-     *         4-1-2. 오른쪽으로부터 가져오는 경우
-     *             4-1-2-1. 오른쪽 노드의 가장 작은 키를 가지고옴
-     *             4-2-2-2. 기존의 구분키를 오른쪽 형제의 새로운 최소 키로 업데이트
-     *
-     *     4-2. Merge
-     *
-     *         오른쪽에 있는 노드가 왼쪽 노드에 합쳐짐
-     *         4-2-1. 형제 노드와 합체
-     *         4-2-2. 부모의 separator key 도 제거됨.
-     *         4-2-3. 상위 노드까지 확인해서 게속적으로 rebalancing 필요.
-     *
+     * 3. handle underflow
      * */
     fun delete(key: List<Any>){
         val packedKey: ByteArray = KeyTool.pack(key, schema)
@@ -105,6 +86,20 @@ class BTree (
         }
     }
 
+    /**
+     * Handle underflow by following steps.
+     *   1. Redistribution @see [LeafNode.redistribute] @see [InternalNode.redistribute]
+     *       The minimum key of right node became new separate key.
+     *       - Borrow from the left node.
+     *         1. Take the maximum key from the left node and insert to myself as the minimum key.
+     *         2. Update the separate key to the new key from step 1.
+     *       - Borrow from the right node.
+     *         1. Take the minimum key from the right node and insert to myself as the maximum key.
+     *         2. Update the separate key with a new minimum key of the right node.
+     *   2. Merge @see [LeafNode.merge] @see [InternalNode.merge]
+     *       The right node will be merged into left node.
+     *       3. Should rebalance continuously to the root node. 상위 노드까지 확인해서 게속적으로 rebalancing 필요.
+     * */
     private fun handleUnderflow(){
         var currentTrace = traceNode.pop()
         var currentNode: Node = currentTrace.first
@@ -118,10 +113,10 @@ class BTree (
             val nextSibling = try { parentNode.moveToChild(keyIdx + 1) } catch (_: IndexOutOfBoundsException) { null }
 
             when {
-                prevSibling != null && prevSibling.hasSurplusKey -> print("redistribute left")
-                nextSibling != null && nextSibling.hasSurplusKey -> print("redistribute right")
-                prevSibling != null -> print("merge left")
-                nextSibling != null -> print("merge right")
+                prevSibling != null && prevSibling.hasSurplusKey -> currentNode.redistribute(prevSibling, parentNode, keyIdx, schema)
+                nextSibling != null && nextSibling.hasSurplusKey -> currentNode.redistribute(nextSibling, parentNode, keyIdx, schema)
+                prevSibling != null -> currentNode.merge(prevSibling, parentNode, keyIdx, schema)
+                nextSibling != null -> currentNode.merge(nextSibling, parentNode, keyIdx, schema)
             }
 
             currentTrace = traceNode.pop()
@@ -130,8 +125,8 @@ class BTree (
             keyIdx = currentTrace.second
         }
 
-        if(isRoot && currentNode.isUnderflow){
-            print("handle root node underflow")
+        if(isRoot && currentNode.keys.isEmpty()){
+            root = if(currentNode.isLeaf) currentNode as LeafNode else currentNode as InternalNode
         }
     }
 

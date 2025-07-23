@@ -40,13 +40,43 @@ sealed class Node(
 
     fun removeFirstKey() = keys.removeFirst()
 
-
-    // 왼쪽에서 빌려오는 경우는 부모의 keyIdx-1 업데이트
-    // 오른쪽에서 빌려오는 경우는 부모의 keyIdx 업데이트
     abstract fun redistribute(targetNode: Node, parentNode: InternalNode, keyIdx: Int, schema: KeySchema)
 
+    /**
+     * Merge the right node into the left node.
+     * - Separation Key should be removed.
+     * - [InternalNode] Separation Key should be added to the left node.
+     * - [InternalNode] All keys, children from the right node should be added to the left node.
+     * - [LeafNode] All keys, values from the right node should be added to the left node.
+     * - [LeafNode] Should reconnect the left, right node's link.
+     * - Parent's child pointer of separationKey + 1 should be removed.
+     *
+     * Separation Key:
+     * - keyIdx - 1 when merging with the left sibling.
+     * - keyIdx when merging with the right sibling.
+     *
+     * @param targetNode One of my sibling nodes.
+     * @param parentNode My parent node. It should be the internal node.
+     * @param keyIdx Index which I used to get to the leaf node.
+     * @param schema Column data of the table or index.
+     * */
     abstract fun merge(targetNode: Node, parentNode: InternalNode, keyIdx: Int, schema: KeySchema)
 
     fun promotionKeyIdx() = floor(keys.size.toDouble() / 2.0).toInt()
     fun promotionKey() = keys[promotionKeyIdx()]
+
+
+    /**
+     * Order node and return separationKey by the following rule.
+     * Separation Key:
+     * 1. keyIdx - 1 when merging with the left sibling.
+     * 2. keyIdx when merging with the right sibling.
+     *
+     * @return Triple<separationKey, leftNode, rightNode>
+     * */
+    internal fun orderNode(targetNode: Node, keyIdx: Int, schema: KeySchema): Triple<Int, Node, Node> = if(isLeft(targetNode, schema)) {
+        Triple(keyIdx, this, targetNode)
+    } else {
+        Triple(keyIdx-1, targetNode, this)
+    }
 }

@@ -3,9 +3,6 @@ package index.btree
 import index.util.KeySchema
 
 
-/**
- * Pi -> Ki <= key < Ki+1
- * */
 class InternalNode(
     keys: MutableList<ByteArray>,
     maxKeys: Int,
@@ -109,46 +106,20 @@ class InternalNode(
         }
     }
 
-
-    /**
-     * Merge underflowNode with a sibling.
-     * The right node should be merged into the left node.
-     * Separation Key should be added to the left node.
-     * Separation Key:
-     * 1. keyIdx - 1 when merging with the left sibling.
-     * 2. keyIdx when merging with the right sibling.
-     * */
-    /**
-     *         30
-     *    10        50
-     *  p0 p1      p2 p3
-     *
-     *
-     *    10 30 50
-     *  p0 p1 p2 p3
-     *
-     * */
     override fun merge(targetNode: Node, parentNode: InternalNode, keyIdx: Int, schema: KeySchema) {
-        val node: InternalNode = targetNode as InternalNode
         val leftNode: InternalNode
         val rightNode: InternalNode
-        val separationKey: Int
-        // merge with the right sibling.
-        if(isLeft(node, schema)){
-            leftNode = this
-            rightNode = node
-            separationKey = keyIdx
-        }else{
-            leftNode = node
-            rightNode = this
-            separationKey = keyIdx-1
-        }
-        val extractedKey = rightNode.keys
+        orderNode(targetNode, keyIdx, schema).let {
+            (separationKey, lNode, rNode) ->
+            leftNode = lNode as InternalNode
+            rightNode = rNode as InternalNode
+            val extractedKey = rightNode.keys
 
-        leftNode.keys.addLast(parentNode.keys[separationKey])
-        leftNode.keys.addAll(extractedKey)
-        leftNode.children.addAll(rightNode.children)
-        parentNode.keys.removeAt(separationKey)
-        parentNode.children.removeAt(separationKey+1)
+            leftNode.keys.addLast(parentNode.keys[separationKey])
+            leftNode.keys.addAll(extractedKey)
+            leftNode.children.addAll(rightNode.children)
+            parentNode.keys.removeAt(separationKey)
+            parentNode.children.removeAt(separationKey+1)
+        }
     }
 }
