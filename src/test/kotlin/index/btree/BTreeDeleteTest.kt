@@ -9,6 +9,11 @@ import java.time.LocalDate
 import kotlin.test.assertTrue
 
 
+
+/**
+ * TODO key packing, compare 부분 int 숫자 키워서 비교 테스트 케이스 추가
+ * - binarySearch 결과가 게속 이상함
+ * */
 class BTreeDeleteTest {
     @Test
     @DisplayName("Given field(int, Long), when insert keys, then traverse result will be lexicographic and packedKey result should be same")
