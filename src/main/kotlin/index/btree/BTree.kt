@@ -43,13 +43,16 @@ class BTree (
      * */
     fun insert(key: List<Any>) {
         val packedKey: ByteArray = KeyTool.pack(key, schema)
-        logger.info { "insert key: $key"}
         root?.let {
-            logger.info { "Root node is not null key: $key" }
-            val (leafNode, idx, _) = search(packedKey)
+            logger.info { "-------------------------------------------" }
+            logger.info { "search key for insert - key: $key" }
+            val (leafNode, idx, result) = search(packedKey)
+            logger.info { "search result - idx: $idx, isExist: $result" }
+            logger.info { "-------------------------------------------" }
+            printTree()
+            logger.info { "-------------------------------------------" }
             leafNode.insert(idx, packedKey, key)
             if(leafNode.isOverflow){
-                logger.info { "split node" }
                 try{
                     split()
                 } catch (e: Exception) {
@@ -59,10 +62,8 @@ class BTree (
             traceNode.clear()
             // check overflow and do split
         } ?: run {
-            logger.info { "Root node is null. Make new root node key: $key" }
             root = LeafNode(mutableListOf(packedKey), maxKeys, mutableListOf(key))
         }
-        printTree()
     }
 
 
@@ -113,8 +114,14 @@ class BTree (
             val nextSibling = try { parentNode.moveToChild(keyIdx + 1) } catch (_: IndexOutOfBoundsException) { null }
 
             when {
-                prevSibling != null && prevSibling.hasSurplusKey -> currentNode.redistribute(prevSibling, parentNode, keyIdx, schema)
-                nextSibling != null && nextSibling.hasSurplusKey -> currentNode.redistribute(nextSibling, parentNode, keyIdx, schema)
+                prevSibling != null && prevSibling.hasSurplusKey -> {
+                    currentNode.redistribute(prevSibling, parentNode, keyIdx, schema)
+                    break
+                }
+                nextSibling != null && nextSibling.hasSurplusKey -> {
+                    currentNode.redistribute(nextSibling, parentNode, keyIdx, schema)
+                    break
+                }
                 prevSibling != null -> currentNode.merge(prevSibling, parentNode, keyIdx, schema)
                 nextSibling != null -> currentNode.merge(nextSibling, parentNode, keyIdx, schema)
             }
@@ -134,7 +141,6 @@ class BTree (
         while(traceNode.isNotEmpty()){
             val (currentNode, currentNodeIdx) = try {traceNode.pop()} catch (_: EmptyStackException) { throw IllegalStateException("Unexpected node trace data invalid")}
             if(currentNode.isOverflow){
-                logger.info { "Node overflow split node $currentNodeIdx" }
                 val promotionKey = currentNode.promotionKey()
                 val newNode = when(currentNode){
                     is LeafNode -> {
@@ -153,13 +159,11 @@ class BTree (
                 if(traceNode.isEmpty()){
                     parentNode = InternalNode(keys = mutableListOf(promotionKey), maxKeys, mutableListOf(currentNode, newNode))
                     root = parentNode
-                    logger.info { "split root node" }
                 } else {
                     // parentNode 의 parentNodeIdx 정보는 나중에 parentNode split 할 때 필요함 -> peek 사용
                     parentNode = traceNode.peek().first as InternalNode
                     // parent key, value 삽입(leafNodeIdx 바로 오른쪽에)
                     parentNode.insert(currentNodeIdx, promotionKey, newNode)
-                    logger.info { "split leaf node" }
                 }
             }
         }
@@ -189,14 +193,18 @@ class BTree (
         var isExist: Boolean
         do {
             val result = node.search(key, comparator)
+            printNode(node, -2)
             searchIdx = result.first
             node = node as InternalNode
             node = node.moveToChild(searchIdx)
             traceNode.push(node to searchIdx)
+            logger.info { "move to [${(node.hashCode())}][$searchIdx] result: ${result.second}" }
         } while(!node.isLeaf)
         val result = node.search(key, comparator)
+        printNode(node, -2)
         searchIdx = result.first
         isExist = result.second
+        logger.info { "final result [${(node.hashCode())}][$searchIdx] result: ${result.second}" }
         return Triple(node as LeafNode, searchIdx, isExist)
     }
 
@@ -266,7 +274,7 @@ class BTree (
     fun printNode(node: Node, idx: Int){
         val keys = node.keyView
         val viewBuilder = StringBuilder()
-        viewBuilder.append("[$idx] ")
+        viewBuilder.append("[${node.hashCode()}][$idx] ")
         for(idx in keys.indices){
             val key: List<Any?> = KeyTool.unpack(keys[idx], schema)
             for(keyItem in key){

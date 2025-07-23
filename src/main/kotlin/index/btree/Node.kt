@@ -31,7 +31,8 @@ sealed class Node(
 
     fun search(key: ByteArray, comparator: Comparator<ByteArray>): Pair<Int, Boolean>{
         val idx = keys.binarySearch(key, comparator)
-        return if(idx >= 0) idx to true else -(idx + 1) to false
+        logger.info { "Binary search result: $idx keyLength: ${keys.size}" }
+        return if(idx >= 0) idx+1 to true else -(idx + 1) to false
     }
 
     fun isLeft(targetNode: Node, schema: KeySchema) = keys.last().comparePackedKey(targetNode.keys[0], schema) < 0
