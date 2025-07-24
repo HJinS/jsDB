@@ -47,62 +47,65 @@ object KeyTool {
         return when (column.type){
             ColumnType.BOOLEAN -> {
                 val packedKey  = byteArrayOf(if (key as Boolean) 1 else 0)
-                (byteArrayOf(0x01)) + packedKey.invert(column.descending)
+                (byteArrayOf(0x01)) + packedKey
             }
 
             ColumnType.BYTE -> {
                 val packedKey = byteArrayOf(key as Byte)
-                (byteArrayOf(0x01)) + packedKey.invert(column.descending)
+                (byteArrayOf(0x01)) + packedKey
             }
 
             ColumnType.SHORT -> {
-                val packedKey = ByteBuffer.allocate(2).putShort(key as Short).array()
-                (byteArrayOf(0x01)) + packedKey.invert(column.descending)
+                val packedKey = (key as Short).encodeSortable()
+                (byteArrayOf(0x01)) + packedKey
             }
             ColumnType.INT -> {
-                val packedKey = encodeVarInt(key as Int)
-                (byteArrayOf(0x01)) + packedKey.invert(column.descending)
+                val packedKey = (key as Int).encodeSortable()
+                (byteArrayOf(0x01)) + packedKey
             }
             ColumnType.LONG -> {
-                val packedKey = ByteBuffer.allocate(8).putLong(key as Long).array()
-                (byteArrayOf(0x01)) + packedKey.invert(column.descending)
+                val packedKey = (key as Long).encodeSortable()
+                (byteArrayOf(0x01)) + packedKey
             }
             ColumnType.FLOAT -> {
-                val packedKey = ByteBuffer.allocate(4).putFloat(key as Float).array()
-                (byteArrayOf(0x01)) + packedKey.invert(column.descending)
+                val packedKey = (key as Float).encodeSortable()
+                (byteArrayOf(0x01)) + packedKey
             }
             ColumnType.DOUBLE -> {
-                val packedKey = ByteBuffer.allocate(8).putDouble(key as Double).array()
-                (byteArrayOf(0x01)) + packedKey.invert(column.descending)
+                val packedKey = (key as Double).encodeSortable()
+                (byteArrayOf(0x01)) + packedKey
             }
             ColumnType.STRING -> {
                 val rawString = key as String
                 val bytes = column.collation?.getCollationKey(rawString)?.toByteArray() ?: rawString.toByteArray(StandardCharsets.UTF_8)
-                (byteArrayOf(0x01)) + encodeVarInt(bytes.size) + bytes.invert(descending=column.descending)
+                (byteArrayOf(0x01)) + encodeVarInt(bytes.size) + bytes
             }
 
             ColumnType.LOCAL_DATE -> {
-                val packedKey = encodeVarInt((key as LocalDate).toEpochDay().toInt())
-                (byteArrayOf(0x01)) + packedKey.invert(column.descending)
+                val epochDay = (key as LocalDate).toEpochDay()
+                val packedKey = epochDay.encodeSortable()
+                (byteArrayOf(0x01)) + packedKey
             }
             ColumnType.LOCAL_DATE_TIME -> {
-                val packedKey = ByteBuffer.allocate(8).putLong((key as LocalDateTime).toEpochSecond(ZoneOffset.UTC)).array()
-                (byteArrayOf(0x01)) + packedKey.invert(column.descending)
+                val epochSecond = (key as LocalDateTime).toEpochSecond(ZoneOffset.UTC)
+                val packedKey = epochSecond.encodeSortable()
+                (byteArrayOf(0x01)) + packedKey
             }
             ColumnType.INSTANT -> {
-                val packedKey = ByteBuffer.allocate(8).putLong((key as Instant).epochSecond).array()
-                (byteArrayOf(0x01)) + packedKey.invert(column.descending)
+                val epochSecond = (key as Instant).epochSecond
+                val packedKey = epochSecond.encodeSortable()
+                (byteArrayOf(0x01)) + packedKey
             }
             ColumnType.UUID -> {
                 val packedKey = ByteBuffer.allocate(16)
                     .putLong((key as UUID).mostSignificantBits)
                     .putLong(key.leastSignificantBits)
                     .array()
-                (byteArrayOf(0x01)) + packedKey.invert(column.descending)
+                (byteArrayOf(0x01)) + packedKey
             }
             ColumnType.BYTES -> {
                 val bytes = key as ByteArray
-                (byteArrayOf(0x01)) + encodeVarInt(bytes.size) + bytes.invert(descending=column.descending)
+                (byteArrayOf(0x01)) + encodeVarInt(bytes.size) + bytes
             }
         }
     }
@@ -126,24 +129,23 @@ object KeyTool {
             ColumnType.BYTE -> bytes[position++]
             ColumnType.SHORT -> {
                 val array = readBytes(2)
-                ByteBuffer.wrap(array).short
+                array.decodeSortableShort()
             }
             ColumnType.INT -> {
-                val (value, size) = decodeVarInt(bytes, position, descending = column.descending)
-                position += size
-                value
+                val array = readBytes(4)
+                array.decodeSortableInt()
             }
             ColumnType.LONG -> {
                 val array = readBytes(8)
-                ByteBuffer.wrap(array).long
+                array.decodeSortableLong()
             }
             ColumnType.FLOAT -> {
                 val array = readBytes(4)
-                ByteBuffer.wrap(array).float
+                array.decodeSortableFloat()
             }
             ColumnType.DOUBLE -> {
                 val array = readBytes(8)
-                ByteBuffer.wrap(array).double
+                array.decodeSortableDouble()
             }
 
             ColumnType.STRING -> {
@@ -159,19 +161,21 @@ object KeyTool {
             }
 
             ColumnType.LOCAL_DATE -> {
-                val (epochDay, lenBytes) = decodeVarInt(bytes, position, descending = column.descending)
-                position += lenBytes
-                LocalDate.ofEpochDay(epochDay.toLong())
+                val array = readBytes(8)
+                val epochDay = array.decodeSortableLong()
+                LocalDate.ofEpochDay(epochDay)
             }
 
             ColumnType.LOCAL_DATE_TIME -> {
                 val array = readBytes(8)
-                LocalDateTime.ofEpochSecond(ByteBuffer.wrap(array).long, 0, ZoneOffset.UTC)
+                val epochSecond = array.decodeSortableLong()
+                LocalDateTime.ofEpochSecond(epochSecond, 0, ZoneOffset.UTC)
             }
 
             ColumnType.INSTANT -> {
                 val array = readBytes(8)
-                Instant.ofEpochSecond(ByteBuffer.wrap(array).long)
+                val epochSecond = array.decodeSortableLong()
+                Instant.ofEpochSecond(epochSecond)
             }
 
             ColumnType.UUID -> {
