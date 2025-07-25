@@ -309,7 +309,7 @@ class BTreeKeyCompareTest: FunSpec({
             ))
         )
     ).forEachIndexed{ index, parameter ->
-        test("[Test $index] The first value[${parameter.first}] should be greater than the second value[${parameter.second}] wparameterh given schema"){
+        test("[Test $index] [${parameter.first}] > [${parameter.second}] with schema ${parameter.third}"){
             val packedValue = KeyTool.pack(parameter.first, parameter.third)
             val result = parameter.first.compareUnpackedKey(parameter.second, parameter.third)
             val packedKey = KeyTool.pack(parameter.second, parameter.third)
@@ -577,7 +577,7 @@ class BTreeKeyCompareTest: FunSpec({
             ))
         )
     ).forEachIndexed{ index, parameter ->
-        test("[Test $index] The first value[${parameter.first}] should be smaller than the second value[${parameter.second}] wparameterh given schema"){
+        test("[Test $index] [${parameter.first}] < [${parameter.second}] with ${parameter.third}"){
             val packedValue = KeyTool.pack(parameter.first, parameter.third)
             val result = parameter.first.compareUnpackedKey(parameter.second, parameter.third)
             val packedKey = KeyTool.pack(parameter.second, parameter.third)
@@ -725,7 +725,7 @@ class BTreeKeyCompareTest: FunSpec({
             ))
         )
     ).forEachIndexed{ index, parameter ->
-        test("[Test $index] The first value[${parameter.first}] should be equal to the second value[${parameter.second}] wparameterh given schema"){
+        test("[Test $index] [${parameter.first}] == [${parameter.second}] with ${parameter.third}"){
             val packedValue = KeyTool.pack(parameter.first, parameter.third)
             val result = parameter.first.compareUnpackedKey(parameter.second, parameter.third)
             val packedKey = KeyTool.pack(parameter.second, parameter.third)
