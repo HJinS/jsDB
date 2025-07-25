@@ -113,7 +113,6 @@ class BTree (
             val prevSibling = try { parentNode.moveToChild(keyIdx - 1) } catch (_: IndexOutOfBoundsException) { null }
             val nextSibling = try { parentNode.moveToChild(keyIdx + 1) } catch (_: IndexOutOfBoundsException) { null }
 
-            println("========================================================")
             printTree()
             when {
                 prevSibling != null && prevSibling.hasSurplusKey -> {
@@ -253,13 +252,14 @@ class BTree (
         val queue = ArrayDeque<QueueItem>()
         queue.addLast(QueueItem(start, 0, start is LeafNode, 0))
         var prevLevel = 0
+        val viewBuilder = StringBuilder()
         while(queue.isNotEmpty()){
             val item = queue.removeFirst()
             var (node, level, isLeaf, idx) = item
             if(prevLevel != level){
-                print("\n")
+                viewBuilder.append("\n")
             }
-            printNode(node, idx)
+            printNode(viewBuilder, node, idx)
             if(!isLeaf){
                 node = node as InternalNode
                 for(idx in 0..(node.childCount-1)){
@@ -269,13 +269,12 @@ class BTree (
             }
             prevLevel = level
         }
-        println("\n======================================")
+        logger.info { "\n\n$viewBuilder\n\n"}
     }
 
-    fun printNode(node: Node, idx: Int){
+    fun printNode(viewBuilder: StringBuilder, node: Node, idx: Int){
         val keys = node.keyView
-        val viewBuilder = StringBuilder()
-        viewBuilder.append("[${node.hashCode()}][$idx] ")
+        viewBuilder.append("   [${node.hashCode()}][$idx] ")
         for(idx in keys.indices){
             val key: List<Any?> = KeyTool.unpack(keys[idx], schema)
             for(keyItem in key){
@@ -283,7 +282,5 @@ class BTree (
             }
             viewBuilder.append(" ")
         }
-        viewBuilder.insert(0, "  ")
-        print(viewBuilder.toString())
     }
 }
