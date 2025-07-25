@@ -48,9 +48,6 @@ class BTree (
             logger.info { "search key for insert - key: $key" }
             val (leafNode, idx, result) = search(packedKey)
             logger.info { "search result - idx: $idx, isExist: $result" }
-            logger.info { "-------------------------------------------" }
-            printTree()
-            logger.info { "-------------------------------------------" }
             leafNode.insert(idx, packedKey, key)
             if(leafNode.isOverflow){
                 try{
@@ -64,6 +61,9 @@ class BTree (
         } ?: run {
             root = LeafNode(mutableListOf(packedKey), maxKeys, mutableListOf(key))
         }
+        logger.info { "-------------------------------------------" }
+        printTree()
+        logger.info { "-------------------------------------------" }
     }
 
 
@@ -113,6 +113,8 @@ class BTree (
             val prevSibling = try { parentNode.moveToChild(keyIdx - 1) } catch (_: IndexOutOfBoundsException) { null }
             val nextSibling = try { parentNode.moveToChild(keyIdx + 1) } catch (_: IndexOutOfBoundsException) { null }
 
+            println("========================================================")
+            printTree()
             when {
                 prevSibling != null && prevSibling.hasSurplusKey -> {
                     currentNode.redistribute(prevSibling, parentNode, keyIdx, schema)
@@ -191,17 +193,16 @@ class BTree (
         }
         var searchIdx: Int
         var isExist: Boolean
-        do {
+        while(!node.isLeaf){
             val result = node.search(key, comparator)
-            printNode(node, -2)
             searchIdx = result.first
             node = node as InternalNode
             node = node.moveToChild(searchIdx)
             traceNode.push(node to searchIdx)
             logger.info { "move to [${(node.hashCode())}][$searchIdx] result: ${result.second}" }
-        } while(!node.isLeaf)
-        val result = node.search(key, comparator)
-        printNode(node, -2)
+        }
+        logger.info { "End of loop" }
+        val result = node.search(key, comparator, true)
         searchIdx = result.first
         isExist = result.second
         logger.info { "final result [${(node.hashCode())}][$searchIdx] result: ${result.second}" }

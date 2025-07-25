@@ -73,7 +73,7 @@ class InternalNode(
         val node: InternalNode = targetNode as InternalNode
 
         // borrow from right sibling
-        if(isLeft(targetNode, schema)){
+        if(isLeft(targetNode, parentNode, keyIdx)){
             // 부모의 구분키 제거
             val removedParentKey = parentNode.keys.removeAt(keyIdx)
             // 자신의 키에 추가
@@ -109,7 +109,7 @@ class InternalNode(
     override fun merge(targetNode: Node, parentNode: InternalNode, keyIdx: Int, schema: KeySchema) {
         val leftNode: InternalNode
         val rightNode: InternalNode
-        orderNode(targetNode, keyIdx, schema).let {
+        orderNode(targetNode, parentNode, keyIdx).let {
             (separationKey, lNode, rNode) ->
             leftNode = lNode as InternalNode
             rightNode = rNode as InternalNode

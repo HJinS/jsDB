@@ -97,7 +97,7 @@ class LeafNode(
     override fun redistribute(targetNode: Node, parentNode: InternalNode, keyIdx: Int, schema: KeySchema){
         val node: LeafNode = targetNode as LeafNode
         // borrow from right sibling
-        if(isLeft(node, schema)){
+        if(isLeft(node, parentNode, keyIdx)){
             val key = node.removeFirstKey()
             val value = node.removeFirstValue()
             node.keys.addLast(key)
@@ -116,7 +116,7 @@ class LeafNode(
         val node: LeafNode = targetNode as LeafNode
         val leftNode: LeafNode
         val rightNode: LeafNode
-        orderNode(node, keyIdx, schema).let {
+        orderNode(node, parentNode, keyIdx).let {
             (separationKey, lNode, rNode) ->
             leftNode = lNode as LeafNode
             rightNode = rNode as LeafNode

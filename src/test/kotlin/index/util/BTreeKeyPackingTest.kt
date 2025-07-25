@@ -66,11 +66,11 @@ class BTreeKeyPackingTest: FunSpec({
             Column("name", ColumnType.STRING, descending = false),
             Column("bytes", ColumnType.BYTES, descending = false)
         ))
-    ).forEach{
-        test("Original value[${it.first}] should be same after packing, unpacking"){
-            val packed = KeyTool.pack(it.first, it.second)
-            val unpacked = KeyTool.unpack(packed, it.second)
-            for ((key1, key2) in it.first.zip(unpacked)){
+    ).forEachIndexed{ index, parameter ->
+        test("[Test $index] Original value[${parameter.first}] should be same after packing, unpacking"){
+            val packed = KeyTool.pack(parameter.first, parameter.second)
+            val unpacked = KeyTool.unpack(packed, parameter.second)
+            for ((key1, key2) in parameter.first.zip(unpacked)){
                 key1 shouldBe key2
             }
         }
@@ -95,7 +95,6 @@ class BTreeKeyPackingTest: FunSpec({
             } else {
                 key1 shouldBe key2
             }
-
         }
     }
 })

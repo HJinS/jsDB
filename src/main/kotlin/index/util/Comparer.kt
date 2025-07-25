@@ -1,12 +1,10 @@
 package index.util
 
-import mu.KotlinLogging
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.UUID
 
-val logger = KotlinLogging.logger {}
 /**
  * Compare key of this, other
  * this < other -> result < 0
@@ -79,7 +77,7 @@ fun ByteArray.comparePackedKey(other: ByteArray, schema: KeySchema): Int{
     var offset1 = 0
     var offset2 = 0
     for (column in schema.columns){
-        logger.info { "descending: ${column.descending} columnType: ${column.type} columnName: ${column.name}" }
+//        logger.info { "descending: ${column.descending} columnType: ${column.type} columnName: ${column.name}" }
         val byte1 = this[offset1]
         val byte2 = other.getOrElse(offset2) { _ -> 0x00.toByte()}
 
@@ -90,8 +88,8 @@ fun ByteArray.comparePackedKey(other: ByteArray, schema: KeySchema): Int{
             offset2++
             continue
         }
-        if (isNull1 && !isNull2) return if (column.descending) 1 else -1
-        if (!isNull1 && isNull2) return if (column.descending) -1 else 1
+        if (isNull1) return if (column.descending) 1 else -1
+        if (isNull2) return if (column.descending) -1 else 1
         offset1++
         offset2++
 
@@ -107,7 +105,7 @@ fun comparePackedItem(bytes1: ByteArray, offset1: Int, bytes2: ByteArray, offset
     fun extractBytes(bytes: ByteArray, offset: Int, length: Int): ByteArray{
         return bytes.copyOfRange(offset, offset + length)
     }
-    logger.info { "bytes1: ${bytes1} bytes2: ${bytes2}" }
+//    logger.info { "bytes1: ${bytes1} bytes2: ${bytes2}" }
     return when (column.type){
         ColumnType.INT, ColumnType.FLOAT -> {
             val extractedBytes1 = extractBytes(bytes1, offset1, 4)

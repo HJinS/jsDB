@@ -1,7 +1,6 @@
 package index.btree
 
 import index.util.KeySchema
-import index.util.comparePackedKey
 import java.util.Collections
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -29,13 +28,25 @@ sealed class Node(
     val hasSurplusKey: Boolean
         get() = keys.size > ceil(maxKeys / 2.0)
 
-    fun search(key: ByteArray, comparator: Comparator<ByteArray>): Pair<Int, Boolean>{
+    /**
+     * 어디로 내려가야할 지 겨올를 찾을 경우에는 실제로 값이 있는 경우 idx+1, 삭제를 위해 찾는 경우는 idx 필요
+     * 음수인 경우는 insertionPoint 그대로 사용(-(idx+1))
+     * */
+    fun search(key: ByteArray, comparator: Comparator<ByteArray>, exactIndex: Boolean=false): Pair<Int, Boolean>{
         val idx = keys.binarySearch(key, comparator)
         logger.info { "Binary search result: $idx keyLength: ${keys.size}" }
-        return if(idx >= 0) idx+1 to true else -(idx + 1) to false
+        return if(idx >= 0) {if(exactIndex) idx to true else idx+1 to true} else -(idx + 1) to false
     }
 
-    fun isLeft(targetNode: Node, schema: KeySchema) = keys.last().comparePackedKey(targetNode.keys[0], schema) < 0
+    fun isLeft(targetNode: Node, parentNode: InternalNode, keyIdx: Int): Boolean{
+        return try {
+            val rightChild = parentNode.moveToChild(keyIdx+1)
+            targetNode === rightChild
+        } catch (_: IndexOutOfBoundsException){
+            val leftChild = parentNode.moveToChild(keyIdx-1)
+            targetNode !== leftChild
+        }
+    }
 
     fun removeLastKey() = keys.removeLast()
 
@@ -75,7 +86,7 @@ sealed class Node(
      *
      * @return Triple<separationKey, leftNode, rightNode>
      * */
-    internal fun orderNode(targetNode: Node, keyIdx: Int, schema: KeySchema): Triple<Int, Node, Node> = if(isLeft(targetNode, schema)) {
+    internal fun orderNode(targetNode: Node, parentNode: InternalNode, keyIdx: Int): Triple<Int, Node, Node> = if(isLeft(targetNode, parentNode, keyIdx)) {
         Triple(keyIdx, this, targetNode)
     } else {
         Triple(keyIdx-1, targetNode, this)
