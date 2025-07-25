@@ -84,6 +84,8 @@ class BTree (
             if(leafNode.isUnderflow){
                 handleUnderflow()
             }
+        } else{
+            throw NoSuchElementException("Key not found")
         }
     }
 
