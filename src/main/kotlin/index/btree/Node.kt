@@ -23,10 +23,10 @@ sealed class Node(
         get() = keys.size > maxKeys
 
     val isUnderflow: Boolean
-        get() = keys.size < ceil(maxKeys / 2.0)
+        get() = keys.size < maxKeys / 2
 
     val hasSurplusKey: Boolean
-        get() = keys.size > ceil(maxKeys / 2.0)
+        get() = keys.size > maxKeys / 2
 
     /**
      * 어디로 내려가야할 지 겨올를 찾을 경우에는 실제로 값이 있는 경우 idx+1, 삭제를 위해 찾는 경우는 idx 필요
@@ -48,9 +48,9 @@ sealed class Node(
         }
     }
 
-    fun removeLastKey() = keys.removeLast()
+    fun removeLastKey(): ByteArray = keys.removeLast()
 
-    fun removeFirstKey() = keys.removeFirst()
+    fun removeFirstKey(): ByteArray = keys.removeFirst()
 
     abstract fun redistribute(targetNode: Node, parentNode: InternalNode, keyIdx: Int, schema: KeySchema)
 

@@ -19,9 +19,9 @@ class InternalNode(
         keys.add(idx, key)
     }
 
-    fun removeFirstChild() = children.removeFirst()
+    private fun removeFirstChild(): Node = children.removeFirst()
 
-    fun removeLastChild() = children.removeLast()
+    private fun removeLastChild(): Node = children.removeLast()
 
     internal fun removeChildrenAt(idx: Int) = children.removeAt(idx)
 
@@ -114,7 +114,7 @@ class InternalNode(
             leftNode = lNode as InternalNode
             rightNode = rNode as InternalNode
             val extractedKey = rightNode.keys
-
+            logger.info { "Merge Internal: leftNode: ${leftNode.hashCode()} rightNode: ${rightNode.hashCode()}" }
             leftNode.keys.addLast(parentNode.keys[separationKey])
             leftNode.keys.addAll(extractedKey)
             leftNode.children.addAll(rightNode.children)

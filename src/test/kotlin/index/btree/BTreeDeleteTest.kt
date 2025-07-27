@@ -12,7 +12,7 @@ import io.kotest.matchers.shouldBe
  * - binarySearch 결과가 게속 이상함
  * */
 class BTreeDeleteTest: BehaviorSpec({
-    context("After deleting keys, the tree's state should be balanced by rebalancing"){
+    context("After deleting keys, the tree's state should be balanced by re-balancing"){
         val schema = KeySchema(listOf(
             Column("count", ColumnType.INT, descending = false),
             Column("largeCount", ColumnType.LONG, descending = false)
@@ -85,6 +85,211 @@ class BTreeDeleteTest: BehaviorSpec({
                     listOf<Number>(21,1231342L),
                     listOf<Number>(210,1234203L),
                     listOf<Number>(235,123123932L),
+                    listOf<Number>(325,1232932L)
+                )
+                Then("Trace result should be $expectedResults"){
+                    val allKeys = btree.traverse()
+                    allKeys.toList().map{ it.second } shouldBe expectedResults
+                }
+            }
+
+            deleteKey = listOf<Number>(12, 12342322L)
+            When("Delete key $deleteKey"){
+                btree.delete(deleteKey)
+                btree.printTree()
+                val expectedResults = listOf(
+                    listOf<Number>(1,10L),
+                    listOf<Number>(1,10L),
+                    listOf<Number>(2,12342L),
+                    listOf<Number>(2,12342L),
+                    listOf<Number>(3,4L),
+                    listOf<Number>(4,1032L),
+                    listOf<Number>(4,23276L),
+                    listOf<Number>(5,50L),
+                    listOf<Number>(21,1231342L),
+                    listOf<Number>(21,1231342L),
+                    listOf<Number>(210,1234203L),
+                    listOf<Number>(235,123123932L),
+                    listOf<Number>(325,1232932L)
+                )
+                Then("Trace result should be $expectedResults"){
+                    val allKeys = btree.traverse()
+                    allKeys.toList().map{ it.second } shouldBe expectedResults
+                }
+            }
+
+            deleteKey = listOf<Number>(4,1032L)
+            When("Delete key $deleteKey"){
+                btree.delete(deleteKey)
+                btree.printTree()
+                val expectedResults = listOf(
+                    listOf<Number>(1,10L),
+                    listOf<Number>(1,10L),
+                    listOf<Number>(2,12342L),
+                    listOf<Number>(2,12342L),
+                    listOf<Number>(3,4L),
+                    listOf<Number>(4,23276L),
+                    listOf<Number>(5,50L),
+                    listOf<Number>(21,1231342L),
+                    listOf<Number>(21,1231342L),
+                    listOf<Number>(210,1234203L),
+                    listOf<Number>(235,123123932L),
+                    listOf<Number>(325,1232932L)
+                )
+                Then("Trace result should be $expectedResults"){
+                    val allKeys = btree.traverse()
+                    allKeys.toList().map{ it.second } shouldBe expectedResults
+                }
+            }
+
+            deleteKey = listOf<Number>(4,23276L)
+            When("Delete key $deleteKey"){
+                btree.delete(deleteKey)
+                btree.printTree()
+                val expectedResults = listOf(
+                    listOf<Number>(1,10L),
+                    listOf<Number>(1,10L),
+                    listOf<Number>(2,12342L),
+                    listOf<Number>(2,12342L),
+                    listOf<Number>(3,4L),
+                    listOf<Number>(5,50L),
+                    listOf<Number>(21,1231342L),
+                    listOf<Number>(21,1231342L),
+                    listOf<Number>(210,1234203L),
+                    listOf<Number>(235,123123932L),
+                    listOf<Number>(325,1232932L)
+                )
+                Then("Trace result should be $expectedResults"){
+                    val allKeys = btree.traverse()
+                    allKeys.toList().map{ it.second } shouldBe expectedResults
+                }
+            }
+
+            deleteKey = listOf<Number>(5,50L)
+            When("Delete key $deleteKey"){
+                btree.delete(deleteKey)
+                btree.printTree()
+                val expectedResults = listOf(
+                    listOf<Number>(1,10L),
+                    listOf<Number>(1,10L),
+                    listOf<Number>(2,12342L),
+                    listOf<Number>(2,12342L),
+                    listOf<Number>(3,4L),
+                    listOf<Number>(21,1231342L),
+                    listOf<Number>(21,1231342L),
+                    listOf<Number>(210,1234203L),
+                    listOf<Number>(235,123123932L),
+                    listOf<Number>(325,1232932L)
+                )
+                Then("Trace result should be $expectedResults"){
+                    val allKeys = btree.traverse()
+                    allKeys.toList().map{ it.second } shouldBe expectedResults
+                }
+            }
+
+            deleteKey = listOf<Number>(21,1231342L)
+            When("Delete key $deleteKey"){
+                btree.delete(deleteKey)
+                btree.printTree()
+                val expectedResults = listOf(
+                    listOf<Number>(1,10L),
+                    listOf<Number>(1,10L),
+                    listOf<Number>(2,12342L),
+                    listOf<Number>(2,12342L),
+                    listOf<Number>(3,4L),
+                    listOf<Number>(21,1231342L),
+                    listOf<Number>(210,1234203L),
+                    listOf<Number>(235,123123932L),
+                    listOf<Number>(325,1232932L)
+                )
+                Then("Trace result should be $expectedResults"){
+                    val allKeys = btree.traverse()
+                    allKeys.toList().map{ it.second } shouldBe expectedResults
+                }
+            }
+
+            deleteKey = listOf<Number>(3,4L)
+            When("Delete key $deleteKey"){
+                btree.delete(deleteKey)
+                btree.printTree()
+                val expectedResults = listOf(
+                    listOf<Number>(1,10L),
+                    listOf<Number>(1,10L),
+                    listOf<Number>(2,12342L),
+                    listOf<Number>(2,12342L),
+                    listOf<Number>(21,1231342L),
+                    listOf<Number>(210,1234203L),
+                    listOf<Number>(235,123123932L),
+                    listOf<Number>(325,1232932L)
+                )
+                Then("Trace result should be $expectedResults"){
+                    val allKeys = btree.traverse()
+                    allKeys.toList().map{ it.second } shouldBe expectedResults
+                }
+            }
+
+            deleteKey = listOf<Number>(21,1231342L)
+            When("Delete key $deleteKey"){
+                btree.delete(deleteKey)
+                btree.printTree()
+                val expectedResults = listOf(
+                    listOf<Number>(1,10L),
+                    listOf<Number>(1,10L),
+                    listOf<Number>(2,12342L),
+                    listOf<Number>(2,12342L),
+                    listOf<Number>(210,1234203L),
+                    listOf<Number>(235,123123932L),
+                    listOf<Number>(325,1232932L)
+                )
+                Then("Trace result should be $expectedResults"){
+                    val allKeys = btree.traverse()
+                    allKeys.toList().map{ it.second } shouldBe expectedResults
+                }
+            }
+
+            deleteKey = listOf<Number>(235,123123932L)
+            When("Delete key $deleteKey"){
+                btree.delete(deleteKey)
+                btree.printTree()
+                val expectedResults = listOf(
+                    listOf<Number>(1,10L),
+                    listOf<Number>(1,10L),
+                    listOf<Number>(2,12342L),
+                    listOf<Number>(2,12342L),
+                    listOf<Number>(210,1234203L),
+                    listOf<Number>(325,1232932L)
+                )
+                Then("Trace result should be $expectedResults"){
+                    val allKeys = btree.traverse()
+                    allKeys.toList().map{ it.second } shouldBe expectedResults
+                }
+            }
+
+            deleteKey = listOf<Number>(210,1234203L)
+            When("Delete key $deleteKey"){
+                btree.delete(deleteKey)
+                btree.printTree()
+                val expectedResults = listOf(
+                    listOf<Number>(1,10L),
+                    listOf<Number>(1,10L),
+                    listOf<Number>(2,12342L),
+                    listOf<Number>(2,12342L),
+                    listOf<Number>(325,1232932L)
+                )
+                Then("Trace result should be $expectedResults"){
+                    val allKeys = btree.traverse()
+                    allKeys.toList().map{ it.second } shouldBe expectedResults
+                }
+            }
+
+            deleteKey = listOf<Number>(2,12342L)
+            When("Delete key $deleteKey"){
+                btree.delete(deleteKey)
+                btree.printTree()
+                val expectedResults = listOf(
+                    listOf<Number>(1,10L),
+                    listOf<Number>(1,10L),
+                    listOf<Number>(2,12342L),
                     listOf<Number>(325,1232932L)
                 )
                 Then("Trace result should be $expectedResults"){

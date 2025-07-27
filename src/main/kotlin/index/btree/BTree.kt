@@ -87,6 +87,7 @@ class BTree (
         } else{
             throw NoSuchElementException("Key not found")
         }
+        traceNode.clear()
     }
 
     /**
@@ -136,7 +137,9 @@ class BTree (
         }
 
         if(isRoot && currentNode.keys.isEmpty()){
-            root = if(currentNode.isLeaf) currentNode as LeafNode else currentNode as InternalNode
+            val currentNodeInternal = currentNode as InternalNode
+            val nextChildNode = currentNodeInternal.moveToChild(0)
+            root = if(nextChildNode.isLeaf) nextChildNode as LeafNode else nextChildNode as InternalNode
         }
     }
 
