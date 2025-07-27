@@ -264,9 +264,9 @@ class BTree (
             printNode(viewBuilder, node, idx)
             if(!isLeaf){
                 node = node as InternalNode
-                for(idx in 0..(node.childCount-1)){
-                    val childNode = node.moveToChild(idx)
-                    queue.addLast(QueueItem(childNode, level + 1, childNode is LeafNode, idx))
+                for(_idx in 0..<node.childCount){
+                    val childNode = node.moveToChild(_idx)
+                    queue.addLast(QueueItem(childNode, level + 1, childNode is LeafNode, _idx))
                 }
             }
             prevLevel = level
