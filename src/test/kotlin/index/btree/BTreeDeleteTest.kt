@@ -5,12 +5,9 @@ import index.util.ColumnType
 import index.util.KeySchema
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import java.time.LocalDate
 
 
-/**
- * TODO key packing, compare 부분 int 숫자 키워서 비교 테스트 케이스 추가
- * - binarySearch 결과가 게속 이상함
- * */
 class BTreeDeleteTest: BehaviorSpec({
     context("After deleting keys, the tree's state should be balanced by re-balancing"){
         val schema = KeySchema(listOf(
@@ -294,6 +291,229 @@ class BTreeDeleteTest: BehaviorSpec({
                 )
                 Then("Trace result should be $expectedResults"){
                     val allKeys = btree.traverse()
+                    allKeys.toList().map{ it.second } shouldBe expectedResults
+                }
+            }
+        }
+
+        val schema2 = KeySchema(listOf(
+            Column("name", ColumnType.STRING, descending = false),
+            Column("date", ColumnType.LOCAL_DATE, descending = false)
+        ))
+        val btree2 = BTree("test", "test table 2", schema2, 3, true)
+        val keys2 = listOf(
+            listOf("Ava", LocalDate.of(2025, 4, 30)),
+            listOf("Grace", LocalDate.of(2024, 3, 20)),
+            listOf("Ava", LocalDate.of(2019, 12, 25)),
+            listOf("Elijah", LocalDate.of(1997, 12, 25)),
+            listOf("ElijahKim", LocalDate.of(1997, 12, 25)),
+            listOf("Lucas", LocalDate.of(1697, 12, 25)),
+            listOf("Faith", LocalDate.of(2022, 1, 18)),
+            listOf("Grace", LocalDate.of(2020, 1, 30)),
+            listOf("soif", LocalDate.of(2020, 1, 30)),
+            listOf("Daniel", LocalDate.of(2018, 4, 9)),
+            listOf("Daniel", LocalDate.of(2018, 4, 9)),
+            listOf("Chloe", LocalDate.of(2019, 12, 25)),
+            listOf("Chloed", LocalDate.of(2020, 12, 25))
+        )
+        for (key in keys2) {
+            btree2.insert(key)
+        }
+
+        btree2.printTree()
+
+        Given("A Tree with schema $schema2"){
+            var deleteKey = listOf("ElijahKim", LocalDate.of(1997, 12, 25))
+            When("Delete key $deleteKey"){
+                btree2.delete(deleteKey)
+                btree2.printTree()
+                val expectedResults = listOf(
+                    listOf("Ava", LocalDate.of(2019, 12, 25)),
+                    listOf("Ava", LocalDate.of(2025, 4, 30)),
+                    listOf("Chloe", LocalDate.of(2019, 12, 25)),
+                    listOf("Chloed", LocalDate.of(2020, 12, 25)),
+                    listOf("Daniel", LocalDate.of(2018, 4, 9)),
+                    listOf("Daniel", LocalDate.of(2018, 4, 9)),
+                    listOf("Elijah", LocalDate.of(1997, 12, 25)),
+                    listOf("Faith", LocalDate.of(2022, 1, 18)),
+                    listOf("Grace", LocalDate.of(2020, 1, 30)),
+                    listOf("Grace", LocalDate.of(2024, 3, 20)),
+                    listOf("Lucas", LocalDate.of(1697, 12, 25)),
+                    listOf("soif", LocalDate.of(2020, 1, 30))
+                )
+                Then("Trace result should be $expectedResults"){
+                    val allKeys = btree2.traverse()
+                    allKeys.toList().map{ it.second } shouldBe expectedResults
+                }
+            }
+
+            deleteKey = listOf("Elijah", LocalDate.of(1997, 12, 25))
+            When("Delete key $deleteKey"){
+                btree2.delete(deleteKey)
+                btree2.printTree()
+                val expectedResults = listOf(
+                    listOf("Ava", LocalDate.of(2019, 12, 25)),
+                    listOf("Ava", LocalDate.of(2025, 4, 30)),
+                    listOf("Chloe", LocalDate.of(2019, 12, 25)),
+                    listOf("Chloed", LocalDate.of(2020, 12, 25)),
+                    listOf("Daniel", LocalDate.of(2018, 4, 9)),
+                    listOf("Daniel", LocalDate.of(2018, 4, 9)),
+                    listOf("Faith", LocalDate.of(2022, 1, 18)),
+                    listOf("Grace", LocalDate.of(2020, 1, 30)),
+                    listOf("Grace", LocalDate.of(2024, 3, 20)),
+                    listOf("Lucas", LocalDate.of(1697, 12, 25)),
+                    listOf("soif", LocalDate.of(2020, 1, 30))
+                )
+                Then("Trace result should be $expectedResults"){
+                    val allKeys = btree2.traverse()
+                    allKeys.toList().map{ it.second } shouldBe expectedResults
+                }
+            }
+
+            deleteKey = listOf("Chloed", LocalDate.of(2020, 12, 25))
+            When("Delete key $deleteKey"){
+                btree2.delete(deleteKey)
+                btree2.printTree()
+                val expectedResults = listOf(
+                    listOf("Ava", LocalDate.of(2019, 12, 25)),
+                    listOf("Ava", LocalDate.of(2025, 4, 30)),
+                    listOf("Chloe", LocalDate.of(2019, 12, 25)),
+                    listOf("Daniel", LocalDate.of(2018, 4, 9)),
+                    listOf("Daniel", LocalDate.of(2018, 4, 9)),
+                    listOf("Faith", LocalDate.of(2022, 1, 18)),
+                    listOf("Grace", LocalDate.of(2020, 1, 30)),
+                    listOf("Grace", LocalDate.of(2024, 3, 20)),
+                    listOf("Lucas", LocalDate.of(1697, 12, 25)),
+                    listOf("soif", LocalDate.of(2020, 1, 30))
+                )
+                Then("Trace result should be $expectedResults"){
+                    val allKeys = btree2.traverse()
+                    allKeys.toList().map{ it.second } shouldBe expectedResults
+                }
+            }
+
+            deleteKey = listOf("Grace", LocalDate.of(2020, 1, 30))
+            When("Delete key $deleteKey"){
+                btree2.delete(deleteKey)
+                btree2.printTree()
+                val expectedResults = listOf(
+                    listOf("Ava", LocalDate.of(2019, 12, 25)),
+                    listOf("Ava", LocalDate.of(2025, 4, 30)),
+                    listOf("Chloe", LocalDate.of(2019, 12, 25)),
+                    listOf("Daniel", LocalDate.of(2018, 4, 9)),
+                    listOf("Daniel", LocalDate.of(2018, 4, 9)),
+                    listOf("Faith", LocalDate.of(2022, 1, 18)),
+                    listOf("Grace", LocalDate.of(2024, 3, 20)),
+                    listOf("Lucas", LocalDate.of(1697, 12, 25)),
+                    listOf("soif", LocalDate.of(2020, 1, 30))
+                )
+                Then("Trace result should be $expectedResults"){
+                    val allKeys = btree2.traverse()
+                    allKeys.toList().map{ it.second } shouldBe expectedResults
+                }
+            }
+
+            deleteKey = listOf("Ava", LocalDate.of(2025, 4, 30))
+            When("Delete key $deleteKey"){
+                btree2.delete(deleteKey)
+                btree2.printTree()
+                val expectedResults = listOf(
+                    listOf("Ava", LocalDate.of(2019, 12, 25)),
+                    listOf("Chloe", LocalDate.of(2019, 12, 25)),
+                    listOf("Daniel", LocalDate.of(2018, 4, 9)),
+                    listOf("Daniel", LocalDate.of(2018, 4, 9)),
+                    listOf("Faith", LocalDate.of(2022, 1, 18)),
+                    listOf("Grace", LocalDate.of(2024, 3, 20)),
+                    listOf("Lucas", LocalDate.of(1697, 12, 25)),
+                    listOf("soif", LocalDate.of(2020, 1, 30))
+                )
+                Then("Trace result should be $expectedResults"){
+                    val allKeys = btree2.traverse()
+                    allKeys.toList().map{ it.second } shouldBe expectedResults
+                }
+            }
+
+            deleteKey = listOf("soif", LocalDate.of(2020, 1, 30))
+            When("Delete key $deleteKey"){
+                btree2.delete(deleteKey)
+                btree2.printTree()
+                val expectedResults = listOf(
+                    listOf("Ava", LocalDate.of(2019, 12, 25)),
+                    listOf("Chloe", LocalDate.of(2019, 12, 25)),
+                    listOf("Daniel", LocalDate.of(2018, 4, 9)),
+                    listOf("Daniel", LocalDate.of(2018, 4, 9)),
+                    listOf("Faith", LocalDate.of(2022, 1, 18)),
+                    listOf("Grace", LocalDate.of(2024, 3, 20)),
+                    listOf("Lucas", LocalDate.of(1697, 12, 25))
+                )
+                Then("Trace result should be $expectedResults"){
+                    val allKeys = btree2.traverse()
+                    allKeys.toList().map{ it.second } shouldBe expectedResults
+                }
+            }
+
+            deleteKey = listOf("Faith", LocalDate.of(2022, 1, 18))
+            When("Delete key $deleteKey"){
+                btree2.delete(deleteKey)
+                btree2.printTree()
+                val expectedResults = listOf(
+                    listOf("Ava", LocalDate.of(2019, 12, 25)),
+                    listOf("Chloe", LocalDate.of(2019, 12, 25)),
+                    listOf("Daniel", LocalDate.of(2018, 4, 9)),
+                    listOf("Daniel", LocalDate.of(2018, 4, 9)),
+                    listOf("Grace", LocalDate.of(2024, 3, 20)),
+                    listOf("Lucas", LocalDate.of(1697, 12, 25))
+                )
+                Then("Trace result should be $expectedResults"){
+                    val allKeys = btree2.traverse()
+                    allKeys.toList().map{ it.second } shouldBe expectedResults
+                }
+            }
+
+            deleteKey = listOf("Daniel", LocalDate.of(2018, 4, 9))
+            When("Delete key $deleteKey"){
+                btree2.delete(deleteKey)
+                btree2.printTree()
+                val expectedResults = listOf(
+                    listOf("Ava", LocalDate.of(2019, 12, 25)),
+                    listOf("Chloe", LocalDate.of(2019, 12, 25)),
+                    listOf("Daniel", LocalDate.of(2018, 4, 9)),
+                    listOf("Grace", LocalDate.of(2024, 3, 20)),
+                    listOf("Lucas", LocalDate.of(1697, 12, 25))
+                )
+                Then("Trace result should be $expectedResults"){
+                    val allKeys = btree2.traverse()
+                    allKeys.toList().map{ it.second } shouldBe expectedResults
+                }
+            }
+
+            deleteKey = listOf("Daniel", LocalDate.of(2018, 4, 9))
+            When("Delete key $deleteKey"){
+                btree2.delete(deleteKey)
+                btree2.printTree()
+                val expectedResults = listOf(
+                    listOf("Ava", LocalDate.of(2019, 12, 25)),
+                    listOf("Chloe", LocalDate.of(2019, 12, 25)),
+                    listOf("Grace", LocalDate.of(2024, 3, 20)),
+                    listOf("Lucas", LocalDate.of(1697, 12, 25))
+                )
+                Then("Trace result should be $expectedResults"){
+                    val allKeys = btree2.traverse()
+                    allKeys.toList().map{ it.second } shouldBe expectedResults
+                }
+            }
+
+            deleteKey = listOf("Lucas", LocalDate.of(1697, 12, 25))
+            When("Delete key $deleteKey"){
+                btree2.delete(deleteKey)
+                btree2.printTree()
+                val expectedResults = listOf(
+                    listOf("Ava", LocalDate.of(2019, 12, 25)),
+                    listOf("Chloe", LocalDate.of(2019, 12, 25)),
+                    listOf("Grace", LocalDate.of(2024, 3, 20))
+                )
+                Then("Trace result should be $expectedResults"){
+                    val allKeys = btree2.traverse()
                     allKeys.toList().map{ it.second } shouldBe expectedResults
                 }
             }

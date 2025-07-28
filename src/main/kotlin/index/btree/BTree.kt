@@ -79,8 +79,9 @@ class BTree (
         val packedKey: ByteArray = KeyTool.pack(key, schema)
         val (leafNode, keyIdx, isExist) = search(packedKey)
         if(isExist){
+            logger.info { "delete key $key" }
+            printTree()
             leafNode.delete(keyIdx)
-            print("delete key")
             if(leafNode.isUnderflow){
                 handleUnderflow()
             }
