@@ -1,5 +1,6 @@
 package index.util
 
+import index.btree.logger
 import mu.KotlinLogging
 import java.lang.IndexOutOfBoundsException
 import java.nio.ByteBuffer
@@ -154,7 +155,9 @@ object KeyTool {
                 val strBytes = readBytes(len)
 
                 if (column.collation != null){
-                    "[CollationKey(${strBytes.joinToString(" ")})]"
+                    val result = "[CollationKey(${strBytes.joinToString(" ")})]"
+                    logger.info { "UnpackKey: $result" }
+                    result
                 } else{
                     strBytes.toString(StandardCharsets.UTF_8)
                 }
