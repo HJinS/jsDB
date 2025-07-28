@@ -41,14 +41,13 @@ class BTree (
      * - 부모의 자식 pointer update, promote key 찾아서 부모 노드로 승진
      * - 부모 노드는 stack 을 이용한 경로 추적
      * */
-    fun insert(key: List<Any>) {
-        val packedKey: ByteArray = KeyTool.pack(key, schema)
+    fun insert(key: ByteArray, value: List<Any>) {
         root?.let {
             logger.info { "-------------------------------------------" }
             logger.info { "search key for insert - key: $key" }
-            val (leafNode, idx, result) = search(packedKey)
+            val (leafNode, idx, result) = searchLeafNode(key)
             logger.info { "search result - idx: $idx, isExist: $result" }
-            leafNode.insert(idx, packedKey, key)
+            leafNode.insert(idx, key, value)
             if(leafNode.isOverflow){
                 try{
                     split()
@@ -59,7 +58,7 @@ class BTree (
             traceNode.clear()
             // check overflow and do split
         } ?: run {
-            root = LeafNode(mutableListOf(packedKey), maxKeys, mutableListOf(key))
+            root = LeafNode(mutableListOf(key), maxKeys, mutableListOf(value))
         }
         logger.info { "-------------------------------------------" }
         printTree()
@@ -75,11 +74,9 @@ class BTree (
      * 2. key <= nodeKey 기준으로 검색(기준은 기존과 동일)
      * 3. handle underflow
      * */
-    fun delete(key: List<Any>){
-        val packedKey: ByteArray = KeyTool.pack(key, schema)
-        val (leafNode, keyIdx, isExist) = search(packedKey)
+    fun delete(key: ByteArray){
+        val (leafNode, keyIdx, isExist) = searchLeafNode(key)
         if(isExist){
-            logger.info { "delete key $key" }
             printTree()
             leafNode.delete(keyIdx)
             if(leafNode.isUnderflow){
@@ -189,7 +186,7 @@ class BTree (
      *
      * 경로를 보관할 stack이 필요
     * */
-    fun search(key: ByteArray): Triple<LeafNode, Int, Boolean> {
+    private fun searchLeafNode(key: ByteArray): Triple<LeafNode, Int, Boolean> {
         var node: Node = root ?: throw IllegalStateException("No root node")
         traceNode.push(node to -1)
         if(node.isLeaf){
@@ -213,6 +210,10 @@ class BTree (
         logger.info { "final result [${(node.hashCode())}][$searchIdx] result: ${result.second}" }
         return Triple(node as LeafNode, searchIdx, isExist)
     }
+
+//    fun search(key: List<Any>): {
+//
+//    }
 
     fun traverse(): List<Pair<List<Any?>, List<Any?>>>{
         val result = mutableListOf<Pair<List<Any?>, List<Any?>>>()

@@ -29,8 +29,10 @@ sealed class Node(
         get() = keys.size > maxKeys / 2
 
     /**
-     * 어디로 내려가야할 지 겨올를 찾을 경우에는 실제로 값이 있는 경우 idx+1, 삭제를 위해 찾는 경우는 idx 필요
+     * 어디로 내려가야할 지 경로를 찾을 경우에는 실제로 값이 있는 경우 idx+1, 삭제를 위해 찾는 경우는 idx 필요
      * 음수인 경우는 insertionPoint 그대로 사용(-(idx+1))
+     * internode 에서 따라 내려가는 경우에는 idx+1로 내려가야한다. 같은 케이스는 오른쪽 subtree 에 있기 때문
+     * leafNode 안에서 정확한 key 값의 위치를 찾기 위해서는 idx 를 그대로 쓰면 된다.
      * */
     fun search(key: ByteArray, comparator: Comparator<ByteArray>, exactIndex: Boolean=false): Pair<Int, Boolean>{
         val idx = keys.binarySearch(key, comparator)

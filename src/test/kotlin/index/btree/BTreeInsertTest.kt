@@ -3,6 +3,7 @@ package index.btree
 import index.util.Column
 import index.util.ColumnType
 import index.util.KeySchema
+import index.util.KeyTool
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import java.time.LocalDate
@@ -174,7 +175,8 @@ class BTreeInsertTest: FunSpec({
             val keys = parameter.first
 
             for (key in keys) {
-                btree.insert(key)
+                val packedKey = KeyTool.pack(key, parameter.third)
+                btree.insert(packedKey, key)
             }
 
             val allKeys = btree.traverse()

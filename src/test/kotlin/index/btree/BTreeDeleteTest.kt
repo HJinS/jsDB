@@ -3,6 +3,7 @@ package index.btree
 import index.util.Column
 import index.util.ColumnType
 import index.util.KeySchema
+import index.util.KeyTool
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import java.time.LocalDate
@@ -34,12 +35,14 @@ class BTreeDeleteTest: BehaviorSpec({
             listOf<Number>(21, 1231342L)
         )
         for (key in keys) {
-            btree.insert(key)
+            val packedKey = KeyTool.pack(key, schema)
+            btree.insert(packedKey, key)
         }
         Given("A Tree with schema $schema"){
             var deleteKey = listOf<Number>(523, 123932L)
+            var packedDeleteKey = KeyTool.pack(deleteKey, schema)
             When("Delete key $deleteKey"){
-                btree.delete(deleteKey)
+                btree.delete(packedDeleteKey)
                 btree.printTree()
                 val expectedResults = listOf(
                     listOf<Number>(1,10L),
@@ -65,8 +68,9 @@ class BTreeDeleteTest: BehaviorSpec({
             }
 
             deleteKey = listOf<Number>(32,1223342L)
+            packedDeleteKey = KeyTool.pack(deleteKey, schema)
             When("Delete key $deleteKey"){
-                btree.delete(deleteKey)
+                btree.delete(packedDeleteKey)
                 btree.printTree()
                 val expectedResults = listOf(
                     listOf<Number>(1,10L),
@@ -91,8 +95,9 @@ class BTreeDeleteTest: BehaviorSpec({
             }
 
             deleteKey = listOf<Number>(12, 12342322L)
+            packedDeleteKey = KeyTool.pack(deleteKey, schema)
             When("Delete key $deleteKey"){
-                btree.delete(deleteKey)
+                btree.delete(packedDeleteKey)
                 btree.printTree()
                 val expectedResults = listOf(
                     listOf<Number>(1,10L),
@@ -116,8 +121,9 @@ class BTreeDeleteTest: BehaviorSpec({
             }
 
             deleteKey = listOf<Number>(4,1032L)
+            packedDeleteKey = KeyTool.pack(deleteKey, schema)
             When("Delete key $deleteKey"){
-                btree.delete(deleteKey)
+                btree.delete(packedDeleteKey)
                 btree.printTree()
                 val expectedResults = listOf(
                     listOf<Number>(1,10L),
@@ -140,8 +146,9 @@ class BTreeDeleteTest: BehaviorSpec({
             }
 
             deleteKey = listOf<Number>(4,23276L)
+            packedDeleteKey = KeyTool.pack(deleteKey, schema)
             When("Delete key $deleteKey"){
-                btree.delete(deleteKey)
+                btree.delete(packedDeleteKey)
                 btree.printTree()
                 val expectedResults = listOf(
                     listOf<Number>(1,10L),
@@ -163,8 +170,9 @@ class BTreeDeleteTest: BehaviorSpec({
             }
 
             deleteKey = listOf<Number>(5,50L)
+            packedDeleteKey = KeyTool.pack(deleteKey, schema)
             When("Delete key $deleteKey"){
-                btree.delete(deleteKey)
+                btree.delete(packedDeleteKey)
                 btree.printTree()
                 val expectedResults = listOf(
                     listOf<Number>(1,10L),
@@ -185,8 +193,9 @@ class BTreeDeleteTest: BehaviorSpec({
             }
 
             deleteKey = listOf<Number>(21,1231342L)
+            packedDeleteKey = KeyTool.pack(deleteKey, schema)
             When("Delete key $deleteKey"){
-                btree.delete(deleteKey)
+                btree.delete(packedDeleteKey)
                 btree.printTree()
                 val expectedResults = listOf(
                     listOf<Number>(1,10L),
@@ -206,8 +215,9 @@ class BTreeDeleteTest: BehaviorSpec({
             }
 
             deleteKey = listOf<Number>(3,4L)
+            packedDeleteKey = KeyTool.pack(deleteKey, schema)
             When("Delete key $deleteKey"){
-                btree.delete(deleteKey)
+                btree.delete(packedDeleteKey)
                 btree.printTree()
                 val expectedResults = listOf(
                     listOf<Number>(1,10L),
@@ -226,8 +236,9 @@ class BTreeDeleteTest: BehaviorSpec({
             }
 
             deleteKey = listOf<Number>(21,1231342L)
+            packedDeleteKey = KeyTool.pack(deleteKey, schema)
             When("Delete key $deleteKey"){
-                btree.delete(deleteKey)
+                btree.delete(packedDeleteKey)
                 btree.printTree()
                 val expectedResults = listOf(
                     listOf<Number>(1,10L),
@@ -245,8 +256,9 @@ class BTreeDeleteTest: BehaviorSpec({
             }
 
             deleteKey = listOf<Number>(235,123123932L)
+            packedDeleteKey = KeyTool.pack(deleteKey, schema)
             When("Delete key $deleteKey"){
-                btree.delete(deleteKey)
+                btree.delete(packedDeleteKey)
                 btree.printTree()
                 val expectedResults = listOf(
                     listOf<Number>(1,10L),
@@ -263,8 +275,9 @@ class BTreeDeleteTest: BehaviorSpec({
             }
 
             deleteKey = listOf<Number>(210,1234203L)
+            packedDeleteKey = KeyTool.pack(deleteKey, schema)
             When("Delete key $deleteKey"){
-                btree.delete(deleteKey)
+                btree.delete(packedDeleteKey)
                 btree.printTree()
                 val expectedResults = listOf(
                     listOf<Number>(1,10L),
@@ -280,8 +293,9 @@ class BTreeDeleteTest: BehaviorSpec({
             }
 
             deleteKey = listOf<Number>(2,12342L)
+            packedDeleteKey = KeyTool.pack(deleteKey, schema)
             When("Delete key $deleteKey"){
-                btree.delete(deleteKey)
+                btree.delete(packedDeleteKey)
                 btree.printTree()
                 val expectedResults = listOf(
                     listOf<Number>(1,10L),
@@ -317,15 +331,17 @@ class BTreeDeleteTest: BehaviorSpec({
             listOf("Chloed", LocalDate.of(2020, 12, 25))
         )
         for (key in keys2) {
-            btree2.insert(key)
+            val packedKey = KeyTool.pack(key, schema2)
+            btree2.insert(packedKey, key)
         }
 
         btree2.printTree()
 
         Given("A Tree with schema $schema2"){
             var deleteKey = listOf("ElijahKim", LocalDate.of(1997, 12, 25))
+            var packedDeleteKey = KeyTool.pack(deleteKey, schema2)
             When("Delete key $deleteKey"){
-                btree2.delete(deleteKey)
+                btree2.delete(packedDeleteKey)
                 btree2.printTree()
                 val expectedResults = listOf(
                     listOf("Ava", LocalDate.of(2019, 12, 25)),
@@ -348,8 +364,9 @@ class BTreeDeleteTest: BehaviorSpec({
             }
 
             deleteKey = listOf("Elijah", LocalDate.of(1997, 12, 25))
+            packedDeleteKey = KeyTool.pack(deleteKey, schema2)
             When("Delete key $deleteKey"){
-                btree2.delete(deleteKey)
+                btree2.delete(packedDeleteKey)
                 btree2.printTree()
                 val expectedResults = listOf(
                     listOf("Ava", LocalDate.of(2019, 12, 25)),
@@ -371,8 +388,9 @@ class BTreeDeleteTest: BehaviorSpec({
             }
 
             deleteKey = listOf("Chloed", LocalDate.of(2020, 12, 25))
+            packedDeleteKey = KeyTool.pack(deleteKey, schema2)
             When("Delete key $deleteKey"){
-                btree2.delete(deleteKey)
+                btree2.delete(packedDeleteKey)
                 btree2.printTree()
                 val expectedResults = listOf(
                     listOf("Ava", LocalDate.of(2019, 12, 25)),
@@ -393,8 +411,9 @@ class BTreeDeleteTest: BehaviorSpec({
             }
 
             deleteKey = listOf("Grace", LocalDate.of(2020, 1, 30))
+            packedDeleteKey = KeyTool.pack(deleteKey, schema2)
             When("Delete key $deleteKey"){
-                btree2.delete(deleteKey)
+                btree2.delete(packedDeleteKey)
                 btree2.printTree()
                 val expectedResults = listOf(
                     listOf("Ava", LocalDate.of(2019, 12, 25)),
@@ -414,8 +433,9 @@ class BTreeDeleteTest: BehaviorSpec({
             }
 
             deleteKey = listOf("Ava", LocalDate.of(2025, 4, 30))
+            packedDeleteKey = KeyTool.pack(deleteKey, schema2)
             When("Delete key $deleteKey"){
-                btree2.delete(deleteKey)
+                btree2.delete(packedDeleteKey)
                 btree2.printTree()
                 val expectedResults = listOf(
                     listOf("Ava", LocalDate.of(2019, 12, 25)),
@@ -434,8 +454,9 @@ class BTreeDeleteTest: BehaviorSpec({
             }
 
             deleteKey = listOf("soif", LocalDate.of(2020, 1, 30))
+            packedDeleteKey = KeyTool.pack(deleteKey, schema2)
             When("Delete key $deleteKey"){
-                btree2.delete(deleteKey)
+                btree2.delete(packedDeleteKey)
                 btree2.printTree()
                 val expectedResults = listOf(
                     listOf("Ava", LocalDate.of(2019, 12, 25)),
@@ -453,8 +474,9 @@ class BTreeDeleteTest: BehaviorSpec({
             }
 
             deleteKey = listOf("Faith", LocalDate.of(2022, 1, 18))
+            packedDeleteKey = KeyTool.pack(deleteKey, schema2)
             When("Delete key $deleteKey"){
-                btree2.delete(deleteKey)
+                btree2.delete(packedDeleteKey)
                 btree2.printTree()
                 val expectedResults = listOf(
                     listOf("Ava", LocalDate.of(2019, 12, 25)),
@@ -471,8 +493,9 @@ class BTreeDeleteTest: BehaviorSpec({
             }
 
             deleteKey = listOf("Daniel", LocalDate.of(2018, 4, 9))
+            packedDeleteKey = KeyTool.pack(deleteKey, schema2)
             When("Delete key $deleteKey"){
-                btree2.delete(deleteKey)
+                btree2.delete(packedDeleteKey)
                 btree2.printTree()
                 val expectedResults = listOf(
                     listOf("Ava", LocalDate.of(2019, 12, 25)),
@@ -488,8 +511,9 @@ class BTreeDeleteTest: BehaviorSpec({
             }
 
             deleteKey = listOf("Daniel", LocalDate.of(2018, 4, 9))
+            packedDeleteKey = KeyTool.pack(deleteKey, schema2)
             When("Delete key $deleteKey"){
-                btree2.delete(deleteKey)
+                btree2.delete(packedDeleteKey)
                 btree2.printTree()
                 val expectedResults = listOf(
                     listOf("Ava", LocalDate.of(2019, 12, 25)),
@@ -504,8 +528,9 @@ class BTreeDeleteTest: BehaviorSpec({
             }
 
             deleteKey = listOf("Lucas", LocalDate.of(1697, 12, 25))
+            packedDeleteKey = KeyTool.pack(deleteKey, schema2)
             When("Delete key $deleteKey"){
-                btree2.delete(deleteKey)
+                btree2.delete(packedDeleteKey)
                 btree2.printTree()
                 val expectedResults = listOf(
                     listOf("Ava", LocalDate.of(2019, 12, 25)),
