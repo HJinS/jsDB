@@ -1,5 +1,7 @@
 package index.util
 
+import index.comparator.MultiColumnKeyComparator
+import index.serializer.MultiColumnKeySerializer
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.ints.shouldBeLessThan
@@ -310,12 +312,14 @@ class BTreeKeyCompareTest: FunSpec({
         )
     ).forEachIndexed{ index, parameter ->
         test("[Test $index] [${parameter.first}] > [${parameter.second}] with schema ${parameter.third}"){
-            val packedValue = KeyTool.pack(parameter.first, parameter.third)
+            val serializer = MultiColumnKeySerializer(parameter.third)
+            val comparator = MultiColumnKeyComparator(parameter.third)
+            val serializedKey1 = serializer.serialize(parameter.first)
+            val serializedKey2 = serializer.serialize(parameter.second)
             val result = parameter.first.compareUnpackedKey(parameter.second, parameter.third)
-            val packedKey = KeyTool.pack(parameter.second, parameter.third)
-            val resultPacked = packedValue.comparePackedKey(packedKey, parameter.third)
+            val resultSerialized = comparator.compare(serializedKey1, serializedKey2)
             result shouldBeGreaterThan 0
-            resultPacked shouldBe 1
+            resultSerialized shouldBe 1
         }
     }
 
@@ -578,12 +582,14 @@ class BTreeKeyCompareTest: FunSpec({
         )
     ).forEachIndexed{ index, parameter ->
         test("[Test $index] [${parameter.first}] < [${parameter.second}] with ${parameter.third}"){
-            val packedValue = KeyTool.pack(parameter.first, parameter.third)
+            val serializer = MultiColumnKeySerializer(parameter.third)
+            val comparator = MultiColumnKeyComparator(parameter.third)
+            val serializedKey1 = serializer.serialize(parameter.first)
+            val serializedKey2 = serializer.serialize(parameter.second)
             val result = parameter.first.compareUnpackedKey(parameter.second, parameter.third)
-            val packedKey = KeyTool.pack(parameter.second, parameter.third)
-            val resultPacked = packedValue.comparePackedKey(packedKey, parameter.third)
+            val resultSerialized = comparator.compare(serializedKey1, serializedKey2)
             result shouldBeLessThan 0
-            resultPacked shouldBe -1
+            resultSerialized shouldBe -1
         }
     }
 
@@ -726,12 +732,14 @@ class BTreeKeyCompareTest: FunSpec({
         )
     ).forEachIndexed{ index, parameter ->
         test("[Test $index] [${parameter.first}] == [${parameter.second}] with ${parameter.third}"){
-            val packedValue = KeyTool.pack(parameter.first, parameter.third)
+            val serializer = MultiColumnKeySerializer(parameter.third)
+            val comparator = MultiColumnKeyComparator(parameter.third)
+            val serializedKey1 = serializer.serialize(parameter.first)
+            val serializedKey2 = serializer.serialize(parameter.second)
             val result = parameter.first.compareUnpackedKey(parameter.second, parameter.third)
-            val packedKey = KeyTool.pack(parameter.second, parameter.third)
-            val resultPacked = packedValue.comparePackedKey(packedKey, parameter.third)
+            val resultSerialized = comparator.compare(serializedKey1, serializedKey2)
             result shouldBe 0
-            resultPacked shouldBe 0
+            resultSerialized shouldBe 0
         }
     }
 })

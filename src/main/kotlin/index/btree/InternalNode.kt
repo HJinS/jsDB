@@ -1,7 +1,5 @@
 package index.btree
 
-import index.util.KeySchema
-
 
 class InternalNode(
     keys: MutableList<ByteArray>,
@@ -69,7 +67,7 @@ class InternalNode(
      * 2. Insert the smallest key of the right sibling node to the location of the parent's separateKey
      * 3. Insert a left most child pointer of the right sibling to me as the right most key
      * */
-    override fun redistribute(targetNode: Node, parentNode: InternalNode, keyIdx: Int, schema: KeySchema){
+    override fun redistribute(targetNode: Node, parentNode: InternalNode, keyIdx: Int){
         val node: InternalNode = targetNode as InternalNode
 
         // borrow from right sibling
@@ -106,7 +104,7 @@ class InternalNode(
         }
     }
 
-    override fun merge(targetNode: Node, parentNode: InternalNode, keyIdx: Int, schema: KeySchema) {
+    override fun merge(targetNode: Node, parentNode: InternalNode, keyIdx: Int) {
         val leftNode: InternalNode
         val rightNode: InternalNode
         orderNode(targetNode, parentNode, keyIdx).let {

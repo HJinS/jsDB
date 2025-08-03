@@ -1,9 +1,11 @@
 package index.btree
 
+import index.comparator.KeyComparator
+import index.serializer.KeySerializer
+import index.serializer.ValueSerializer
 import index.util.KeySchema
 import index.util.KeyTool
 import index.util.MAX_KEYS
-import index.util.comparePackedKey
 import mu.KotlinLogging
 import java.util.EmptyStackException
 import java.util.Stack
@@ -17,16 +19,18 @@ val logger = KotlinLogging.logger {}
  * 키 개수는 최대 MAX_DEGREE 만큼만
  *
 * */
-class BTree (
+class BTree<K, V> (
     val name: String,
     val targetTable: String,
-    private val schema: KeySchema,
+    private val keySerializer: KeySerializer<K>,
+    private val valueSerializer: ValueSerializer<V>,
+    private val keyComparator: KeyComparator,
     private val maxKeys: Int = MAX_KEYS,
     private val allowDuplicate: Boolean = true
 ){
     private var root: Node? = null
     private val comparator = Comparator<ByteArray> {
-        a, b -> a.comparePackedKey(b, schema)
+        a, b -> keyComparator.compare(a, b)
     }
     private val traceNode: Stack<Pair<Node, Int>> = Stack()
 
@@ -34,20 +38,22 @@ class BTree (
      * 1. 삽입할 위치의 노드를 찾음
      * 2. 노드에 key, value 삽입
      * 3. split 이 필요한 경우에는 split 진행
-     *  - leaf split 시에는 linked list 관리 필요
+     *  - leaf split 시에는 linked list 관리 필요1
      *  - root split 시에는 높이 증가
      *
      * split
      * - 부모의 자식 pointer update, promote key 찾아서 부모 노드로 승진
      * - 부모 노드는 stack 을 이용한 경로 추적
      * */
-    fun insert(key: ByteArray, value: List<Any>) {
+    fun insert(key: K, value: V) {
+        val serializedValue = valueSerializer.serialize(value)
+        val serializedKey = keySerializer.serialize(key)
         root?.let {
             logger.info { "-------------------------------------------" }
             logger.info { "search key for insert - key: $key" }
-            val (leafNode, idx, result) = searchLeafNode(key)
+            val (leafNode, idx, result) = searchLeafNode(serializedKey)
             logger.info { "search result - idx: $idx, isExist: $result" }
-            leafNode.insert(idx, key, value)
+            leafNode.insert(idx, serializedKey, serializedValue)
             if(leafNode.isOverflow){
                 try{
                     split()
@@ -58,7 +64,7 @@ class BTree (
             traceNode.clear()
             // check overflow and do split
         } ?: run {
-            root = LeafNode(mutableListOf(key), maxKeys, mutableListOf(value))
+            root = LeafNode(mutableListOf(serializedKey), maxKeys, mutableListOf(serializedValue))
         }
         logger.info { "-------------------------------------------" }
         printTree()
@@ -74,8 +80,9 @@ class BTree (
      * 2. key <= nodeKey 기준으로 검색(기준은 기존과 동일)
      * 3. handle underflow
      * */
-    fun delete(key: ByteArray){
-        val (leafNode, keyIdx, isExist) = searchLeafNode(key)
+    fun delete(key: K){
+        val serializedKey = keySerializer.serialize(key)
+        val (leafNode, keyIdx, isExist) = searchLeafNode(serializedKey)
         if(isExist){
             printTree()
             leafNode.delete(keyIdx)
@@ -117,15 +124,15 @@ class BTree (
             printTree()
             when {
                 prevSibling != null && prevSibling.hasSurplusKey -> {
-                    currentNode.redistribute(prevSibling, parentNode, keyIdx, schema)
+                    currentNode.redistribute(prevSibling, parentNode, keyIdx)
                     break
                 }
                 nextSibling != null && nextSibling.hasSurplusKey -> {
-                    currentNode.redistribute(nextSibling, parentNode, keyIdx, schema)
+                    currentNode.redistribute(nextSibling, parentNode, keyIdx)
                     break
                 }
-                prevSibling != null -> currentNode.merge(prevSibling, parentNode, keyIdx, schema)
-                nextSibling != null -> currentNode.merge(nextSibling, parentNode, keyIdx, schema)
+                prevSibling != null -> currentNode.merge(prevSibling, parentNode, keyIdx)
+                nextSibling != null -> currentNode.merge(nextSibling, parentNode, keyIdx)
             }
 
             currentTrace = traceNode.pop()
@@ -215,15 +222,15 @@ class BTree (
 //
 //    }
 
-    fun traverse(): List<Pair<List<Any?>, List<Any?>>>{
-        val result = mutableListOf<Pair<List<Any?>, List<Any?>>>()
+    fun traverse(): List<Pair<K, V>>{
+        val result = mutableListOf<Pair<K, V>>()
         var currentNode: Node? = findLeftMostLeaf() ?: throw java.lang.IllegalStateException("Empty tree")
         while(currentNode != null){
             currentNode = currentNode as LeafNode
             val keys = currentNode.keyView
             for(i in keys.indices){
-                val key: List<Any?> = KeyTool.unpack(keys[i], schema)
-                val value: List<Any?> = currentNode.values[i]
+                val key: K = keySerializer.deserialize(keys[i])
+                val value: V = valueSerializer.deserialize(currentNode.values[i])
                 result += key to value
             }
             currentNode = currentNode.next
@@ -269,9 +276,9 @@ class BTree (
             printNode(viewBuilder, node, idx)
             if(!isLeaf){
                 node = node as InternalNode
-                for(_idx in 0..<node.childCount){
-                    val childNode = node.moveToChild(_idx)
-                    queue.addLast(QueueItem(childNode, level + 1, childNode is LeafNode, _idx))
+                for(i in 0..<node.childCount){
+                    val childNode = node.moveToChild(i)
+                    queue.addLast(QueueItem(childNode, level + 1, childNode is LeafNode, i))
                 }
             }
             prevLevel = level
@@ -282,11 +289,10 @@ class BTree (
     fun printNode(viewBuilder: StringBuilder, node: Node, idx: Int){
         val keys = node.keyView
         viewBuilder.append("   [${node.hashCode()}][$idx] ")
-        for(idx in keys.indices){
-            val key: List<Any?> = KeyTool.unpack(keys[idx], schema)
-            for(keyItem in key){
-                viewBuilder.append("$keyItem|")
-            }
+
+        for(i in keys.indices){
+            val key: K = keySerializer.deserialize(keys[i])
+            viewBuilder.append(keySerializer.format(key))
             viewBuilder.append(" ")
         }
     }

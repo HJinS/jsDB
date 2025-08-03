@@ -1,12 +1,11 @@
 package index.btree
 
-import index.util.KeySchema
 import java.util.Collections
 
 class LeafNode(
     keys: MutableList<ByteArray>,
     maxKeys: Int,
-    values: MutableList<List<Any?>>,
+    values: MutableList<ByteArray>,
     next: LeafNode? = null,
     prev: LeafNode? = null
 ): Node(true, keys, maxKeys){
@@ -21,12 +20,12 @@ class LeafNode(
     val prev: LeafNode?
         get() = _prev
 
-    val values: List<List<Any?>>
+    val values: List<ByteArray>
         get() = Collections.unmodifiableList(_values)
 
-    fun insert(idx: Int, key: ByteArray, originalData: List<Any?>){
+    fun insert(idx: Int, key: ByteArray, data: ByteArray){
         keys.add(idx, key)
-        _values.add(idx, originalData)
+        _values.add(idx, data)
     }
 
     fun delete(keyIdx: Int){
@@ -34,9 +33,9 @@ class LeafNode(
         _values.removeAt(keyIdx)
     }
 
-    fun removeFirstValue() = _values.removeFirst()
+    private fun removeFirstValue(): ByteArray = _values.removeFirst()
 
-    fun removeLastValue() = _values.removeLast()
+    private fun removeLastValue(): ByteArray = _values.removeLast()
 
     /**
      * leaf node
@@ -46,7 +45,7 @@ class LeafNode(
      * - 0 ~ mid-1, mid ~ len-1 좌우 분리(닫힌 구간)
      * - promote key 도 leaf node 에 남아야함
      * */
-    fun split(): Pair<MutableList<ByteArray>, MutableList<List<Any?>>> {
+    fun split(): Pair<MutableList<ByteArray>, MutableList<ByteArray>> {
         val promotionKeyIdx = promotionKeyIdx()
         val splitKeys = splitKey()
         val splitValues = splitValues(promotionKeyIdx)
@@ -61,7 +60,7 @@ class LeafNode(
         return splitKeys
     }
 
-    private fun splitValues(promotionKeyIdx: Int): MutableList<List<Any?>>{
+    private fun splitValues(promotionKeyIdx: Int): MutableList<ByteArray>{
         val valueSize = _values.size
         val splitValues =  _values.takeLast(valueSize - promotionKeyIdx).toMutableList()
         _values.subList(promotionKeyIdx, valueSize).clear()
@@ -94,7 +93,7 @@ class LeafNode(
      * 3. Insert key and value to me as the biggest one.
      * 4. Update the parent node's separator keys to the new smallest key of the right sibling
      * */
-    override fun redistribute(targetNode: Node, parentNode: InternalNode, keyIdx: Int, schema: KeySchema){
+    override fun redistribute(targetNode: Node, parentNode: InternalNode, keyIdx: Int){
         val node: LeafNode = targetNode as LeafNode
         logger.info { "Redistribute: ${node.keys} ${node._values}" }
         // borrow from right sibling
@@ -115,7 +114,7 @@ class LeafNode(
         }
     }
 
-    override fun merge(targetNode: Node, parentNode: InternalNode, keyIdx: Int, schema: KeySchema) {
+    override fun merge(targetNode: Node, parentNode: InternalNode, keyIdx: Int) {
         val node: LeafNode = targetNode as LeafNode
         val leftNode: LeafNode
         val rightNode: LeafNode

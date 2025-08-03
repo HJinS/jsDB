@@ -3,6 +3,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     val kotlinVersion = "2.1.20"
     kotlin("jvm") version kotlinVersion
+    kotlin("plugin.serialization") version kotlinVersion
     application
 }
 
@@ -26,9 +27,10 @@ dependencies {
     implementation("org.slf4j:slf4j-api:2.0.13")
     implementation("org.slf4j:slf4j-simple:2.0.13")
     implementation("io.github.microutils:kotlin-logging:3.0.5")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter", "junit-jupiter", "5.6.2")
-    testImplementation("org.assertj", "assertj-core", "3.16.1")
     testImplementation("io.kotest:kotest-runner-junit5:$kotestVersion")
     testImplementation("io.kotest:kotest-assertions-core:$kotestVersion")
     testImplementation("io.kotest:kotest-framework-datatest:$kotestVersion")

@@ -1,6 +1,9 @@
 package index.util
 
+import index.comparator.MultiColumnKeyComparator
+import index.serializer.MultiColumnKeySerializer
 import io.kotest.core.spec.style.FunSpec
+import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
 import java.nio.ByteBuffer
 import java.text.Collator
@@ -68,16 +71,17 @@ class BTreeKeyPackingTest: FunSpec({
         ))
     ).forEachIndexed{ index, parameter ->
         test("[Test $index] Original value[${parameter.first}] should be same after packing, unpacking"){
-            val packed = KeyTool.pack(parameter.first, parameter.second)
-            val unpacked = KeyTool.unpack(packed, parameter.second)
-            for ((key1, key2) in parameter.first.zip(unpacked)){
+            val serializer = MultiColumnKeySerializer(parameter.second)
+            val serializedKey1 = serializer.serialize(parameter.first)
+            val deSerialized = serializer.deserialize(serializedKey1)
+            for ((key1, key2) in parameter.first.zip(deSerialized)){
                 key1 shouldBe key2
             }
         }
     }
 
     test("Original value should be same after packing, unpacking string collator comparison case"){
-        val value = listOf(10, "Alice", LocalDate.of(2025, 5, 10))
+        val key = listOf(10, "Alice", LocalDate.of(2025, 5, 10))
         val collatorInstance = Collator.getInstance(Locale.US)
         val schema = KeySchema(
             listOf(
@@ -86,9 +90,11 @@ class BTreeKeyPackingTest: FunSpec({
                 Column("birth", ColumnType.LOCAL_DATE, descending = false)
             )
         )
-        val packed = KeyTool.pack(value, schema)
-        val unpacked = KeyTool.unpack(packed, schema)
-        for ((key1, key2) in value.zip(unpacked)){
+        val serializer = MultiColumnKeySerializer(schema)
+        val serializedKey1 = serializer.serialize(key)
+        val deSerialized = serializer.deserialize(serializedKey1)
+
+        for ((key1, key2) in key.zip(deSerialized)){
             if (key1 == "Alice"){
                 val collatedBytes = collatorInstance.getCollationKey("Alice").toByteArray()
                 key2 shouldBe "[CollationKey(${collatedBytes.joinToString(" ")})]"

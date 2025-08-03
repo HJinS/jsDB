@@ -1,8 +1,6 @@
 package index.btree
 
-import index.util.KeySchema
 import java.util.Collections
-import kotlin.math.ceil
 import kotlin.math.floor
 
 /**
@@ -13,7 +11,7 @@ import kotlin.math.floor
 sealed class Node(
     val isLeaf: Boolean,
     internal val keys: MutableList<ByteArray>,
-    internal val maxKeys: Int
+    private val maxKeys: Int
 ){
 
     val keyView: List<ByteArray>
@@ -54,7 +52,7 @@ sealed class Node(
 
     fun removeFirstKey(): ByteArray = keys.removeFirst()
 
-    abstract fun redistribute(targetNode: Node, parentNode: InternalNode, keyIdx: Int, schema: KeySchema)
+    abstract fun redistribute(targetNode: Node, parentNode: InternalNode, keyIdx: Int)
 
     /**
      * Merge the right node into the left node.
@@ -72,9 +70,8 @@ sealed class Node(
      * @param targetNode One of my sibling nodes.
      * @param parentNode My parent node. It should be the internal node.
      * @param keyIdx Index which I used to get to the leaf node.
-     * @param schema Column data of the table or index.
      * */
-    abstract fun merge(targetNode: Node, parentNode: InternalNode, keyIdx: Int, schema: KeySchema)
+    abstract fun merge(targetNode: Node, parentNode: InternalNode, keyIdx: Int)
 
     fun promotionKeyIdx() = floor(keys.size.toDouble() / 2.0).toInt()
     fun promotionKey() = keys[promotionKeyIdx()]
