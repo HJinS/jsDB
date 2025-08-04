@@ -3,8 +3,6 @@ package index.btree
 import index.comparator.KeyComparator
 import index.serializer.KeySerializer
 import index.serializer.ValueSerializer
-import index.util.KeySchema
-import index.util.KeyTool
 import index.util.MAX_KEYS
 import mu.KotlinLogging
 import java.util.EmptyStackException
@@ -107,7 +105,7 @@ class BTree<K, V> (
      *         2. Update the separate key with a new minimum key of the right node.
      *   2. Merge @see [LeafNode.merge] @see [InternalNode.merge]
      *       The right node will be merged into left node.
-     *       3. Should rebalance continuously to the root node. 상위 노드까지 확인해서 게속적으로 rebalancing 필요.
+     *       3. Should rebalance continuously to the root node.
      * */
     private fun handleUnderflow(){
         var currentTrace = traceNode.pop()

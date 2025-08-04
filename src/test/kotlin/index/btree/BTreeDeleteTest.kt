@@ -7,7 +7,6 @@ import index.serializer.RowDataSerializer
 import index.util.Column
 import index.util.ColumnType
 import index.util.KeySchema
-import index.util.KeyTool
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import kotlinx.serialization.Serializable

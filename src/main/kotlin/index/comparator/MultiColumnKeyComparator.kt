@@ -1,7 +1,10 @@
 package index.comparator
 
+import index.util.Column
+import index.util.ColumnType
 import index.util.KeySchema
-import index.util.comparePackedItem
+import index.util.compareTo
+import index.util.decodeVarInt
 
 
 class MultiColumnKeyComparator(private val schema: KeySchema): KeyComparator {
@@ -32,4 +35,45 @@ class MultiColumnKeyComparator(private val schema: KeySchema): KeyComparator {
         return 0
     }
 
+    private fun comparePackedItem(bytes1: ByteArray, offset1: Int, bytes2: ByteArray, offset2: Int, column: Column): Triple<Int, Int, Int>{
+        fun extractBytes(bytes: ByteArray, offset: Int, length: Int): ByteArray{
+            return bytes.copyOfRange(offset, offset + length)
+        }
+
+        return when (column.type){
+            ColumnType.INT, ColumnType.FLOAT -> {
+                val extractedBytes1 = extractBytes(bytes1, offset1, 4)
+                val extractedBytes2 = extractBytes(bytes2, offset2, 4)
+                Triple(extractedBytes1.compareTo(extractedBytes2, column.descending), 4, 4)
+            }
+            ColumnType.STRING, ColumnType.BYTES -> {
+                val (len1, lenBytes1) = decodeVarInt(bytes1, offset1)
+                val (len2, lenBytes2) = decodeVarInt(bytes2, offset2)
+                val extractedBytes1 = extractBytes(bytes1, offset1 + lenBytes1, len1)
+                val extractedBytes2 = extractBytes(bytes2, offset2 + lenBytes2, len2)
+                Triple(extractedBytes1.compareTo(extractedBytes2, descending=column.descending), lenBytes1 + len1, lenBytes2 + len2)
+            }
+            ColumnType.LONG, ColumnType.DOUBLE, ColumnType.LOCAL_DATE_TIME, ColumnType.INSTANT, ColumnType.LOCAL_DATE -> {
+                val extractedBytes1 = extractBytes(bytes1, offset1, 8)
+                val extractedBytes2 = extractBytes(bytes2, offset2, 8)
+                Triple(extractedBytes1.compareTo(extractedBytes2, column.descending), 8, 8)
+            }
+            ColumnType.SHORT -> {
+                val extractedBytes1 = extractBytes(bytes1, offset1, 2)
+                val extractedBytes2 = extractBytes(bytes2, offset2, 2)
+                Triple(extractedBytes1.compareTo(extractedBytes2, column.descending), 2, 2)
+            }
+            ColumnType.BOOLEAN, ColumnType.BYTE -> {
+                val extractedBytes1 = extractBytes(bytes1, offset1, 1)
+                val extractedBytes2 = extractBytes(bytes2, offset2, 1)
+                Triple(extractedBytes1.compareTo(extractedBytes2, column.descending), 1, 1)
+            }
+            ColumnType.UUID -> {
+                val len = 16
+                val extractedBytes1 = extractBytes(bytes1, offset1, len)
+                val extractedBytes2 = extractBytes(bytes2, offset2, len)
+                Triple(extractedBytes1.compareTo(extractedBytes2, column.descending), len, len)
+            }
+        }
+    }
 }
