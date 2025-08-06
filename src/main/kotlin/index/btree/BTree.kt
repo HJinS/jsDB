@@ -181,6 +181,8 @@ class BTree<K, V> (
     /**
      * Find leaf node using provided [key].
      *
+     * See [LeafNode.search], [InternalNode.search].
+     *
      *       Key1   Key2   Key3
      *    P1     P2     P3     P4
      *
