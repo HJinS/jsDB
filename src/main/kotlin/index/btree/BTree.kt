@@ -95,17 +95,16 @@ class BTree<K, V> (
 
     /**
      * Handle underflow by following steps.
-     *   1. Redistribution @see [LeafNode.redistribute] @see [InternalNode.redistribute]
-     *       The minimum key of right node became new separate key.
-     *       - Borrow from the left node.
-     *         1. Take the maximum key from the left node and insert to myself as the minimum key.
-     *         2. Update the separate key to the new key from step 1.
-     *       - Borrow from the right node.
-     *         1. Take the minimum key from the right node and insert to myself as the maximum key.
-     *         2. Update the separate key with a new minimum key of the right node.
-     *   2. Merge @see [LeafNode.merge] @see [InternalNode.merge]
-     *       The right node will be merged into left node.
-     *       3. Should rebalance continuously to the root node.
+     *
+     * Redistribution
+     *  - The minimum key of the right node became a new separate key.
+     *  - See [LeafNode.redistribute], [InternalNode.redistribute].
+     *
+     * Merge
+     *  - The right node will be merged into the left node.
+     *  - See [LeafNode.merge], [InternalNode.merge].
+     *
+     * Should rebalance continuously to the root node.
      * */
     private fun handleUnderflow(){
         var currentTrace = traceNode.pop()
