@@ -179,18 +179,28 @@ class BTree<K, V> (
     }
 
     /**
-     * 부모 노드의 키 K를 기준으로, 왼쪽 서브트리(subtree)의 모든 값은 K보다 작고, 오른쪽 서브트리의 모든 값은 K보다 크거나 같다. (>=).
-     * find node by keyIndex, value.
-     * p1: parentKey1 <= allChildNodeKeyOfPointer1 < parentKey2
-     * p2: parentKey2 <= allChildNodeKeyOfPointer2 < parentKey3
-     * key <= nodeKey 인 첫 nodeKey 를 찾고 그 왼쪽 자식으로 간다
-     * 즉 searchKey 가 노드의 key 보다 작거나 같아야 한다.
-     * 왼쪽으로 가야(더 작은범위부터 찾아야) 모든 범위를 찾을 수 있다.
-     * 1, 5, 10 -> 3을 찾을 경우 5의 idx가 필요함
-     * 1, 5, 10 -> 5를 찾을 경우 5의 idx가 필요함
+     * Find leaf node using provided [key].
      *
-     * 경로를 보관할 stack이 필요
-    * */
+     *       Key1   Key2   Key3
+     *    P1     P2     P3     P4
+     *
+     * - ParentKey < All keys from the left subtree.
+     * - ParentKey <= All keys from the right subtree.
+     * - Find the key which is greater than provided key within key 1-3 and go down to left subtree of that key.
+     * - Save the search path for future use.
+     * - P1 < Key1
+     * - Key1 <= P2 < Key2
+     * - Key2 <= P3 < Key3
+     * - Key3 <= P4
+     *
+     * Example
+     *
+     *        1      5     10
+     *    P1     P2     P3     P4
+     *
+     * - Searching for 3, go P2.
+     * - Searching for 5, go P3.
+     **/
     private fun searchLeafNode(key: ByteArray): Triple<LeafNode, Int, Boolean> {
         var node: Node = root ?: throw IllegalStateException("No root node")
         traceNode.push(node to -1)
