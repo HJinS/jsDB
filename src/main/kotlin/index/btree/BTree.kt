@@ -10,13 +10,25 @@ import java.util.Stack
 import kotlin.collections.plusAssign
 
 val logger = KotlinLogging.logger {}
+
+
 /**
  * 모든 데이터는 leaf node 에만 저장
  * 정렬된 키 배열을 유지
  * 내부 노드는 분기를 위해 존재
  * 키 개수는 최대 MAX_DEGREE 만큼만
  *
-* */
+ * @param K
+ * @param V
+ * @property name
+ * @property targetTable
+ * @property keySerializer
+ * @property valueSerializer
+ * @property keyComparator
+ * @property maxKeys
+ * @property allowDuplicate
+ * @constructor Create empty B tree
+ */
 class BTree<K, V> (
     val name: String,
     val targetTable: String,
@@ -33,16 +45,15 @@ class BTree<K, V> (
     private val traceNode: Stack<Pair<Node, Int>> = Stack()
 
     /**
-     * 1. 삽입할 위치의 노드를 찾음
-     * 2. 노드에 key, value 삽입
-     * 3. split 이 필요한 경우에는 split 진행
-     *  - leaf split 시에는 linked list 관리 필요1
-     *  - root split 시에는 높이 증가
+     * Insert the provided key and value to B+tree.
+     * - Find the place to insert.
+     * - Insert the key and value.
+     * - Split the node at overflow.
      *
-     * split
-     * - 부모의 자식 pointer update, promote key 찾아서 부모 노드로 승진
-     * - 부모 노드는 stack 을 이용한 경로 추적
-     * */
+     * @param key key to insert into B+tree of type [K].
+     * @param value value to insert into B+tree of type [V].
+     * @see [split]
+     */
     fun insert(key: K, value: V) {
         val serializedValue = valueSerializer.serialize(value)
         val serializedKey = keySerializer.serialize(key)
@@ -97,12 +108,16 @@ class BTree<K, V> (
      * Handle underflow by following steps.
      *
      * Redistribution
+     *
+     * @see [LeafNode.redistribute]
+     * @see [InternalNode.redistribute]
      *  - The minimum key of the right node became a new separate key.
-     *  - See [LeafNode.redistribute], [InternalNode.redistribute].
      *
      * Merge
+     *
+     * @see [LeafNode.merge]
+     * @see [InternalNode.merge]
      *  - The right node will be merged into the left node.
-     *  - See [LeafNode.merge], [InternalNode.merge].
      *
      * Should rebalance continuously to the root node.
      * */
@@ -145,6 +160,18 @@ class BTree<K, V> (
         }
     }
 
+
+    /**
+     * Split the node so that the B+tree remains balanced.
+     *
+     * - Split the node using search history.
+     * - Rearrange a linked list at the leaf node.
+     * - Root node split means additional height to the B+tree.
+     * - Clear the search history after the insert.
+     *
+     * @see [LeafNode.split]
+     * @see [InternalNode.split]
+     * */
     private fun split(){
         while(traceNode.isNotEmpty()){
             val (currentNode, currentNodeIdx) = try {traceNode.pop()} catch (_: EmptyStackException) { throw IllegalStateException("Unexpected node trace data invalid")}
