@@ -216,9 +216,11 @@ class BTree<K, V> (
         return Triple(node as LeafNode, searchIdx, isExist)
     }
 
-//    fun search(key: List<Any>): {
-//
-//    }
+    fun search(key: K): V?{
+        val serializedKey = keySerializer.serialize(key)
+        val (leafNode, keyIdx, isExist) = searchLeafNode(serializedKey)
+        return if(isExist) valueSerializer.deserialize(leafNode.values[keyIdx]) else null
+    }
 
     fun traverse(): List<Pair<K, V>>{
         val result = mutableListOf<Pair<K, V>>()
