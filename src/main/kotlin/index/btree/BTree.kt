@@ -13,21 +13,18 @@ val logger = KotlinLogging.logger {}
 
 
 /**
- * 모든 데이터는 leaf node 에만 저장
- * 정렬된 키 배열을 유지
- * 내부 노드는 분기를 위해 존재
- * 키 개수는 최대 MAX_DEGREE 만큼만
+ * B+tree implementation.
  *
- * @param K
- * @param V
- * @property name
- * @property targetTable
- * @property keySerializer
- * @property valueSerializer
- * @property keyComparator
- * @property maxKeys
- * @property allowDuplicate
- * @constructor Create empty B tree
+ * @param K Type of key.
+ * @param V Type of value.
+ * @property name Name of BTree.
+ * @property targetTable Table to apply.
+ * @property keySerializer Serializer to serialize keys to ByteArray, comparable format.
+ * @property valueSerializer Serializer to serialize values to ByteArray. IT's different form serializing keys.
+ * @property keyComparator Comparator for comparing keys.
+ * @property maxKeys MaxKeys in one node except root.
+ * @property allowDuplicate Flag to allow duplicate or not.
+ * @constructor Create empty B tree.
  */
 class BTree<K, V> (
     val name: String,
@@ -82,12 +79,16 @@ class BTree<K, V> (
 
 
     /**
-     * delete
-     * key의 최소 개수는 ceil(maxKeys/2) 이상 이어야함.
+     * Delete certain key.
      *
-     * 1. 삭제할 key 를 찾아 leafNode 로 내려감
-     * 2. key <= nodeKey 기준으로 검색(기준은 기존과 동일)
-     * 3. handle underflow
+     * If the key not exist, do nothing.
+     *
+     * If underflow, re-balance tree by [handleUnderflow]
+     * - Underflow condition: keySize < maxKeys / 2
+     *
+     * @param key key to delete from B+tree of type [K].
+     * @see [handleUnderflow]
+     * @see [LeafNode.isUnderflow]
      * */
     fun delete(key: K){
         val serializedKey = keySerializer.serialize(key)
@@ -98,8 +99,6 @@ class BTree<K, V> (
             if(leafNode.isUnderflow){
                 handleUnderflow()
             }
-        } else{
-            throw NoSuchElementException("Key not found")
         }
         traceNode.clear()
     }
@@ -207,8 +206,6 @@ class BTree<K, V> (
     /**
      * Find leaf node using provided [key].
      *
-     * See [LeafNode.search], [InternalNode.search].
-     *
      *       Key1   Key2   Key3
      *    P1     P2     P3     P4
      *
@@ -228,6 +225,10 @@ class BTree<K, V> (
      *
      * - Searching for 3, go P2.
      * - Searching for 5, go P3.
+     *
+     * @param key Key to find leaf node
+     * @see [LeafNode.search]
+     * @see [InternalNode.search]
      **/
     private fun searchLeafNode(key: ByteArray): Triple<LeafNode, Int, Boolean> {
         var node: Node = root ?: throw IllegalStateException("No root node")
@@ -260,6 +261,12 @@ class BTree<K, V> (
         return if(isExist) valueSerializer.deserialize(leafNode.values[keyIdx]) else null
     }
 
+    /**
+     * Traverse all the leaf nodes from left to right and return key, value of leaf node.
+     *
+     * @return Key, Value of the leaf node.
+     * @see [findLeftMostLeaf]
+     * */
     fun traverse(): List<Pair<K, V>>{
         val result = mutableListOf<Pair<K, V>>()
         var currentNode: Node? = findLeftMostLeaf() ?: throw java.lang.IllegalStateException("Empty tree")
@@ -276,6 +283,11 @@ class BTree<K, V> (
         return result
     }
 
+    /**
+     * Find left most leaf of the B+tree.
+     *
+     * @return The left most child of B+tree.
+     * */
     private fun findLeftMostLeaf(): LeafNode?{
         var currentNode = root ?: return null
         while(true){
@@ -289,7 +301,7 @@ class BTree<K, V> (
     }
 
     /**
-     * Test use only
+     * Print tree with logger. Only for test.
      * */
     fun printTree(){
 
@@ -324,7 +336,10 @@ class BTree<K, V> (
         logger.info { "\n\n$viewBuilder\n\n"}
     }
 
-    fun printNode(viewBuilder: StringBuilder, node: Node, idx: Int){
+    /**
+     * Print a single node.
+     * */
+    private fun printNode(viewBuilder: StringBuilder, node: Node, idx: Int){
         val keys = node.keyView
         viewBuilder.append("   [${node.hashCode()}][$idx] ")
 

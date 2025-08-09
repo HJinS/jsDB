@@ -3,8 +3,16 @@ package index.serializer
 import index.util.*
 import java.lang.IndexOutOfBoundsException
 
-
+/**
+ * Serializer to serialize multi-column keys.
+ *
+ * @property schema Schema of the keys.
+ * @see [BaseKeySerializer]
+ * @see [KeySchema]
+ * */
 class MultiColumnKeySerializer(schema: KeySchema): BaseKeySerializer<List<Any?>>(schema) {
+
+
     override fun serialize(key: List<Any?>): ByteArray {
         require(key.size <= schema.columns.size) { "Too many key values for schema" }
         return buildList{

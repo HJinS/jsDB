@@ -11,6 +11,7 @@ import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.util.*
 
+
 abstract class BaseKeySerializer<K>(protected val schema: KeySchema): KeySerializer<K> {
     protected fun packKeyItem(key: Any?, column: Column): ByteArray{
         if(key == null) return byteArrayOf(0x00)
