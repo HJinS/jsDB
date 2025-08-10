@@ -38,28 +38,50 @@ class LeafNode(
     private fun removeLastValue(): ByteArray = _values.removeLast()
 
     /**
-     * leaf node
-     * - 추가로 value split 필요
-     * - key < maxKeys 인 경우 split
-     * - mid(promote key) 값을 floor(len / 2)로 지정
-     * - 0 ~ mid-1, mid ~ len-1 좌우 분리(닫힌 구간)
-     * - promote key 도 leaf node 에 남아야함
+     * Split the leaf node into 2 pieces.
+     *
+     * PromotionKey also remains at leaf node.
+     * - PromotionKey: floor(len / 2)
+     * - PromotionKey goes to parent node.
+     * - Key separation: [0, promotionKey-1], [promotionKey, len-1]
+     * - Value separation: [0, promotionKey-1], [promotionKey, len-1]
+     *
+     * @see splitKey
+     * @see splitValues
+     * @see promotionKeyIdx
+     * @return key, value for a new node.
      * */
     fun split(): Pair<MutableList<ByteArray>, MutableList<ByteArray>> {
         val promotionKeyIdx = promotionKeyIdx()
-        val splitKeys = splitKey()
+        val splitKeys = splitKey(promotionKeyIdx)
         val splitValues = splitValues(promotionKeyIdx)
         return splitKeys to splitValues
     }
 
-    private fun splitKey(): MutableList<ByteArray>{
+
+    /**
+     * Split keys into 2 pieces.
+     *
+     * [0, [promotionKeyIdx]-1], [[promotionKeyIdx], len-1]
+     *
+     * @param promotionKeyIdx Standard for splitting values
+     * @return split keys.
+     * */
+    private fun splitKey(promotionKeyIdx: Int): MutableList<ByteArray>{
         val keySize = keys.size
-        val promotionKeyIdx = promotionKeyIdx()
         val splitKeys =  keys.takeLast(keySize - promotionKeyIdx).toMutableList()
         keys.subList(promotionKeyIdx, keySize).clear()
         return splitKeys
     }
 
+    /**
+     * Split values into 2 pieces.
+     *
+     * [0, [promotionKeyIdx]-1], [[promotionKeyIdx], len-1]
+     *
+     * @param promotionKeyIdx Standard for splitting values
+     * @return split values.
+     * */
     private fun splitValues(promotionKeyIdx: Int): MutableList<ByteArray>{
         val valueSize = _values.size
         val splitValues =  _values.takeLast(valueSize - promotionKeyIdx).toMutableList()
@@ -68,7 +90,7 @@ class LeafNode(
     }
 
     /**
-     * Link new node.
+     * Update the linked list of the leaf node.
      * */
     fun linkNewSiblingNode(siblingNode: LeafNode){
         val nextTemp = _next
@@ -79,6 +101,10 @@ class LeafNode(
 
     /**
      * ### Leaf redistribution
+     * Do not rotate keys.
+     *
+     * Get the key from sibling directly.
+     *
      * #### borrow from the left sibling
      * separateKey - (keyIdx - 1)
      * 1. Take the biggest key of the left sibling.
@@ -92,6 +118,10 @@ class LeafNode(
      * 2. Take the left most value of the right sibling.
      * 3. Insert key and value to me as the biggest one.
      * 4. Update the parent node's separator keys to the new smallest key of the right sibling
+     *
+     * @param targetNode The target node to get key from.
+     * @param parentNode Parent node to update new separation key.
+     * @param keyIdx Separation key.
      * */
     override fun redistribute(targetNode: Node, parentNode: InternalNode, keyIdx: Int){
         val node: LeafNode = targetNode as LeafNode

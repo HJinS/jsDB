@@ -27,10 +27,20 @@ sealed class Node(
         get() = keys.size > maxKeys / 2
 
     /**
-     * 어디로 내려가야할 지 경로를 찾을 경우에는 실제로 값이 있는 경우 idx+1, 삭제를 위해 찾는 경우는 idx 필요
-     * 음수인 경우는 insertionPoint 그대로 사용(-(idx+1))
-     * internode 에서 따라 내려가는 경우에는 idx+1로 내려가야한다. 같은 케이스는 오른쪽 subtree 에 있기 때문
-     * leafNode 안에서 정확한 key 값의 위치를 찾기 위해서는 idx 를 그대로 쓰면 된다.
+     * Find value or child pointer using key.
+     *
+     * If find the path to the leaf node, go down to idx+1 (if exists).
+     * - If the key exists, corresponding children are in right subtree.
+     *
+     * If key doesn't exist, then goes to (-(idx+1)).
+     * - Kotlin's binary search return inverted insertion point.
+     *
+     * If find the exact value using the key at leaf node, use idx (if exists).
+     *
+     * @param key Key to find.
+     * @param comparator Comparator to compare at the binary search.
+     * @param exactIndex Use this parameter to get the exact node from the leaf node.
+     * @return Search result. Pair of index, isExist.
      * */
     fun search(key: ByteArray, comparator: Comparator<ByteArray>, exactIndex: Boolean=false): Pair<Int, Boolean>{
         val idx = keys.binarySearch(key, comparator)

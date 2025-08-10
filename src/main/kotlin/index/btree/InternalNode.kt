@@ -24,28 +24,46 @@ class InternalNode(
     internal fun removeChildrenAt(idx: Int) = children.removeAt(idx)
 
     /**
-     * internal node
-     *  - mid(promote key) 값을 floor(len / 2)로 지정
-     *  - mid 값은 promote 됨
-     *  - 0 ~ mid-1, mid+1 ~ len-1 key 분리(닫힌 구간)
-     *  - 0 ~ mid, mid+1 ~ len-1 자식 분리(닫힌 구간)
+     * Split the internal node into 2 pieces.
+     * - PromotionKey: floor(len / 2)
+     * - PromotionKey goes to parent node.
+     * - Key separation: [0, promotionKey-1], [promotionKey+1, len-1]
+     * - Children separation: [0, promotionKey], [promotionKey+1, len-1]
+     *
+     * @see splitKey
+     * @see splitChildPointer
+     * @see promotionKeyIdx
+     * @return key, value for a new node.
      * */
     fun split(): Pair<MutableList<ByteArray>, MutableList<Node>> {
         val promotionKeyIdx = promotionKeyIdx()
-        val splitKeys = splitKey()
+        val splitKeys = splitKey(promotionKeyIdx)
         val splitChildren = splitChildPointer(promotionKeyIdx)
         keys.removeLast()
         return splitKeys to splitChildren
     }
 
-    private fun splitKey(): MutableList<ByteArray>{
+    /**
+     * Split keys into 2 pieces.
+     *
+     * [0, [promotionKeyIdx]-1], [[promotionKeyIdx]+1, len-1]
+     *
+     * @param promotionKeyIdx Standard for splitting values
+     * @return split key array
+     * */
+    private fun splitKey(promotionKeyIdx: Int): MutableList<ByteArray>{
         val keySize = keys.size
-        val promotionKeyIdx = promotionKeyIdx()
         val splitKeys =  keys.takeLast(keySize - promotionKeyIdx - 1).toMutableList()
         keys.subList(promotionKeyIdx+1, keySize).clear()
         return splitKeys
     }
 
+    /**
+     * Split children into 2 pieces.
+     *
+     * [0, [promotionKeyIdx]], [[promotionKeyIdx]+1, len-1]
+     * @return split children.
+     * */
     private fun splitChildPointer(promotionKeyIdx: Int): MutableList<Node>{
         val childrenSize = children.size
         val splitChildPointer = children.takeLast(childrenSize - promotionKeyIdx - 1).toMutableList()
@@ -55,6 +73,8 @@ class InternalNode(
 
     /**
      * ### redistribution
+     * Rotate keys using parent node.
+     *
      * #### borrow from the left sibling
      * separateKey - (keyIdx - 1)
      * 1. Take a separateKey from the parent Node and insert to my node as the smallest key
@@ -66,40 +86,45 @@ class InternalNode(
      * 1. Take a separateKey from the parent Node and insert to my node as the biggest key
      * 2. Insert the smallest key of the right sibling node to the location of the parent's separateKey
      * 3. Insert a left most child pointer of the right sibling to me as the right most key
+     *
+     * @param targetNode The target node to get key from.
+     * @param parentNode Parent node to update new separation key.
+     * @param keyIdx Separation key.
      * */
     override fun redistribute(targetNode: Node, parentNode: InternalNode, keyIdx: Int){
         val node: InternalNode = targetNode as InternalNode
 
-        // borrow from right sibling
+        // Borrow from right sibling
         if(isLeft(targetNode, parentNode, keyIdx)){
-            // 부모의 구분키 제거
+            // Delete separation key from parent node.
             val removedParentKey = parentNode.keys.removeAt(keyIdx)
-            // 자신의 키에 추가
+            // Add the separation key as the biggest key to me.
             keys.addLast(removedParentKey)
 
-            // 오른쪽 형제의 가장 작은 키 제거
+            // Delete the smallest key from right sibling.
             val siblingKey = node.removeFirstKey()
-            // 부모의 삭제된 자리에 키 추가
+            // Insert the smallest key to parent node as new separation key.
             parentNode.keys.add(keyIdx, siblingKey)
 
-            // 오른쪽 형제의 가장 왼쪽 child point 제거
+            // Delete the smallest child pointer from the right sibling.
             val siblingChild = node.removeFirstChild()
-            // 자신의 가장 오른쪽 childPoint 로 추가
+            // Insert the pointer to me as the biggest one.
             children.addLast(siblingChild)
         } else{
-            // 부모 구분키 제거(구분키는 keyIdx-1 이어야함.)
+            // Delete separation key from parent node.
+            // In this case, the separation key should be keyIdx - 1
             val removedParentKey = parentNode.keys.removeAt(keyIdx-1)
-            // 지신의 키에 추가
+            // Add the separation key as the smallest key to me.
             keys.addFirst(removedParentKey)
 
-            // 왼쪽 형제의 가장 큰 키 제거
+            // Delete the biggest key from left sibling.
             val siblingKey = node.keys.removeLast()
-            // 부모의 삭제된 자리에 키 추가
+            // Insert the biggest key to parent node as new separation key.
             parentNode.keys.add(keyIdx-1, siblingKey)
 
-            // 왼쪽 형제의 가장 오른쪽 child point 제거
+            // Delete the biggest child pointer from the left sibling.
             val siblingChild = node.removeLastChild()
-            // 자신의 가장 왼쪽 childPoint 로 추가
+            // Insert the pointer to me as the smallest one.
             children.addFirst(siblingChild)
         }
     }
