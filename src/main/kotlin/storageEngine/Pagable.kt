@@ -1,0 +1,4 @@
+package storageEngine
+
+interface Pagable {
+}
