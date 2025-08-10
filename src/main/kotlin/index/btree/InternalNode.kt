@@ -129,6 +129,11 @@ class InternalNode(
         }
     }
 
+    /**
+     * Merge right node into left one.
+     *
+     * @see Node.merge
+     * */
     override fun merge(targetNode: Node, parentNode: InternalNode, keyIdx: Int) {
         val leftNode: InternalNode
         val rightNode: InternalNode

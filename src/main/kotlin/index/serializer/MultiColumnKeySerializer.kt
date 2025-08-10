@@ -7,8 +7,8 @@ import java.lang.IndexOutOfBoundsException
  * Serializer to serialize multi-column keys.
  *
  * @property schema Schema of the keys.
- * @see [BaseKeySerializer]
- * @see [KeySchema]
+ * @see BaseKeySerializer
+ * @see KeySchema
  * */
 class MultiColumnKeySerializer(schema: KeySchema): BaseKeySerializer<List<Any?>>(schema) {
 

@@ -49,7 +49,7 @@ class BTree<K, V> (
      *
      * @param key key to insert into B+tree of type [K].
      * @param value value to insert into B+tree of type [V].
-     * @see [split]
+     * @see split
      */
     fun insert(key: K, value: V) {
         val serializedValue = valueSerializer.serialize(value)
@@ -87,8 +87,8 @@ class BTree<K, V> (
      * - Underflow condition: keySize < maxKeys / 2
      *
      * @param key key to delete from B+tree of type [K].
-     * @see [handleUnderflow]
-     * @see [LeafNode.isUnderflow]
+     * @see handleUnderflow
+     * @see LeafNode.isUnderflow
      * */
     fun delete(key: K){
         val serializedKey = keySerializer.serialize(key)
@@ -108,14 +108,14 @@ class BTree<K, V> (
      *
      * Redistribution
      *
-     * @see [LeafNode.redistribute]
-     * @see [InternalNode.redistribute]
+     * @see LeafNode.redistribute
+     * @see InternalNode.redistribute
      *  - The minimum key of the right node became a new separate key.
      *
      * Merge
      *
-     * @see [LeafNode.merge]
-     * @see [InternalNode.merge]
+     * @see LeafNode.merge
+     * @see InternalNode.merge
      *  - The right node will be merged into the left node.
      *
      * Should rebalance continuously to the root node.
@@ -168,8 +168,8 @@ class BTree<K, V> (
      * - Root node split means additional height to the B+tree.
      * - Clear the search history after the insert.
      *
-     * @see [LeafNode.split]
-     * @see [InternalNode.split]
+     * @see LeafNode.split
+     * @see InternalNode.split
      * */
     private fun split(){
         while(traceNode.isNotEmpty()){
@@ -227,8 +227,8 @@ class BTree<K, V> (
      * - Searching for 5, go P3.
      *
      * @param key Key to find leaf node
-     * @see [LeafNode.search]
-     * @see [InternalNode.search]
+     * @see LeafNode.search
+     * @see InternalNode.search
      **/
     private fun searchLeafNode(key: ByteArray): Triple<LeafNode, Int, Boolean> {
         var node: Node = root ?: throw IllegalStateException("No root node")
@@ -265,7 +265,7 @@ class BTree<K, V> (
      * Traverse all the leaf nodes from left to right and return key, value of leaf node.
      *
      * @return Key, Value of the leaf node.
-     * @see [findLeftMostLeaf]
+     * @see findLeftMostLeaf
      * */
     fun traverse(): List<Pair<K, V>>{
         val result = mutableListOf<Pair<K, V>>()
