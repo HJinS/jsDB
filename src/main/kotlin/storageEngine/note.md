@@ -75,3 +75,20 @@ TODO
 #### 동시성 제어
 - 페이지 래치: 버퍼 풀의 특정 페이지에 여러 스레드가 동시에 접근하여 내부 구조를 망가뜨리는 것을 막기 위해 매우 짧은 시간동안의 메모리 잠금(Latch)이 필요하다.
 - 이는 트랜잭션 락 보다 훨씬 가볍고 빠르다.
+
+
+### DistManager
+
+> 데이터베이스 파일로 부터 page 를 가져오고 저장하는 역할
+> readPage, writePage, allocatePage, getNumPages, close 등
+
+### BufferPoolManager
+
+> Page 를 가져올 때 캐싱하는 역할도 같이 함. DiskManager 를 사용해서 Page 를 가져오며, Disk I/O 를 최소화하는 것이 목표
+> fetchPage, newPage, unpinPage, flushPage, flushPages 등.
+> bufferPool, pageTable, replacer, freeFrames 등 필요
+
+### Page
+
+> 별도의 클래스 보다는 Page 클래스 혹은 Node 클래스에 통합시키는 것이 맞음.
+> SlottedPage 관리
