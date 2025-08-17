@@ -1,4 +1,0 @@
-package storageEngine
-
-interface Pagable {
-}
