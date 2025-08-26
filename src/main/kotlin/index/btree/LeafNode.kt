@@ -100,10 +100,10 @@ class LeafNode(
     }
 
     /**
-     * ### Leaf redistribution
+     * ### Leaf Redistribution
      * Do not rotate keys.
      *
-     * Get the key from sibling directly.
+     * Get the key from the sibling directly.
      *
      * #### borrow from the left sibling
      * separateKey - (keyIdx - 1)

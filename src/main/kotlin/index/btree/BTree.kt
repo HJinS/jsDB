@@ -284,7 +284,7 @@ class BTree<K, V> (
     }
 
     /**
-     * Find left most leaf of the B+tree.
+     * Find the left most leaf of the B+tree.
      *
      * @return The left most child of B+tree.
      * */
@@ -301,7 +301,7 @@ class BTree<K, V> (
     }
 
     /**
-     * Print tree with logger. Only for test.
+     * Print the tree with logger. Only for test.
      * */
     fun printTree(){
 
