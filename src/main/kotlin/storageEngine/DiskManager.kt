@@ -9,39 +9,36 @@ class DiskManager(dbPath: String, private val pageSize: Int) {
     private val fileChannel: FileChannel = RandomAccessFile(dbPath, "rw").channel
 
     /**
-     * 특정 페이지 ID에 해당하는 페이지 데이터를 디스크에서 읽어옵니다.
-     * @param pageId 읽어올 페이지의 ID
-     * @param pageData 읽어온 데이터를 채울 ByteArray (페이지 크기와 동일)
+     * Read page from disk with given [pageId] and load the data.
+     * First page id should be 1.
+     * @param pageId ID being read from disk.
+     * @param pageData ByteArray to save the page data. It should be the same size as [pageSize].
      */
     fun readPage(pageId: Long, pageData: ByteArray){
-        val offset = pageId * pageSize
+        val offset = (pageId - 1) * pageSize
 
         val buffer = ByteBuffer.wrap(pageData)
         fileChannel.read(buffer, offset)
     }
 
     /**
-     * 특정 페이지 ID 위치에 페이지 데이터를 디스크에 씁니다.
-     * @param pageId 데이터를 쓸 페이지의 ID
-     * @param pageData 디스크에 쓸 ByteArray (페이지 크기와 동일)
+     * Write the data to the page(pageId).
+     * @param pageId Page id to write to.
+     * @param pageData Data to write. It should be the same size as [pageSize].
      */
     fun writePage(pageId: Long, pageData: ByteArray){
-        val offset = pageId * pageSize
+        val offset = (pageId - 1) * pageSize
 
         val buffer = ByteBuffer.wrap(pageData)
         fileChannel.write(buffer, offset)
     }
 
     /**
-     * 파일 끝에 새로운 페이지를 위한 공간을 할당하고, 그 페이지의 ID를 반환합니다.
-     * @return 새로 할당된 페이지의 ID
+     * Return new pageId.
+     * The file will be managed automatically by FileChannel.
+     * @return New page id.
      */
-    fun allocatePage(): Long{
-        val newPageOffset = fileChannel.size()
-        val newPageId = newPageOffset / pageSize
-
-        return newPageId
-    }
+    fun allocatePage(): Long = fileChannel.size() / pageSize + 1
 
     /**
      * 현재까지 할당된 전체 페이지의 수를 반환합니다.
