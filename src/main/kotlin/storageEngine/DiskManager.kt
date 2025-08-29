@@ -5,6 +5,9 @@ import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 
 class DiskManager(dbPath: String, private val pageSize: Int) {
+    init {
+        require(pageSize > 0){"page size must be greater than zero"}
+    }
 
     private val fileChannel: FileChannel = RandomAccessFile(dbPath, "rw").channel
 
@@ -18,7 +21,10 @@ class DiskManager(dbPath: String, private val pageSize: Int) {
         val offset = (pageId - 1) * pageSize
 
         val buffer = ByteBuffer.wrap(pageData)
-        fileChannel.read(buffer, offset)
+        val result = fileChannel.read(buffer, offset)
+        if(result == -1){
+            throw IllegalArgumentException("No such page")
+        }
     }
 
     /**
@@ -41,10 +47,14 @@ class DiskManager(dbPath: String, private val pageSize: Int) {
     fun allocatePage(): Long = fileChannel.size() / pageSize + 1
 
     /**
-     * 현재까지 할당된 전체 페이지의 수를 반환합니다.
+     * Return current last page ID
+     * @return current last page id
      */
     fun getNumPages(): Long = fileChannel.size() / pageSize
 
+    /**
+     * Close the file channel.
+     * */
     fun close(){
         fileChannel.close()
     }
