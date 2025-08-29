@@ -1,11 +1,7 @@
-package index.btree
+package index.util
 
 import index.comparator.MultiColumnKeyComparator
 import index.serializer.MultiColumnKeySerializer
-import index.util.Column
-import index.util.ColumnType
-import index.util.KeySchema
-import index.util.compareUnpackedKey
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.ints.shouldBeLessThan
@@ -15,8 +11,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 
-
-class BTreeKeyCompareTest: FunSpec({
+class CompareTest: FunSpec({
     listOf(
         Triple(
             listOf<Number>(10, 5230L),

@@ -14,21 +14,6 @@ import java.time.LocalDate
 
 
 class BTreeInsertTest: FunSpec({
-
-    @Serializable
-    data class IDData(val id: Int, val longId: Long)
-
-    @Serializable
-    data class UserData(
-        val name: String,
-        @Serializable(with = LocalDateSerializer::class)
-        val birthDate: LocalDate
-    )
-
-    val idValueSerializer = RowDataSerializer(IDData::class)
-
-    val userDataSerializer = RowDataSerializer(UserData::class)
-
     listOf(
         Triple(
             listOf(
@@ -249,4 +234,19 @@ class BTreeInsertTest: FunSpec({
         }
     }
 
-})
+}){
+    companion object{
+        @Serializable
+        data class IDData(val id: Int, val longId: Long)
+
+        @Serializable
+        data class UserData(
+            val name: String,
+            @Serializable(with = LocalDateSerializer::class)
+            val birthDate: LocalDate
+        )
+
+        val idValueSerializer = RowDataSerializer(IDData::class)
+        val userDataSerializer = RowDataSerializer(UserData::class)
+    }
+}
