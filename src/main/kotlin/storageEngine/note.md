@@ -87,8 +87,3 @@ TODO
 > Page 를 가져올 때 캐싱하는 역할도 같이 함. DiskManager 를 사용해서 Page 를 가져오며, Disk I/O 를 최소화하는 것이 목표
 > fetchPage, newPage, unpinPage, flushPage, flushPages 등.
 > bufferPool, pageTable, replacer, freeFrames 등 필요
-
-### Page
-
-> 별도의 클래스 보다는 Page 클래스 혹은 Node 클래스에 통합시키는 것이 맞음.
-> SlottedPage 관리
