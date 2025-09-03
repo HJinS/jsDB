@@ -1,5 +1,8 @@
 package storageEngine
 
+import storageEngine.util.PageType
+import java.nio.ByteBuffer
+
 
 /**
  * TODO
@@ -25,37 +28,73 @@ package storageEngine
  * 2	            2	        cellCount	        저장된 셀(레코드)의 개수
  * 4	            2	        freeSpaceStart	    빈 공간의 시작 위치 (슬롯 배열의 끝)
  * 6	            2	        freeSpaceEnd	    빈 공간의 끝 위치 (데이터 영역의 시작)
- * 8	            8	        parentPageId	    부모 노드의 페이지 ID (4바이트)
- * 16	            8	        leftSiblingPageId  (리프 전용) 오른쪽 형제 페이지 ID (4바이트)
- * 24	            8	        rightSiblingPageId  (리프 전용) 오른쪽 형제 페이지 ID (4바이트)
+ * 8	            8	        parentPageId	    부모 노드의 페이지 ID (8바이트)
+ * 16	            8	        leftSiblingPageId  (리프 전용) 오른쪽 형제 페이지 ID (8바이트)
+ * 24	            8	        rightSiblingPageId  (리프 전용) 오른쪽 형제 페이지 ID (8바이트)
  * 32	            8	        lsn	                (고급) 로그 시퀀스 번호. WAL 복구 시 사용
  *
- *
- *
+ * ```
+ * Initial state
  * +-------------------------------------------------+
  * |                    Page Header                  |
- * |         [Record count: 3] [freeSpaceEnd         |
+ * |         [Record count: 3] freeSpaceEnd          |
+ * +-------------------------------------------------+ <--- Slot array start.
+ * |                        ↓                        |
+ * +-------------------------------------------------+ <--- Slot array end(freeSpaceStart).
+ * |                                                 |
+ * |                    Free Space                   |
+ * |                                                 |
+ * +-------------------------------------------------+ <--- Data start(freeSpaceEnd).
+ * |                        ↑                        |
+ * +-------------------------------------------------+
+ *
+ * After insert.
+ * +-------------------------------------------------+
+ * |                    Page Header                  |
+ * |         [Record count: 3] freeSpaceEnd          |
  * +-------------------------------------------------+ <--- Slot array start.
  * |         Slot 1: [Record 1 position, size]       |
  * |         Slot 2: [Record 2 position, size]       |
  * |         Slot 3: [Record 3 position, size]       |
- * +-------------------------------------------------+ <--- Slot array end.
+ * +-------------------------------------------------+ <--- Slot array end(freeSpaceStart).
  * |                                                 |
  * |                    Free Space                   |
  * |                                                 |
- * +-------------------------------------------------+ <--- Data start.
+ * +-------------------------------------------------+ <--- Data start(freeSpaceEnd).
  * |                     Record 3                    |
  * |                     Record 2                    |
  * |                     Record 1                    |
  * +-------------------------------------------------+
+ * ```
  * */
 class Page(
     val pageId: Long,
-    val pageSize: Int
+    val pageSize: Int = 4096,
+    pageType: PageType = PageType.LEAF_NODE,
 ){
     internal val data: ByteArray = ByteArray(pageSize)
-
     init {
-
+        val buffer: ByteBuffer = ByteBuffer.wrap(data)
+        // pageType
+        buffer.put(0, pageType.value.toByte())
+        // reserved
+        buffer.put(1, 0)
+        // cellCount
+        buffer.putShort(2, 0)
+        // freeSpaceStart
+        buffer.putShort(4, HEADER_SIZE.toShort())
+        // freeSpaceEnd
+        buffer.putShort(6, pageSize.toShort())
+        // parentPageId
+        buffer.putLong(8, 0)
+        // leftSiblingPageId
+        buffer.putLong(16, 0)
+        // rightSiblingPageId
+        buffer.putLong(24, 0)
+        // lsn
+        buffer.putLong(32, 0)
+    }
+    companion object{
+        internal const val HEADER_SIZE = 40
     }
 }
