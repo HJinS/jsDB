@@ -94,6 +94,9 @@ class Page(
         // lsn
         buffer.putLong(32, 0)
     }
+    val type: PageType
+        get() = PageType.fromValue(ByteBuffer.wrap(data).get(0).toShort()) ?: throw IllegalStateException("Page type should be set")
+
     companion object{
         internal const val HEADER_SIZE = 40
     }
