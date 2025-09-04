@@ -87,13 +87,12 @@ abstract class BaseKeySerializer<K>(protected val schema: KeySchema): KeySeriali
         val nullFlag = try { bytes[position++] } catch( exception: IndexOutOfBoundsException) { throw exception}
         if (nullFlag.toInt() == 0x00) return null to 1
 
-        val descending = column.descending
         val columnType = column.type
 
         fun readBytes(length: Int): ByteArray {
             val slice = bytes.copyOfRange(position, position + length)
             position += length
-            return slice.invert(descending)
+            return slice
         }
 
         val result: Any? = when (columnType){
