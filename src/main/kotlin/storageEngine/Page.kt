@@ -159,6 +159,7 @@ class Page(
             insertRecord(offset.toInt(), key, value, keyLengthEncoded, valueLengthEncoded)
             // update length information
             buffer.putShort(slotLocation + 2, totalLength.toShort())
+            return buffer.getShort(PageHeaderOffset.RECORD_COUNT.offset).toInt()
         } else{
             deleteData(slotId)
             return insertData(key, value)
@@ -179,7 +180,7 @@ class Page(
         return insertSlot(initialInsertOffset.toShort(), totalLength.toShort())
     }
 
-    private fun insertRecord(offset: Int, key: ByteArray, value: ByteArray, keyLengthEncoded: ByteArray, valueLengthEncoded: ByteArray): Int{
+    private fun insertRecord(offset: Int, key: ByteArray, value: ByteArray, keyLengthEncoded: ByteArray, valueLengthEncoded: ByteArray){
         var insertLocation = offset
         buffer.put(insertLocation, keyLengthEncoded)
         insertLocation += keyLengthEncoded.size
@@ -188,13 +189,16 @@ class Page(
         buffer.put(insertLocation, valueLengthEncoded)
         insertLocation += valueLengthEncoded.size
         buffer.put(insertLocation, value)
-
     }
 
     fun deleteData(slotId: Int){
         val slotLocation = HEADER_SIZE + slotId * SLOT_SIZE
         buffer.putShort(slotLocation, 0)
         buffer.putShort(slotLocation+2, 0)
+    }
+
+    fun compaction(){
+
     }
 
     companion object{
