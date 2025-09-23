@@ -35,10 +35,11 @@ fun encodeVarInt(value: Int): ByteArray{
 /**
  * encode 역함수
  * shl: bit 값을 왼쪽으로 이동
- * 0xFF: 0b11111111
- * 0x80: 0b10000000
- * 0x7F: 0b01111111
+ * - 0xFF: 0b11111111
+ * - 0x80: 0b10000000
+ * - 0x7F: 0b01111111
  *
+ * ```
  * example
  *  - original value: 10000000 11010100 10101010 00000101
  *  - first: 0000000
@@ -46,6 +47,7 @@ fun encodeVarInt(value: Int): ByteArray{
  *  - third: 0101010 1010100 0000000
  *  - fourth: 0000101 0101010 1010100 0000000
  *  - fifth: 10101010 10101010 00000000
+ * ```
  * */
 fun decodeVarInt(bytes: ByteArray, offset: Int = 0, descending: Boolean = false): Pair<Int, Int> {
     var result = 0

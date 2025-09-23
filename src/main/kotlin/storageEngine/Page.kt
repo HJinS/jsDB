@@ -197,8 +197,42 @@ class Page(
         buffer.putShort(slotLocation+2, 0)
     }
 
+    /*
+    * 1. write pointer = page 끝
+    * 2. read pointer = 첫번째 슬롯의 offset
+    *
+    * loop
+    * 1. write pointer 이동: 기존 write pointer에서 슬롯의 size 만큼 이동
+    * 2. read pointer에서 데이터를 읽어 write pointer로 이동
+    * 3. 슬롯의 offset 갱신
+    * */
     fun compaction(){
+        val slotArrayEndBytes = buffer.getShort(PageHeaderOffset.FREE_SPACE_START.offset).toInt()
+        var slotArrayStartBytes = 40
+        val slotArrayTemp = mutableListOf<Triple<Int, Int, Int>>()
 
+        var slotNumber = 0
+        // slotArray 데이터를 memory에 로드
+        while(slotArrayStartBytes < slotArrayEndBytes){
+            val offset = buffer.getShort(slotArrayStartBytes).toInt()
+            val length = buffer.getShort(slotArrayStartBytes + 2).toInt()
+            slotArrayTemp.addLast(Triple(slotNumber, offset, length))
+            slotArrayStartBytes += SLOT_SIZE
+            slotNumber += 1
+        }
+        // offset 기준 내림차순 -> 끝에서 부터(slot id 작은 순)
+        slotArrayTemp.sortByDescending { it.second }
+
+        var writePointer = pageSize - 1
+        slotArrayStartBytes = 40
+        // iterate 하면서 write pointer는 끝에서 사이즈를 통해 점차 내려감
+        // read pointer는 slot array 데이터의 offset을 사용
+        slotArrayTemp.forEach { (slotNumber, offset, length) ->
+            val readPointer = offset
+            writePointer -= length
+            data.copyInto(data, writePointer, readPointer, readPointer+length)
+            buffer.putShort(slotArrayStartBytes + SLOT_SIZE * slotNumber, writePointer.toShort())
+        }
     }
 
     companion object{
