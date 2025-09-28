@@ -1,5 +1,6 @@
 package storage
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import storageEngine.Page
@@ -27,25 +28,51 @@ class PageTest:BehaviorSpec({
         `when`("delete 1 key, value pair"){
             val deleteSlotId = 2
             page.deleteData(deleteSlotId)
-            then("slot data of deleted key(offset, length) should be 0"){
-
+            then("getData(2) should throw an exception"){
+                shouldThrow<IllegalStateException> { page.getData(deleteSlotId) }
             }
         }
 
-        `when`("update first data"){
-            then("first data should have new data"){
-
+        `when`("update the second data"){
+            val dummyNewKey = ByteArray(40).apply { Random.nextBytes(this) }
+            val dummyNewValue = ByteArray(40).apply { Random.nextBytes(this) }
+            val slotId = page.updateData(1, dummyNewKey, dummyNewValue)
+            then("the first data should have new data and should use new slot 3"){
+                slotId shouldBe 3
+            }
+            then("the new data retrieved should be equal to new data"){
+                val (key, value) = page.getData(slotId)
+                key shouldBe dummyNewKey
+                value shouldBe dummyNewValue
+            }
+            then("the record count should be 2"){
+                page.recordCount shouldBe 2
             }
         }
 
         `when`("insert new data"){
-            then("new data should be saved to 4'th slot"){
-
+            val dummyNewKey = ByteArray(40).apply { Random.nextBytes(this) }
+            val dummyNewValue = ByteArray(40).apply { Random.nextBytes(this) }
+            val slotId = page.updateData(1, dummyNewKey, dummyNewValue)
+            then("the new data should have slotId 4"){
+                slotId shouldBe 4
+            }
+            then("the record count should be 3"){
+                page.recordCount shouldBe 3
+            }
+            then("the data retrieved should be equal to origin data"){
+                val (key, value) = page.getData(slotId)
+                key shouldBe dummyNewKey
+                value shouldBe dummyNewValue
             }
         }
         `when`("compaction has done"){
-            then("total slot size should be 3"){
-
+            page.compaction()
+            then("the record count should be 3"){
+                page.recordCount shouldBe 3
+            }
+            then("the slot count should be "){
+                page.recordCount shouldBe 3
             }
         }
     }
