@@ -57,9 +57,9 @@ import java.nio.ByteBuffer
  * |                    Page Header                  |
  * |         [Record count: 3] freeSpaceEnd          |
  * +-------------------------------------------------+ <--- Slot array start.
- * |         Slot 1: [Record 1 position, size]       |
- * |         Slot 2: [Record 2 position, size]       |
- * |         Slot 3: [Record 3 position, size]       |
+ * |         Slot 1: [Record 1 offset, size]       |
+ * |         Slot 2: [Record 2 offset, size]       |
+ * |         Slot 3: [Record 3 offset, size]       |
  * +-------------------------------------------------+ <--- Slot array end(freeSpaceStart).
  * |                                                 |
  * |                    Free Space                   |
@@ -100,11 +100,11 @@ class Page(
             data[0] = type.value.toByte()
         }
 
-    val recordCount: Int
-        get() = buffer.getShort(2).toInt()
-
     private val freeSpaceEnd: Int
         get() = buffer.getShort(PageHeaderOffset.FREE_SPACE_END.offset).toInt()
+
+    val recordCount: Int
+        get() = buffer.getShort(PageHeaderOffset.RECORD_COUNT.offset).toInt()
 
     val leftSiblingPageId: Long
         get() = buffer.getLong(PageHeaderOffset.LEFT_SIBLING_PAGE_ID.offset)
@@ -112,23 +112,33 @@ class Page(
     val rightSiblingPageId: Long
         get() = buffer.getLong(PageHeaderOffset.RIGHT_SIBLING_PAGE_ID.offset)
 
-    private fun insertSlot(offset: Short, length: Short): Int{
-        val currentFreeSpaceStart = buffer.getShort(PageHeaderOffset.FREE_SPACE_START.offset).toInt()
+    private fun increaseRecordCount(){
         val recordCount = buffer.getShort(PageHeaderOffset.RECORD_COUNT.offset)
+        buffer.putShort(PageHeaderOffset.RECORD_COUNT.offset, (recordCount + 1).toShort())
+    }
+
+    private fun decreaseRecordCount(){
+        val recordCount = buffer.getShort(PageHeaderOffset.RECORD_COUNT.offset)
+        buffer.putShort(PageHeaderOffset.RECORD_COUNT.offset, (recordCount - 1).toShort())
+    }
+
+    private fun insertSlot(offset: Short, length: Short){
+        val currentFreeSpaceStart = buffer.getShort(PageHeaderOffset.FREE_SPACE_START.offset).toInt()
         // slotID 는 0 부터 시작
         // 따라서 recordCount 그대로 반환
         // 반환값은 slotID
         buffer.putShort(currentFreeSpaceStart, offset)
         buffer.putShort(currentFreeSpaceStart + 2, length)
         buffer.putShort(PageHeaderOffset.FREE_SPACE_START.offset, (currentFreeSpaceStart + SLOT_SIZE).toShort())
-        buffer.putShort(PageHeaderOffset.RECORD_COUNT.offset, (recordCount + 1).toShort())
-        return recordCount.toInt()
+        increaseRecordCount()
     }
 
     fun getData(slotId: Int): Pair<ByteArray, ByteArray>{
         val slotLocation = HEADER_SIZE + slotId * SLOT_SIZE
         val offset = buffer.getShort(slotLocation)
         val length = buffer.getShort(slotLocation + 2)
+        if(offset.toInt() == 0 && length.toInt() == 0) throw IllegalStateException("No Data")
+
         // slot 데이터를 가지고 실제 데이터 추출
         // 반만 열린 범위인 것을 주의
         val recordData = data.slice(offset until (offset+length)).toByteArray()
@@ -146,7 +156,7 @@ class Page(
         return key to value
     }
 
-    fun updateData(slotId: Int, key: ByteArray, value: ByteArray): Int{
+    fun updateData(slotId: Int, key: ByteArray, value: ByteArray){
         val (_, oldValue) = getData(slotId)
         if(oldValue.size >= value.size){
             val slotLocation = HEADER_SIZE + slotId * SLOT_SIZE
@@ -159,14 +169,13 @@ class Page(
             insertRecord(offset.toInt(), key, value, keyLengthEncoded, valueLengthEncoded)
             // update length information
             buffer.putShort(slotLocation + 2, totalLength.toShort())
-            return buffer.getShort(PageHeaderOffset.RECORD_COUNT.offset).toInt()
         } else{
             deleteData(slotId)
-            return insertData(key, value)
+            insertData(key, value)
         }
     }
 
-    fun insertData(key: ByteArray, value: ByteArray): Int{
+    fun insertData(key: ByteArray, value: ByteArray){
         val keyLength = key.size
         val valueLength = value.size
         val keyLengthEncoded = encodeVarInt(keyLength)
@@ -177,7 +186,7 @@ class Page(
         // 자라나는 방향이 반대인 것을 잊지 말것
         val initialInsertOffset = freeSpaceEnd - totalLength + 1
         insertRecord(initialInsertOffset, key, value, keyLengthEncoded, valueLengthEncoded)
-        return insertSlot(initialInsertOffset.toShort(), totalLength.toShort())
+        insertSlot(initialInsertOffset.toShort(), totalLength.toShort())
     }
 
     private fun insertRecord(offset: Int, key: ByteArray, value: ByteArray, keyLengthEncoded: ByteArray, valueLengthEncoded: ByteArray){
@@ -195,6 +204,7 @@ class Page(
         val slotLocation = HEADER_SIZE + slotId * SLOT_SIZE
         buffer.putShort(slotLocation, 0)
         buffer.putShort(slotLocation+2, 0)
+        decreaseRecordCount()
     }
 
     /*
