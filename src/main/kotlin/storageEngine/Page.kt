@@ -34,10 +34,12 @@ import java.nio.ByteBuffer
  * | 2      | 2     | recordCount        | Count of the stored cell(record)                  |
  * | 4      | 2     | freeSpaceStart     | Start point of the free space(=end of slot array) |
  * | 6      | 2     | freeSpaceEnd       | End point of the free space(=start of data area)  |
- * | 8      | 8     | parentPageId       | Page id of the parent node.                       |
- * | 16     | 8     | leftSiblingPageId  | Page id of the left sibling node.                 |
- * | 24     | 8     | rightSiblingPageId | Page id of the right sibling node.                |
- * | 32     | 8     | lsn                | Log sequence number for WAL recovery.             |
+ * | 8      | 2     | freeSlotHead       | Start point of the free slot array                |
+ * | 10     | 6     | reserved           | Extra space for byte alignment                    |
+ * | 16     | 8     | parentPageId       | Page id of the parent node.                       |
+ * | 24     | 8     | leftSiblingPageId  | Page id of the left sibling node.                 |
+ * | 32     | 8     | rightSiblingPageId | Page id of the right sibling node.                |
+ * | 40     | 8     | lsn                | Log sequence number for WAL recovery.             |
  *
  * ```
  * Initial state
@@ -87,10 +89,12 @@ class Page(
     init {
         val buffer: ByteBuffer = ByteBuffer.wrap(data)
         buffer.put(PageHeaderOffset.PAGE_TYPE.offset, pageType.value.toByte())
-        buffer.put(PageHeaderOffset.RESERVED.offset, 0)
+        buffer.put(PageHeaderOffset.RESERVED_ONE.offset, 0)
         buffer.putShort(PageHeaderOffset.RECORD_COUNT.offset, 0)
         buffer.putShort(PageHeaderOffset.FREE_SPACE_START.offset, HEADER_SIZE.toShort())
         buffer.putShort(PageHeaderOffset.FREE_SPACE_END.offset, (pageSize-1).toShort())
+        buffer.putShort(PageHeaderOffset.FREE_SLOT_HEAD.offset, (-1).toShort())
+        buffer.putShort(PageHeaderOffset.RESERVED_TWO.offset, 0)
         buffer.putLong(PageHeaderOffset.PARENT_PAGE_ID.offset, 0)
         buffer.putLong(PageHeaderOffset.LEFT_SIBLING_PAGE_ID.offset, 0)
         buffer.putLong(PageHeaderOffset.RIGHT_SIBLING_PAGE_ID.offset, 0)
@@ -143,6 +147,25 @@ class Page(
         buffer.putShort(freeSpaceStart, offset)
         buffer.putShort(freeSpaceStart + 2, length)
         buffer.putShort(PageHeaderOffset.FREE_SPACE_START.offset, (freeSpaceStart + SLOT_SIZE).toShort())
+    }
+
+    private fun addFreeSlot(slotId: Int){
+        var freeSlotId = buffer.getShort(PageHeaderOffset.FREE_SLOT_HEAD.offset).toInt()
+        var slotLocation = -1
+        while(freeSlotId != -1){
+            slotLocation = HEADER_SIZE + freeSlotId * SLOT_SIZE
+            freeSlotId = buffer.getShort(slotLocation).toInt()
+        }
+        buffer.putShort(slotLocation, slotId.toShort())
+        buffer.putShort(HEADER_SIZE + slotId * SLOT_SIZE, (-1).toShort())
+    }
+
+    private fun getFreeSlotId(): Int{
+        val freeSlotId = buffer.getShort(PageHeaderOffset.FREE_SLOT_HEAD.offset).toInt()
+        return freeSlotId.takeIf { it != -1 }?.also { id ->
+            val nextFreeSlotId = buffer.getShort(HEADER_SIZE + id * SLOT_SIZE).toInt()
+            buffer.putShort(PageHeaderOffset.FREE_SLOT_HEAD.offset, nextFreeSlotId.toShort())
+        } ?: -1
     }
 
     fun getData(slotId: Int): Pair<ByteArray, ByteArray>{
@@ -269,7 +292,7 @@ class Page(
     }
 
     companion object{
-        internal const val HEADER_SIZE = 40
+        internal const val HEADER_SIZE = 48
         internal const val SLOT_SIZE: Short = 4
     }
 }

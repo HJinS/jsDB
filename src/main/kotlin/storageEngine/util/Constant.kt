@@ -14,12 +14,14 @@ enum class PageType(val value: Short){
 
 enum class PageHeaderOffset(val offset: Int, val bytes: Int){
     PAGE_TYPE(0, 1),
-    RESERVED(1, 1),
+    RESERVED_ONE(1, 1),
     RECORD_COUNT(2, 2),
     FREE_SPACE_START(4, 2),
     FREE_SPACE_END(6, 2),
-    PARENT_PAGE_ID(8, 8),
-    LEFT_SIBLING_PAGE_ID(16, 8),
-    RIGHT_SIBLING_PAGE_ID(24, 8),
-    LSN(32, 8)
+    FREE_SLOT_HEAD(8, 2),
+    RESERVED_TWO(10, 6),
+    PARENT_PAGE_ID(16, 8),
+    LEFT_SIBLING_PAGE_ID(24, 8),
+    RIGHT_SIBLING_PAGE_ID(32, 8),
+    LSN(40, 8)
 }
