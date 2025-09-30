@@ -136,22 +136,9 @@ class Page(
         return (slotArrayOffset - slotArrayStartBytes) / SLOT_SIZE
     }
 
-    /**
-     * @return the slotID of the last record
-     * */
-    private fun insertSlot(offset: Short, length: Short){
-        val freeSpaceStart = currentFreeSpaceStart
-        // slotID 는 0 부터 시작
-        // 따라서 recordCount 그대로 반환
-        // 반환값은 slotID
-        buffer.putShort(freeSpaceStart, offset)
-        buffer.putShort(freeSpaceStart + 2, length)
-        buffer.putShort(PageHeaderOffset.FREE_SPACE_START.offset, (freeSpaceStart + SLOT_SIZE).toShort())
-    }
-
-    private fun addFreeSlot(slotId: Int){
-        var freeSlotId = buffer.getShort(PageHeaderOffset.FREE_SLOT_HEAD.offset).toInt()
-        var slotLocation = -1
+    private fun retrieveFreeSlotId(slotId: Int){
+        var slotLocation = PageHeaderOffset.FREE_SLOT_HEAD.offset
+        var freeSlotId = buffer.getShort(slotLocation).toInt()
         while(freeSlotId != -1){
             slotLocation = HEADER_SIZE + freeSlotId * SLOT_SIZE
             freeSlotId = buffer.getShort(slotLocation).toInt()
@@ -168,11 +155,30 @@ class Page(
         } ?: -1
     }
 
+    private fun getNewSlotId(): Int{
+        val currentNewSlotId = buffer.getShort(PageHeaderOffset.FREE_SPACE_START.offset)
+        buffer.putShort(PageHeaderOffset.FREE_SPACE_START.offset, (currentNewSlotId + SLOT_SIZE).toShort())
+        return currentNewSlotId.toInt()
+    }
+
+    /**
+     * @return the slotID of the last record
+     * */
+    private fun insertSlot(offset: Short, length: Short): Int{
+        val newSlotId = getFreeSlotId().takeIf { it != -1 } ?: getNewSlotId()
+        // slotID 는 0 부터 시작
+        // 따라서 recordCount 그대로 반환
+        // 반환값은 slotID
+        buffer.putShort(newSlotId, offset)
+        buffer.putShort(newSlotId + 2, length)
+        return newSlotId
+    }
+
     fun getData(slotId: Int): Pair<ByteArray, ByteArray>{
         val slotLocation = HEADER_SIZE + slotId * SLOT_SIZE
         val offset = buffer.getShort(slotLocation)
         val length = buffer.getShort(slotLocation + 2)
-        if(offset.toInt() == 0 && length.toInt() == 0) throw IllegalStateException("No Data")
+        if(length.toInt() == 0) throw IllegalStateException("No Data")
         // slot 데이터를 가지고 실제 데이터 추출
         // 반만 열린 범위인 것을 주의
         val recordData = data.slice(offset until (offset+length)).toByteArray()
@@ -222,7 +228,6 @@ class Page(
         val keyLengthEncoded = encodeVarInt(keyLength)
         val valueLengthEncoded = encodeVarInt(valueLength)
         val totalLength = keyLength + valueLength + keyLengthEncoded.size + valueLengthEncoded.size
-        val freeSpaceEnd = buffer.getShort(PageHeaderOffset.FREE_SPACE_END.offset).toInt()
         // 0부터 시작하는 특성 상 + 1을 해줘야 위치가 맞음
         // 자라나는 방향이 반대인 것을 잊지 말것
         val initialInsertOffset = freeSpaceEnd - totalLength + 1
@@ -250,6 +255,7 @@ class Page(
         val slotLocation = HEADER_SIZE + slotId * SLOT_SIZE
         buffer.putShort(slotLocation, 0)
         buffer.putShort(slotLocation+2, 0)
+        retrieveFreeSlotId(slotId)
         decreaseRecordCount()
         return slotId
     }
@@ -271,13 +277,14 @@ class Page(
         var slotNumber = 0
         // slotArray 데이터를 memory에 로드
         while(slotArrayStartBytes < slotArrayEndBytes){
-            val offset = buffer.getShort(slotArrayStartBytes).toInt()
+            var offset = buffer.getShort(slotArrayStartBytes).toInt()
             val length = buffer.getShort(slotArrayStartBytes + 2).toInt()
+            if(length == 0) offset = 0
             slotArrayTemp.addLast(Triple(slotNumber, offset, length))
             slotArrayStartBytes += SLOT_SIZE
             slotNumber += 1
         }
-        // offset 기준 내림차순 -> 끝에서 부터(slot id 작은 순)
+        // offset 기준 내림차순 -> 끝에서 부터
         slotArrayTemp.sortByDescending { it.second }
 
         var writePointer = pageSize - 1
@@ -285,6 +292,7 @@ class Page(
         // iterate 하면서 write pointer는 끝에서 사이즈를 통해 점차 내려감
         // read pointer는 slot array 데이터의 offset을 사용
         slotArrayTemp.forEach { (slotNumber, readPointer, length) ->
+            if(length == 0 && readPointer == 0) return@forEach
             writePointer -= length
             data.copyInto(data, writePointer, readPointer, readPointer+length)
             buffer.putShort(slotArrayStartBytes + SLOT_SIZE * slotNumber, writePointer.toShort())
