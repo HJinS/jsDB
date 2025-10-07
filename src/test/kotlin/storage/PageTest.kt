@@ -2,9 +2,14 @@ package storage
 
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.shouldBe
 import storageEngine.Page
+import storageEngine.util.PageHeaderOffset
+import java.lang.reflect.Field
+import java.nio.ByteBuffer
 import kotlin.random.Random
+import kotlin.reflect.full.memberProperties
 
 
 // get, update, insert, delete 테스트
@@ -37,8 +42,8 @@ class PageTest:BehaviorSpec({
             val dummyNewKey = ByteArray(40).apply { Random.nextBytes(this) }
             val dummyNewValue = ByteArray(40).apply { Random.nextBytes(this) }
             val slotId = page.updateData(1, dummyNewKey, dummyNewValue)
-            then("the first data should have new data and should use new slot 3"){
-                slotId shouldBe 3
+            then("the first data should have new data and should use used slot 2"){
+                slotId shouldBe 2
             }
             then("the new data retrieved should be equal to new data"){
                 val (key, value) = page.getData(slotId)
@@ -53,9 +58,9 @@ class PageTest:BehaviorSpec({
         `when`("insert new data"){
             val dummyNewKey = ByteArray(40).apply { Random.nextBytes(this) }
             val dummyNewValue = ByteArray(40).apply { Random.nextBytes(this) }
-            val slotId = page.updateData(1, dummyNewKey, dummyNewValue)
-            then("the new data should have slotId 4"){
-                slotId shouldBe 4
+            val slotId = page.insertData(dummyNewKey, dummyNewValue)
+            then("the new data should have slotId 1"){
+                slotId shouldBe 1
             }
             then("the record count should be 3"){
                 page.recordCount shouldBe 3
@@ -67,13 +72,18 @@ class PageTest:BehaviorSpec({
             }
         }
         `when`("compaction has done"){
+            val bufferDelegateField: Field = Page::class.java.getDeclaredField("buffer\$delegate")
+            bufferDelegateField.isAccessible = true
+            val bufferDelegate = bufferDelegateField.get(page) as Lazy<*>
+            val buffer = bufferDelegate.value as ByteBuffer
+            val freeSpaceEndBefore = buffer.getShort(PageHeaderOffset.FREE_SPACE_END.offset)
+
             page.compaction()
-            then("the record count should be 3"){
-                page.recordCount shouldBe 3
+            val freeSpaceEndAfter = buffer.getShort(PageHeaderOffset.FREE_SPACE_END.offset)
+            then("Before value should smaller then after value"){
+                freeSpaceEndBefore shouldBeLessThan freeSpaceEndAfter
             }
-            then("the slot count should be "){
-                page.recordCount shouldBe 3
-            }
+
         }
     }
 }){

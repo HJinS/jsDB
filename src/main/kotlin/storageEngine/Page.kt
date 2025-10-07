@@ -2,14 +2,14 @@ package storageEngine
 
 import index.util.decodeVarInt
 import index.util.encodeVarInt
+import mu.KotlinLogging
 import storageEngine.util.PageHeaderOffset
 import storageEngine.util.PageType
 import java.nio.ByteBuffer
+import kotlin.text.toHexString
 
 
 /**
- * TODO
- * 미사용 slotID 배열 추가할 것
  *
  * 헤더
  * 1. 새 페이지를 특정 노드 타입의 슬롯 페이지 구조로 초기화
@@ -81,6 +81,8 @@ class Page(
     pageType: PageType = PageType.LEAF_NODE,
 ){
     private val data: ByteArray = ByteArray(pageSize)
+    private val logger = KotlinLogging.logger {}
+
 
     // Do not use a relative path function. The data will be saved incorrectly.
     private val buffer: ByteBuffer by lazy {
@@ -136,6 +138,9 @@ class Page(
         return (slotArrayOffset - slotArrayStartBytes) / SLOT_SIZE
     }
 
+    /**
+    * slot 삭제시 미사용 슬롯 등록
+    * */
     private fun retrieveFreeSlotId(slotId: Int){
         var slotLocation = PageHeaderOffset.FREE_SLOT_HEAD.offset
         var freeSlotId = buffer.getShort(slotLocation).toInt()
@@ -147,6 +152,9 @@ class Page(
         buffer.putShort(HEADER_SIZE + slotId * SLOT_SIZE, (-1).toShort())
     }
 
+    /**
+     * 사용할 미사용 슬롯 하나 획득
+     * */
     private fun getFreeSlotId(): Int{
         val freeSlotId = buffer.getShort(PageHeaderOffset.FREE_SLOT_HEAD.offset).toInt()
         return freeSlotId.takeIf { it != -1 }?.also { id ->
@@ -156,9 +164,9 @@ class Page(
     }
 
     private fun getNewSlotId(): Int{
-        val currentNewSlotId = buffer.getShort(PageHeaderOffset.FREE_SPACE_START.offset)
-        buffer.putShort(PageHeaderOffset.FREE_SPACE_START.offset, (currentNewSlotId + SLOT_SIZE).toShort())
-        return currentNewSlotId.toInt()
+        val newSlotLocation = buffer.getShort(PageHeaderOffset.FREE_SPACE_START.offset)
+        buffer.putShort(PageHeaderOffset.FREE_SPACE_START.offset, (newSlotLocation + SLOT_SIZE).toShort())
+        return (newSlotLocation - HEADER_SIZE) / SLOT_SIZE
     }
 
     /**
@@ -166,33 +174,47 @@ class Page(
      * */
     private fun insertSlot(offset: Short, length: Short): Int{
         val newSlotId = getFreeSlotId().takeIf { it != -1 } ?: getNewSlotId()
+        val slotLocation = HEADER_SIZE + newSlotId * SLOT_SIZE
         // slotID 는 0 부터 시작
         // 따라서 recordCount 그대로 반환
         // 반환값은 slotID
-        buffer.putShort(newSlotId, offset)
-        buffer.putShort(newSlotId + 2, length)
+        buffer.putShort(slotLocation, offset)
+        buffer.putShort(slotLocation + 2, length)
         return newSlotId
     }
 
+    @OptIn(ExperimentalStdlibApi::class)
     fun getData(slotId: Int): Pair<ByteArray, ByteArray>{
+        logger.info("========================[getData 시작]========================")
         val slotLocation = HEADER_SIZE + slotId * SLOT_SIZE
         val offset = buffer.getShort(slotLocation)
         val length = buffer.getShort(slotLocation + 2)
+        logger.info("[getData] 조회할 데이터 offset = $offset")
+        logger.info("[getData] 조회할 데이터 length = $length")
+        logger.info("[getData] 조회할 데이터 slotId = $slotId")
         if(length.toInt() == 0) throw IllegalStateException("No Data")
         // slot 데이터를 가지고 실제 데이터 추출
         // 반만 열린 범위인 것을 주의
         val recordData = data.slice(offset until (offset+length)).toByteArray()
+        logger.info("[getData] 조회할 실제 데이터 = ${recordData.toHexString()}")
         // 가장 앞에 있는 부분은 key의 길이 정보를 varInt로 인코딩 한 것
         // keyLengthByteLen는 인코딩된 byte 길이를 말함
         // 이 길이 정보를 통해 실제 key 데이터를 추출
         val (keyLength, keyLengthByteLen) = decodeVarInt(recordData, 0)
+        logger.info("[getData] 조회할 실제 데이터 중 key 길이 decode 결과 = $keyLength")
+        logger.info("[getData] 조회할 실제 데이터 중 key 길이 decode 결과의 byte 기준 길이 = $keyLengthByteLen")
         val key = recordData.slice(keyLengthByteLen until keyLengthByteLen + keyLength).toByteArray()
+        logger.info("[getData] 조회할 실제 데이터 중 key =  ${key.toHexString()}")
         // valueLengthByteLen는 인코딩된 byte 길이를 말함
         // 이 길이 정보를 통해 실제 value 데이터를 추출
         val (valueLength, valueLengthByteLen) = decodeVarInt(recordData, keyLengthByteLen + keyLength)
+        logger.info("[getData] 조회할 실제 데이터 중 value 길이 decode 결과 = $valueLength")
+        logger.info("[getData] 조회할 실제 데이터 중 value 길이 decode 결과의 byte 기준 길이 = $valueLengthByteLen")
         val value = recordData.slice(
             keyLengthByteLen + keyLength + valueLengthByteLen until keyLengthByteLen + keyLength + valueLengthByteLen + valueLength
         ).toByteArray()
+        logger.info("[getData] 조회할 실제 데이터 중 value =  ${value.toHexString()}")
+        logger.info("========================[getData 종료]========================")
         return key to value
     }
 
@@ -222,7 +244,9 @@ class Page(
     /**
      * @return the slotID of the last one
      * */
+    @OptIn(ExperimentalStdlibApi::class)
     fun insertData(key: ByteArray, value: ByteArray): Int{
+        logger.info("========================[insertData 시작]========================")
         val keyLength = key.size
         val valueLength = value.size
         val keyLengthEncoded = encodeVarInt(keyLength)
@@ -231,21 +255,42 @@ class Page(
         // 0부터 시작하는 특성 상 + 1을 해줘야 위치가 맞음
         // 자라나는 방향이 반대인 것을 잊지 말것
         val initialInsertOffset = freeSpaceEnd - totalLength + 1
+        logger.info("[insertData 삽입전] 삽입 위치 = $initialInsertOffset")
+        logger.info("[insertData 삽입전] key = ${key.toHexString()}")
+        logger.info("[insertData 삽입전] value = ${value.toHexString()}")
+        logger.info("[insertData 삽입전] key 길이 = $keyLength")
+        logger.info("[insertData 삽입전] value 길이 = $valueLength")
+        logger.info("[insertData 삽입전] 인코딩된 key 길이 = ${keyLengthEncoded.toHexString()}")
+        logger.info("[insertData 삽입전] 인코딩된 value 길이 = ${valueLengthEncoded.toHexString()}")
         insertRecord(initialInsertOffset, key, value, keyLengthEncoded, valueLengthEncoded)
-        insertSlot(initialInsertOffset.toShort(), totalLength.toShort())
+        buffer.putShort(PageHeaderOffset.FREE_SPACE_END.offset, (initialInsertOffset - 1).toShort())
+        val slotId = insertSlot(initialInsertOffset.toShort(), totalLength.toShort())
+        logger.info("insertData slotId=$slotId")
         increaseRecordCount()
-        return getSlotId(currentFreeSpaceStart - SLOT_SIZE)
+        logger.info("========================[insertData 종료]========================")
+        return slotId
     }
 
+    @OptIn(ExperimentalStdlibApi::class)
     private fun insertRecord(offset: Int, key: ByteArray, value: ByteArray, keyLengthEncoded: ByteArray, valueLengthEncoded: ByteArray){
+        logger.info("========================[insertRecord 시작]========================")
         var insertLocation = offset
+        logger.info("[insertRecord 삽입] key 길이 삽입 위치 = $insertLocation")
+        logger.info("[insertRecord 삽입] 인코딩된 key 길이 = ${keyLengthEncoded.toHexString()}")
         buffer.put(insertLocation, keyLengthEncoded)
         insertLocation += keyLengthEncoded.size
+        logger.info("[insertRecord 삽입] key 삽입 위치 = $insertLocation")
+        logger.info("[insertRecord 삽입] 인코딩된 key = ${key.toHexString()}")
         buffer.put(insertLocation, key)
         insertLocation += key.size
+        logger.info("[insertRecord 삽입] value 길이 삽입 위치 = $insertLocation")
+        logger.info("[insertRecord 삽입] 인코딩된 value 길이 = ${valueLengthEncoded.toHexString()}")
         buffer.put(insertLocation, valueLengthEncoded)
         insertLocation += valueLengthEncoded.size
+        logger.info("[insertRecord 삽입] value 삽입 위치 = $insertLocation")
+        logger.info("[insertRecord 삽입] 인코딩된 value = ${value.toHexString()}")
         buffer.put(insertLocation, value)
+        logger.info("========================[insertRecord 종료]========================")
     }
 
     /**
@@ -271,7 +316,7 @@ class Page(
     * */
     fun compaction(){
         val slotArrayEndBytes = buffer.getShort(PageHeaderOffset.FREE_SPACE_START.offset).toInt()
-        var slotArrayStartBytes = 40
+        var slotArrayStartBytes = HEADER_SIZE
         val slotArrayTemp = mutableListOf<Triple<Int, Int, Int>>()
 
         var slotNumber = 0
@@ -288,7 +333,7 @@ class Page(
         slotArrayTemp.sortByDescending { it.second }
 
         var writePointer = pageSize - 1
-        slotArrayStartBytes = 40
+        slotArrayStartBytes = HEADER_SIZE
         // iterate 하면서 write pointer는 끝에서 사이즈를 통해 점차 내려감
         // read pointer는 slot array 데이터의 offset을 사용
         slotArrayTemp.forEach { (slotNumber, readPointer, length) ->
@@ -297,6 +342,7 @@ class Page(
             data.copyInto(data, writePointer, readPointer, readPointer+length)
             buffer.putShort(slotArrayStartBytes + SLOT_SIZE * slotNumber, writePointer.toShort())
         }
+        buffer.putShort(PageHeaderOffset.FREE_SPACE_END.offset, writePointer.toShort())
     }
 
     companion object{

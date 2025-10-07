@@ -29,6 +29,7 @@ dependencies {
     implementation("io.github.microutils:kotlin-logging:3.0.5")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
+    implementation("org.jetbrains.kotlin:kotlin-reflect:2.2.20")
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter", "junit-jupiter", "5.6.2")
     testImplementation("io.kotest:kotest-runner-junit5:$kotestVersion")

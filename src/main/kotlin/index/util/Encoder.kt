@@ -49,25 +49,33 @@ fun encodeVarInt(value: Int): ByteArray{
  *  - fifth: 10101010 10101010 00000000
  * ```
  * */
-fun decodeVarInt(bytes: ByteArray, offset: Int = 0, descending: Boolean = false): Pair<Int, Int> {
+fun decodeVarInt(bytes: ByteArray, offset: Int = 0): Pair<Int, Int> {
     var result = 0
     var shift = 0
     var pos = offset
 
-    while (pos < bytes.size) {
-        var byte = bytes[pos].toInt()
-        byte = if (descending) {
-            byte xor 0xFF // invert 처리
-        } else {
-            byte and 0xFF // ByteArray 에서 디코딩 대상 byte 가져옴
+    while (true) {
+        // 배열 범위를 벗어나는지 확인
+        if (pos >= bytes.size) {
+            throw IllegalArgumentException("Malformed VarInt")
         }
+
+        val byte = bytes[pos].toInt() and 0xFF
+        // ByteArray 에서 디코딩 대상 byte 가져옴 + 부호 없는 정수로 변환(int 변환 시 부호 확장을 고려하여 마지막 8bit만 가져옴)
         // 뒤 7bit를 가지교 와서 7칸 쉬프트(처음엔 0칸)한 후에 or로 저장
         // 인코딩 할 때 높은 자리 숫자가 배열 뒤쪽으로 오게 됨
         // 숫자 가장 앞의 bit가 1이면 뒤에 숫자가 더 있다는 뜻
         result = result or ((byte and 0x7F) shl shift)
         pos++
+
+        // MSB가 0이면 마지막 바이트 이므로 종료
         if ((byte and 0x80) == 0) break
         shift += 7
+
+        // 32비트 Int를 넘어서는 과도한 데이터 방지
+        if (shift >= 32) {
+            throw IllegalArgumentException("VarInt is too long")
+        }
     }
     return result to (pos - offset)
 }
