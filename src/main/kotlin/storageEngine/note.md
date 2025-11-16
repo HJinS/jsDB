@@ -87,3 +87,5 @@ TODO
 > Page 를 가져올 때 캐싱하는 역할도 같이 함. DiskManager 를 사용해서 Page 를 가져오며, Disk I/O 를 최소화하는 것이 목표
 > fetchPage, newPage, unpinPage, flushPage, flushPages 등.
 > bufferPool, pageTable, replacer, freeFrames 등 필요
+> bufferPool managing 의 경우에는 Mysql(InnoDB)의 Midpoint-Insertion LRU
+> flush cycle - write on eviction, write on shutdown + background threwad 사용
