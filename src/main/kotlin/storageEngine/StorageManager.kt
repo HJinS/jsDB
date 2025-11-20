@@ -4,7 +4,7 @@ import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 
-class DiskManager(dbPath: String, private val pageSize: Int) {
+class StorageManager(dbPath: String, private val pageSize: Int) {
     init {
         require(pageSize > 0){"page size must be greater than zero"}
     }

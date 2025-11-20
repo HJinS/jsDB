@@ -88,6 +88,6 @@ class PageTest:BehaviorSpec({
     }
 }){
     companion object{
-        val page = Page(0)
+        val page = Page(pageId=0)
     }
 }

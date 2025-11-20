@@ -29,17 +29,18 @@ import kotlin.text.toHexString
  *
  * | offset | bytes | fieldName          | description                                       |
  * |--------|-------|--------------------|---------------------------------------------------|
- * | 0      | 1     | pageType           | The type of the page(leaf, internal, free list)   |
- * | 1      | 1     | reserved           | Extra space for byte alignment                    |
- * | 2      | 2     | recordCount        | Count of the stored cell(record)                  |
- * | 4      | 2     | freeSpaceStart     | Start point of the free space(=end of slot array) |
- * | 6      | 2     | freeSpaceEnd       | End point of the free space(=start of data area)  |
- * | 8      | 2     | freeSlotHead       | Start point of the free slot array                |
- * | 10     | 6     | reserved           | Extra space for byte alignment                    |
- * | 16     | 8     | parentPageId       | Page id of the parent node.                       |
- * | 24     | 8     | leftSiblingPageId  | Page id of the left sibling node.                 |
- * | 32     | 8     | rightSiblingPageId | Page id of the right sibling node.                |
- * | 40     | 8     | lsn                | Log sequence number for WAL recovery.             |
+ * | 0      | 8     | pageID             | PageID                                            |
+ * | 8      | 1     | pageType           | The type of the page(leaf, internal, free list)   |
+ * | 9      | 1     | reserved           | Extra space for byte alignment                    |
+ * | 10     | 2     | recordCount        | Count of the stored cell(record)                  |
+ * | 12     | 2     | freeSpaceStart     | Start point of the free space(=end of slot array) |
+ * | 14     | 2     | freeSpaceEnd       | End point of the free space(=start of data area)  |
+ * | 16     | 2     | freeSlotHead       | Start point of the free slot array                |
+ * | 18     | 6     | reserved           | Extra space for byte alignment                    |
+ * | 24     | 8     | parentPageId       | Page id of the parent node.                       |
+ * | 32     | 8     | leftSiblingPageId  | Page id of the left sibling node.                 |
+ * | 40     | 8     | rightSiblingPageId | Page id of the right sibling node.                |
+ * | 48     | 8     | lsn                | Log sequence number for WAL recovery.             |
  *
  * ```
  * Initial state
@@ -76,13 +77,12 @@ import kotlin.text.toHexString
  * ```
  * */
 class Page(
-    val pageId: Long,
     val pageSize: Int = 4096,
-    pageType: PageType = PageType.LEAF_NODE,
+    pageId: Long = -1,
+    pageType: PageType = PageType.EMPTY,
 ){
     private val data: ByteArray = ByteArray(pageSize)
     private val logger = KotlinLogging.logger {}
-
 
     // Do not use a relative path function. The data will be saved incorrectly.
     private val buffer: ByteBuffer by lazy {
@@ -90,7 +90,8 @@ class Page(
     }
     init {
         val buffer: ByteBuffer = ByteBuffer.wrap(data)
-        buffer.put(PageHeaderOffset.PAGE_TYPE.offset, pageType.value.toByte())
+        buffer.putLong(PageHeaderOffset.PAGE_ID.offset, pageId)
+        buffer.put(PageHeaderOffset.PAGE_TYPE.offset, pageType.value)
         buffer.put(PageHeaderOffset.RESERVED_ONE.offset, 0)
         buffer.putShort(PageHeaderOffset.RECORD_COUNT.offset, 0)
         buffer.putShort(PageHeaderOffset.FREE_SPACE_START.offset, HEADER_SIZE.toShort())
@@ -102,11 +103,8 @@ class Page(
         buffer.putLong(PageHeaderOffset.RIGHT_SIBLING_PAGE_ID.offset, 0)
         buffer.putLong(PageHeaderOffset.LSN.offset, 0)
     }
-    var type: PageType
-        get() = PageType.fromValue(data[0].toShort()) ?: throw IllegalStateException("Page type should be set")
-        set(type) {
-            data[0] = type.value.toByte()
-        }
+    val type: PageType
+        get() = PageType.fromValue(data[PageHeaderOffset.PAGE_TYPE.offset]) ?: throw IllegalStateException("Page type should be set")
 
     private val freeSpaceEnd: Int
         get() = buffer.getShort(PageHeaderOffset.FREE_SPACE_END.offset).toInt()
@@ -346,7 +344,7 @@ class Page(
     }
 
     companion object{
-        internal const val HEADER_SIZE = 48
+        internal const val HEADER_SIZE = 56
         internal const val SLOT_SIZE: Short = 4
     }
 }
