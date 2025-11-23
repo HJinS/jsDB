@@ -32,5 +32,20 @@
 
 
 class BufferPoolManager(){
+    fun fetchPage(){
+
+    }
+
+    fun newPage(){
+
+    }
+
+    fun unpinPage(){
+
+    }
+
+    fun flushPage(){
+
+    }
 
 }

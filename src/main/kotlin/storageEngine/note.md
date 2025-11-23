@@ -100,6 +100,8 @@ TODO
 - promotion to young
   - old 리스트에 있던 페이지가 **다시 접근 되면** old-list 에서 빼내어 young-list 의 head 로 이동
   - young-list 에서 접근된 페이지는 young-list 의 head 로 이동
+  - 테이블 스캔시 - Midpoint 에 삽입 된 후 innodb_old_blocks_time(ms) 시간 안에 다시 접근 되어야 new-list 로 승격 시킨다.
+  - 일반 조회시 - 그런 조건 없음
 - flush
   - flush list 라는 별도의 리스트를 두어 dirty-page 를 따로 관리
   - background-thread 가 주기적으로 flush list 를 확인하여, 디스크에 I/O 여우가 있을 때 마다 변경된 내용을 디스크에 기록
