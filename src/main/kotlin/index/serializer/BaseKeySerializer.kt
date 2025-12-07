@@ -1,6 +1,7 @@
 package index.serializer
 
 import index.btree.logger
+import index.exception.SerializerException
 import index.util.*
 import java.lang.IndexOutOfBoundsException
 import java.nio.ByteBuffer
@@ -84,7 +85,11 @@ abstract class BaseKeySerializer<K>(protected val schema: KeySchema): KeySeriali
 
     protected fun unpackKeyItem(bytes: ByteArray, offset: Int, column: Column): Pair<Any?, Int> {
         var position = offset
-        val nullFlag = try { bytes[position++] } catch( exception: IndexOutOfBoundsException) { throw exception}
+        val nullFlag = try {
+            bytes[position++]
+        } catch( exception: IndexOutOfBoundsException) {
+            throw SerializerException(message="Invalid bytes.", cause=exception)
+        }
         if (nullFlag.toInt() == 0x00) return null to 1
 
         val columnType = column.type

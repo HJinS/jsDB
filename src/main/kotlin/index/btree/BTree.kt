@@ -1,6 +1,7 @@
 package index.btree
 
 import index.comparator.KeyComparator
+import index.exception.BTreeException
 import index.serializer.KeySerializer
 import index.serializer.ValueSerializer
 import index.util.MAX_KEYS
@@ -173,7 +174,7 @@ class BTree<K, V> (
      * */
     private fun split(){
         while(traceNode.isNotEmpty()){
-            val (currentNode, currentNodeIdx) = try {traceNode.pop()} catch (_: EmptyStackException) { throw IllegalStateException("Unexpected node trace data invalid")}
+            val (currentNode, currentNodeIdx) = try {traceNode.pop()} catch (e: EmptyStackException) { throw BTreeException("Unexpected node trace data invalid", e)}
             if(currentNode.isOverflow){
                 val promotionKey = currentNode.promotionKey()
                 val newNode = when(currentNode){
@@ -269,7 +270,7 @@ class BTree<K, V> (
      * */
     fun traverse(): List<Pair<K, V>>{
         val result = mutableListOf<Pair<K, V>>()
-        var currentNode: Node? = findLeftMostLeaf() ?: throw java.lang.IllegalStateException("Empty tree")
+        var currentNode: Node? = findLeftMostLeaf() ?: throw BTreeException("Empty tree", null)
         while(currentNode != null){
             currentNode = currentNode as LeafNode
             val keys = currentNode.keyView

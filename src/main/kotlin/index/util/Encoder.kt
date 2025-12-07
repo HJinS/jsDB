@@ -1,5 +1,6 @@
 package index.util
 
+import index.exception.DecodeException
 import java.nio.ByteBuffer
 import kotlin.experimental.xor
 
@@ -57,7 +58,7 @@ fun decodeVarInt(bytes: ByteArray, offset: Int = 0): Pair<Int, Int> {
     while (true) {
         // 배열 범위를 벗어나는지 확인
         if (pos >= bytes.size) {
-            throw IllegalArgumentException("Malformed VarInt")
+            throw DecodeException("Position should be less than total byte size.", null)
         }
 
         val byte = bytes[pos].toInt() and 0xFF
@@ -74,7 +75,7 @@ fun decodeVarInt(bytes: ByteArray, offset: Int = 0): Pair<Int, Int> {
 
         // 32비트 Int를 넘어서는 과도한 데이터 방지
         if (shift >= 32) {
-            throw IllegalArgumentException("VarInt is too long")
+            throw DecodeException("VarInt is too long", null)
         }
     }
     return result to (pos - offset)
