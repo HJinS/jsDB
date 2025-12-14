@@ -55,7 +55,7 @@ class BTree<K, V> (
     fun insert(key: K, value: V) {
         val serializedValue = valueSerializer.serialize(value)
         val serializedKey = keySerializer.serialize(key)
-        root?.let {
+        if (root != null) {
             logger.info { "-------------------------------------------" }
             logger.info { "search key for insert - key: $key" }
             val (leafNode, idx, result) = searchLeafNode(serializedKey)
@@ -70,7 +70,7 @@ class BTree<K, V> (
             }
             traceNode.clear()
             // check overflow and do split
-        } ?: run {
+        } else {
             root = LeafNode(mutableListOf(serializedKey), maxKeys, mutableListOf(serializedValue))
         }
         logger.info { "-------------------------------------------" }
