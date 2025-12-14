@@ -2,7 +2,7 @@ package storageEngine.frameManagement
 
 interface ReplacementPolicy {
     fun evict(): Int?
-    fun access(key: Int)
-    fun pin(key: Int)
-    fun unpin(key: Int)
+    fun access(frameId: Int)
+    fun pin(frameId: Int)
+    fun unpin(frameId: Int)
 }
