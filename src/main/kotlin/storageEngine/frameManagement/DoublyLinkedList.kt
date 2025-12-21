@@ -20,20 +20,24 @@ internal class DoublyLinkedList {
         tail.prev = head
     }
 
+    fun getLast(): Node? = tail.prev
+
     fun remove(node: Node){
         val prevNode = node.prev!!
         val nextNode = node.next!!
         prevNode.next = nextNode
         nextNode.prev = prevNode
-        count -= 1
+        count--
     }
 
 
-    fun removeLast(): Node{
+    fun removeLast(): Node?{
+        if(count == 0) return null
         val lastNode = tail.prev!!
-        val newLastNode = lastNode.next!!
+        val newLastNode = lastNode.prev!!
         newLastNode.next = tail
         tail.prev = newLastNode
+        count--
         return lastNode
     }
 
@@ -46,7 +50,7 @@ internal class DoublyLinkedList {
         targetNode.prev = node
         node.next = targetNode
         node.prev = prevNode
-        count += 1
+        count++
     }
 
     fun addFirst(node: Node){
@@ -55,7 +59,7 @@ internal class DoublyLinkedList {
         insertPoint.prev = node
         node.next = insertPoint
         node.prev = head
-        count += 1
+        count++
     }
 
     fun addLast(node: Node){
@@ -64,6 +68,6 @@ internal class DoublyLinkedList {
         insertPoint.next = node
         node.next = tail
         node.prev = insertPoint
-        count += 1
+        count++
     }
 }

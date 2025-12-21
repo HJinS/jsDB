@@ -1,6 +1,6 @@
 package storageEngine.frameManagement
 
-internal data class Node(
+data class Node(
     val frameId: Int,
     var prev: Node? = null,
     var next: Node? = null,
