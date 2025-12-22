@@ -1,5 +1,6 @@
 package storage
 
+import config.PageConfig
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.comparables.shouldBeLessThan
@@ -9,7 +10,6 @@ import storageEngine.util.PageHeaderOffset
 import java.lang.reflect.Field
 import java.nio.ByteBuffer
 import kotlin.random.Random
-import kotlin.reflect.full.memberProperties
 
 
 // get, update, insert, delete 테스트
@@ -88,6 +88,6 @@ class PageTest:BehaviorSpec({
     }
 }){
     companion object{
-        val page = Page(pageId=0)
+        val page = Page(pageConfig = PageConfig(), pageId=0)
     }
 }

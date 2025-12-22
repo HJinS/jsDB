@@ -7,10 +7,12 @@ package storageEngine.frameManagement
  * 새로운 노드가 어디에 있어야 할 지 및 비율 조정 등 수행
  * */
 class GenerationalList(
-    val youngRatio: Double
+    val youngRatio: Double,
+    val capacity: Int
 ) {
     private val linkedList = DoublyLinkedList()
     private var midPoint: Node? = null
+    private val maxYoungCount by lazy { (capacity * youngRatio).toInt() }
 
     var youngCount = 0
         private set
@@ -25,6 +27,7 @@ class GenerationalList(
         youngCount ++
         node.isOld = false
         if(midPoint == node) shrinkOldList()
+        adjustRatio()
     }
 
     fun touchYoung(node: Node){
@@ -68,7 +71,15 @@ class GenerationalList(
     }
 
     fun adjustRatio(){
-
+        if (youngCount > maxYoungCount){
+            val nextMidPoint = midPoint?.next
+            if(nextMidPoint != null){
+                nextMidPoint.isOld = true
+                midPoint = nextMidPoint
+                youngCount --
+                oldCount ++
+            }
+        }
     }
 
     fun getOldest() = linkedList.getLast()

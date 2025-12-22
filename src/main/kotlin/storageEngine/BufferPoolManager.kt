@@ -5,7 +5,7 @@
  * buffer pool
  * - frameID 를 가지고 실제 frame 을 보관
  * node map
- * - lru 를 관기하기 위함
+ * - lru 를 관리하기 위함
  * - frame 접근을 바로 하기 위함
  * doubly linked list
  * - lru linked list

@@ -9,7 +9,7 @@ class MidpointLRUPolicy(
     midpointLruConfig: MidpointLruConfig
 ): ReplacementPolicy {
     private val map = HashMap<Int, Node>()
-    private val generationalList:  GenerationalList = GenerationalList(midpointLruConfig.youngRatio)
+    private val generationalList:  GenerationalList = GenerationalList(midpointLruConfig.youngRatio, midpointLruConfig.capacity)
     private val promotionRule: PromotionRule = PromotionRule(
         midpointLruConfig.capacity,
         midpointLruConfig.lruOldBlocksTimeMs

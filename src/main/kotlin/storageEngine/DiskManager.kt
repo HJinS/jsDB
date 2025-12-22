@@ -1,15 +1,16 @@
 package storageEngine
 
+import config.StorageConfig
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 
-class DiskManager(dbPath: String, private val pageSize: Int) {
+class DiskManager(storageConfig: StorageConfig, private val pageSize: Int) {
     init {
         require(pageSize > 0){"page size must be greater than zero"}
     }
 
-    private val fileChannel: FileChannel = RandomAccessFile(dbPath, "rw").channel
+    private val fileChannel: FileChannel = RandomAccessFile(storageConfig.dbPath, "rw").channel
 
     /**
      * Read page from disk with given [pageId] and load the data.

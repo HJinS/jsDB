@@ -1,5 +1,6 @@
 package storageEngine
 
+import config.PageConfig
 import index.util.decodeVarInt
 import index.util.encodeVarInt
 import mu.KotlinLogging
@@ -77,11 +78,11 @@ import kotlin.text.toHexString
  * ```
  * */
 class Page(
-    val pageSize: Int = 4096,
+    val pageConfig: PageConfig,
     pageId: Long = -1,
     pageType: PageType = PageType.EMPTY,
 ){
-    private val data: ByteArray = ByteArray(pageSize)
+    private val data: ByteArray = ByteArray(pageConfig.pageSize)
     private val logger = KotlinLogging.logger {}
 
     // Do not use a relative path function. The data will be saved incorrectly.
@@ -95,7 +96,7 @@ class Page(
         buffer.put(PageHeaderOffset.RESERVED_ONE.offset, 0)
         buffer.putShort(PageHeaderOffset.RECORD_COUNT.offset, 0)
         buffer.putShort(PageHeaderOffset.FREE_SPACE_START.offset, HEADER_SIZE.toShort())
-        buffer.putShort(PageHeaderOffset.FREE_SPACE_END.offset, (pageSize-1).toShort())
+        buffer.putShort(PageHeaderOffset.FREE_SPACE_END.offset, (pageConfig.pageSize-1).toShort())
         buffer.putShort(PageHeaderOffset.FREE_SLOT_HEAD.offset, (-1).toShort())
         buffer.putShort(PageHeaderOffset.RESERVED_TWO.offset, 0)
         buffer.putLong(PageHeaderOffset.PARENT_PAGE_ID.offset, 0)
@@ -132,7 +133,7 @@ class Page(
     }
 
     private fun getSlotId(slotArrayOffset: Int): Int{
-        val slotArrayStartBytes = 40
+        val slotArrayStartBytes = HEADER_SIZE
         return (slotArrayOffset - slotArrayStartBytes) / SLOT_SIZE
     }
 
@@ -330,7 +331,7 @@ class Page(
         // offset 기준 내림차순 -> 끝에서 부터
         slotArrayTemp.sortByDescending { it.second }
 
-        var writePointer = pageSize - 1
+        var writePointer = pageConfig.pageSize - 1
         slotArrayStartBytes = HEADER_SIZE
         // iterate 하면서 write pointer는 끝에서 사이즈를 통해 점차 내려감
         // read pointer는 slot array 데이터의 offset을 사용

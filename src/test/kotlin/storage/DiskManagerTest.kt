@@ -1,5 +1,6 @@
 package storage
 
+import config.StorageConfig
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -18,7 +19,7 @@ class DiskManagerTest: BehaviorSpec({
     given("a non-initialized DiskManager class"){
         `when`("initialize DiskManager with PAGE_SIZE=0"){
             then("should throw an IllegalArgumentException"){
-                val error = shouldThrow<IllegalArgumentException> { DiskManager(DBPATH, 0) }
+                val error = shouldThrow<IllegalArgumentException> { DiskManager(StorageConfig(dbPath=DBPATH), 0) }
                 error.message shouldBe "page size must be greater than zero"
             }
             File(DBPATH).delete()
@@ -80,6 +81,6 @@ class DiskManagerTest: BehaviorSpec({
     companion object {
         private const val DBPATH = "./test.db"
         private const val PAGE_SIZE = 2048
-        private val diskManager = DiskManager(DBPATH, PAGE_SIZE)
+        private val diskManager = DiskManager(StorageConfig(dbPath=DBPATH), PAGE_SIZE)
     }
 }
