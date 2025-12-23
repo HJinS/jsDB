@@ -1,9 +1,9 @@
 package storageEngine.frameManagement
 
-data class Node(
+data class Frame(
     val frameId: Int,
-    var prev: Node? = null,
-    var next: Node? = null,
+    var prev: Frame? = null,
+    var next: Frame? = null,
     var isPinned: Boolean = false,
     var isOld: Boolean = true,
     var lastAccessTime: Long = 0

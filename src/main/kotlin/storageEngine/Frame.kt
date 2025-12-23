@@ -1,4 +1,0 @@
-package storageEngine
-
-class Frame {
-}

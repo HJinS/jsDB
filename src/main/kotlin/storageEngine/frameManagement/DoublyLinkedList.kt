@@ -9,8 +9,8 @@ package storageEngine.frameManagement
  * ```
  * */
 internal class DoublyLinkedList {
-    private val head = Node(-1)
-    private val tail = Node(-1)
+    private val head = Frame(-1)
+    private val tail = Frame(-1)
     private var count: Int = 0
     val size: Int
         get() = count
@@ -20,54 +20,54 @@ internal class DoublyLinkedList {
         tail.prev = head
     }
 
-    fun getLast(): Node? = tail.prev
+    fun getLast(): Frame? = tail.prev
 
-    fun remove(node: Node){
-        val prevNode = node.prev!!
-        val nextNode = node.next!!
-        prevNode.next = nextNode
-        nextNode.prev = prevNode
+    fun remove(frame: Frame){
+        val prevFrame = frame.prev!!
+        val nextFrame = frame.next!!
+        prevFrame.next = nextFrame
+        nextFrame.prev = prevFrame
         count--
     }
 
 
-    fun removeLast(): Node?{
+    fun removeLast(): Frame?{
         if(count == 0) return null
-        val lastNode = tail.prev!!
-        val newLastNode = lastNode.prev!!
-        newLastNode.next = tail
-        tail.prev = newLastNode
+        val lastFrame = tail.prev!!
+        val newLastFrame = lastFrame.prev!!
+        newLastFrame.next = tail
+        tail.prev = newLastFrame
         count--
-        return lastNode
+        return lastFrame
     }
 
     /**
-     * add [node] to the left of [targetNode]
+     * add [frame] to the left of [targetFrame]
      * */
-    fun add(node: Node, targetNode: Node){
-        val prevNode = targetNode.prev!!
-        prevNode.next = node
-        targetNode.prev = node
-        node.next = targetNode
-        node.prev = prevNode
+    fun add(frame: Frame, targetFrame: Frame){
+        val prevFrame = targetFrame.prev!!
+        prevFrame.next = frame
+        targetFrame.prev = frame
+        frame.next = targetFrame
+        frame.prev = prevFrame
         count++
     }
 
-    fun addFirst(node: Node){
+    fun addFirst(frame: Frame){
         val insertPoint = head.next!!
-        head.next = node
-        insertPoint.prev = node
-        node.next = insertPoint
-        node.prev = head
+        head.next = frame
+        insertPoint.prev = frame
+        frame.next = insertPoint
+        frame.prev = head
         count++
     }
 
-    fun addLast(node: Node){
+    fun addLast(frame: Frame){
         val insertPoint = tail.prev!!
-        tail.prev = node
-        insertPoint.next = node
-        node.next = tail
-        node.prev = insertPoint
+        tail.prev = frame
+        insertPoint.next = frame
+        frame.next = tail
+        frame.prev = insertPoint
         count++
     }
 }

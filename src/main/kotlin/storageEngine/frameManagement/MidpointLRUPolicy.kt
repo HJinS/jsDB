@@ -8,7 +8,7 @@ import java.lang.System.currentTimeMillis
 class MidpointLRUPolicy(
     midpointLruConfig: MidpointLruConfig
 ): ReplacementPolicy {
-    private val map = HashMap<Int, Node>()
+    private val map = HashMap<Int, Frame>()
     private val generationalList:  GenerationalList = GenerationalList(midpointLruConfig.youngRatio, midpointLruConfig.capacity)
     private val promotionRule: PromotionRule = PromotionRule(
         midpointLruConfig.capacity,
@@ -16,8 +16,8 @@ class MidpointLRUPolicy(
     )
 
     override fun evict(): Int? {
-        val oldNode = generationalList.removeOldest() ?: return null
-        val frameId = oldNode.frameId
+        val oldFrame = generationalList.removeOldest() ?: return null
+        val frameId = oldFrame.frameId
         map.remove(frameId)
         return frameId
     }
@@ -38,19 +38,19 @@ class MidpointLRUPolicy(
      * */
     override fun access(frameId: Int) {
         val now = currentTimeMillis()
-        val node = map[frameId]
-        if(node == null){
+        val frame = map[frameId]
+        if(frame == null){
             promotionRule.checkSize(map.size)
-            val newNode = Node(frameId, lastAccessTime = now)
-            generationalList.addOld(newNode)
-            map[frameId] = newNode
+            val newFrame = Frame(frameId, lastAccessTime = now)
+            generationalList.addOld(newFrame)
+            map[frameId] = newFrame
         }else{
-            if(!node.isPinned){
-                if(node.isOld){
-                    if(promotionRule.isPromotable(node)) generationalList.promoteYoung(node)
-                } else generationalList.touchYoung(node)
+            if(!frame.isPinned){
+                if(frame.isOld){
+                    if(promotionRule.isPromotable(frame)) generationalList.promoteYoung(frame)
+                } else generationalList.touchYoung(frame)
             }
-            node.lastAccessTime = now
+            frame.lastAccessTime = now
         }
     }
 
