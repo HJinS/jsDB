@@ -48,10 +48,8 @@ abstract class BaseKeySerializer<K>(protected val schema: KeySchema): KeySeriali
                 (byteArrayOf(0x01)) + packedKey
             }
             ColumnType.STRING -> {
-                val rawString = key as String
-                val bytes = column.collation?.getCollationKey(rawString)?.toByteArray() ?: rawString.toByteArray(
-                    StandardCharsets.UTF_8)
-                (byteArrayOf(0x01)) + encodeVarInt(bytes.size) + bytes
+                val packedKey = (key as String).encodeSortable(column.collation)
+                (byteArrayOf(0x01)) + packedKey
             }
 
             ColumnType.LOCAL_DATE -> {

@@ -2,6 +2,8 @@ package index.util
 
 import index.exception.DecodeException
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
+import java.text.Collator
 import kotlin.experimental.xor
 
 
@@ -126,6 +128,52 @@ fun Double.encodeSortable(): ByteArray{
     val sortableBits = if(this > 0.0) bits xor Long.MIN_VALUE else bits.inv()
     return ByteBuffer.allocate(8).putLong(sortableBits).array()
 }
+
+
+/**
+ * string encode 할 경우 바로 사전식 비교를 할 수 있도록 길이 정보를 encoding 하는 것이 아닌 terminator(0x00) 을 끝에 붙이는 방식 사용
+ * 문자열 중간에 0x00 이 있는 경우에는 0x00 을 0x00 0xFF 로 Escape 처리 하여 사용
+ * */
+fun String.encodeSortable(collator: Collator?): ByteArray{
+    val bytes = collator?.getCollationKey(this)?.toByteArray() ?: this.toByteArray(StandardCharsets.UTF_8)
+    val length = bytes.size
+    var zeroByteCount = 0
+    for(idx in 0 until length){
+        if(bytes[idx] == 0.toByte()) zeroByteCount++
+    }
+
+    val resultBytes = ByteArray(length + zeroByteCount + 1)
+    var sourceBytesIdx = 0
+    var targetBytesIdx = 0
+    var lengthToCopy = length
+
+    while(sourceBytesIdx < length){
+        var nextZeroIndex = -1
+
+        if(zeroByteCount > 0 ){
+            for(idx in sourceBytesIdx until length){
+                if(bytes[idx] == 0.toByte()){
+                    nextZeroIndex = idx
+                    break
+                }
+            }
+            lengthToCopy = if(nextZeroIndex == -1) length - sourceBytesIdx else nextZeroIndex - sourceBytesIdx
+        }
+
+        System.arraycopy(bytes, sourceBytesIdx, resultBytes, targetBytesIdx, lengthToCopy)
+        targetBytesIdx += lengthToCopy
+        if(nextZeroIndex == -1){
+            break
+        } else {
+            resultBytes[targetBytesIdx++] = 0x00
+            resultBytes[targetBytesIdx++] = 0xFF.toByte()
+            sourceBytesIdx = nextZeroIndex + 1
+        }
+    }
+    resultBytes[targetBytesIdx] = 0
+    return resultBytes
+}
+
 
 fun ByteArray.decodeSortableInt(): Int{
     val sortableBits = ByteBuffer.wrap(this).int
