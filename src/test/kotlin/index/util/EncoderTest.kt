@@ -51,4 +51,16 @@ class EncoderTest: BehaviorSpec({
             }
         }
     }
+
+    var originalString = "fapwoq\\!@#ㄴㅇㄹ)ihesdfj"
+    given("a string $originalString encoded with encodeSortable"){
+        val encodedString = originalString.encodeSortable(null)
+        `when`("decode the string"){
+            val decodedString = encodedString.decodeSortableString(null)
+            then("the decoded string $decodedString should be equal with original one"){
+                decodedString shouldBe originalString
+            }
+        }
+
+    }
 })

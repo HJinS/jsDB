@@ -1,10 +1,12 @@
 package index.util
 
+import index.btree.logger
 import index.exception.DecodeException
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.text.Collator
 import kotlin.experimental.xor
+import kotlin.text.toByteArray
 
 
 /**
@@ -204,4 +206,31 @@ fun ByteArray.decodeSortableDouble(): Double{
     val sortableBits = ByteBuffer.wrap(this).long
     val originalBits = if(sortableBits < 0) sortableBits xor Long.MIN_VALUE else sortableBits.inv()
     return Double.fromBits(originalBits)
+}
+
+fun ByteArray.decodeSortableString(collator: Collator?): String{
+    var fromIdx = 0
+    var toIdx = 0
+    val size = this.size
+    val resultBytes = ByteArray(this.size)
+    var validCharCount = 0
+    while (fromIdx  < size){
+        val byte = this[fromIdx]
+        if(fromIdx + 1 < size && byte == 0x00.toByte() && this[fromIdx+1] == 0xFF.toByte()){
+            fromIdx++
+        } else if(byte == 0x00.toByte()) {
+            break
+        }
+        resultBytes[toIdx] = byte
+        validCharCount++
+        toIdx++
+        fromIdx++
+    }
+    val results = ByteArray(validCharCount)
+    System.arraycopy(resultBytes, 0, results, 0, validCharCount)
+    return if (collator != null){
+        "[CollationKey(${results.joinToString(" ")})]"
+    } else{
+        results.toString(StandardCharsets.UTF_8)
+    }
 }
