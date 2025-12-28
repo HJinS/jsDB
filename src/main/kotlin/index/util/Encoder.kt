@@ -229,7 +229,7 @@ fun ByteArray.decodeSortableString(collator: Collator?): String{
     val results = ByteArray(validCharCount)
     System.arraycopy(resultBytes, 0, results, 0, validCharCount)
     return if (collator != null){
-        "[CollationKey(${results.joinToString(" ")})]"
+        "[CollationKey(${results.joinToString(""){ "%02x".format(it) }})]"
     } else{
         results.toString(StandardCharsets.UTF_8)
     }
