@@ -176,6 +176,45 @@ fun String.encodeSortable(collator: Collator?): ByteArray{
     return resultBytes
 }
 
+fun ByteArray.encodeSortable(): ByteArray{
+    val length = this.size
+    var zeroByteCount = 0
+    for(idx in 0 until length){
+        if(this[idx] == 0.toByte()) zeroByteCount++
+    }
+
+    val resultBytes = ByteArray(length + zeroByteCount + 1)
+    var sourceBytesIdx = 0
+    var targetBytesIdx = 0
+    var lengthToCopy = length
+
+    while(sourceBytesIdx < length){
+        var nextZeroIndex = -1
+
+        if(zeroByteCount > 0 ){
+            for(idx in sourceBytesIdx until length){
+                if(this[idx] == 0.toByte()){
+                    nextZeroIndex = idx
+                    break
+                }
+            }
+            lengthToCopy = if(nextZeroIndex == -1) length - sourceBytesIdx else nextZeroIndex - sourceBytesIdx
+        }
+
+        System.arraycopy(this, sourceBytesIdx, resultBytes, targetBytesIdx, lengthToCopy)
+        targetBytesIdx += lengthToCopy
+        if(nextZeroIndex == -1){
+            break
+        } else {
+            resultBytes[targetBytesIdx++] = 0x00
+            resultBytes[targetBytesIdx++] = 0xFF.toByte()
+            sourceBytesIdx = nextZeroIndex + 1
+        }
+    }
+    resultBytes[targetBytesIdx] = 0
+    return resultBytes
+}
+
 
 fun ByteArray.decodeSortableInt(): Int{
     val sortableBits = ByteBuffer.wrap(this).int
@@ -233,4 +272,27 @@ fun ByteArray.decodeSortableString(collator: Collator?): String{
     } else{
         results.toString(StandardCharsets.UTF_8)
     }
+}
+
+fun ByteArray.decodeSortableByteArray(): ByteArray{
+    var fromIdx = 0
+    var toIdx = 0
+    val size = this.size
+    val resultBytes = ByteArray(this.size)
+    var validCharCount = 0
+    while (fromIdx  < size){
+        val byte = this[fromIdx]
+        if(fromIdx + 1 < size && byte == 0x00.toByte() && this[fromIdx+1] == 0xFF.toByte()){
+            fromIdx++
+        } else if(byte == 0x00.toByte()) {
+            break
+        }
+        resultBytes[toIdx] = byte
+        validCharCount++
+        toIdx++
+        fromIdx++
+    }
+    val results = ByteArray(validCharCount)
+    System.arraycopy(resultBytes, 0, results, 0, validCharCount)
+    return results
 }
