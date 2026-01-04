@@ -15,7 +15,7 @@ class CompareTest: FunSpec({
     listOf(
         Triple(
             listOf<Number>(10, 5230L),
-            listOf(10),
+            listOf(10, null),
             KeySchema(
                 listOf(
                     Column("count", ColumnType.INT, descending = false),
@@ -55,7 +55,7 @@ class CompareTest: FunSpec({
         ),
         Triple(
             listOf<Number>(15232324, 523451323230L),
-            listOf(-15232324),
+            listOf(-15232324, null),
             KeySchema(
                 listOf(
                     Column("count", ColumnType.INT, descending = false),
@@ -85,7 +85,7 @@ class CompareTest: FunSpec({
         ),
         Triple(
             listOf<Number>(10, 5230L),
-            listOf(11),
+            listOf(11, null),
             KeySchema(
                 listOf(
                     Column("count", ColumnType.INT, descending = true),
@@ -115,7 +115,7 @@ class CompareTest: FunSpec({
         ),
         Triple(
             listOf("Alice", true),
-            listOf("Alice"),
+            listOf("Alice", null),
             KeySchema(
                 listOf(
                     Column("name", ColumnType.STRING, descending = false),
@@ -175,7 +175,7 @@ class CompareTest: FunSpec({
         ),
         Triple(
             listOf(10.toByte(), 100.toShort()),
-            listOf(10.toByte()),
+            listOf(10.toByte(), null),
             KeySchema(
                 listOf(
                     Column("byte", ColumnType.BYTE, descending = false),
@@ -225,7 +225,7 @@ class CompareTest: FunSpec({
         ),
         Triple(
             listOf(10.0F, 100.0),
-            listOf(10.0F),
+            listOf(10.0F, null),
             KeySchema(
                 listOf(
                     Column("float", ColumnType.FLOAT, descending = false),
@@ -399,7 +399,7 @@ class CompareTest: FunSpec({
     listOf(
         Triple(
             listOf<Number>(10, 5230L),
-            listOf(20),
+            listOf(20, null),
             KeySchema(
                 listOf(
                     Column("count", ColumnType.INT, descending = false),
@@ -419,7 +419,7 @@ class CompareTest: FunSpec({
         ),
         Triple(
             listOf<Number>(15232324, 523451323230L),
-            listOf(1523232423),
+            listOf(1523232423, null),
             KeySchema(
                 listOf(
                     Column("count", ColumnType.INT, descending = false),
@@ -509,7 +509,7 @@ class CompareTest: FunSpec({
         ),
         Triple(
             listOf("Alice", true),
-            listOf("Alice"),
+            listOf("Alice", null),
             KeySchema(
                 listOf(
                     Column("name", ColumnType.STRING, descending = true),
@@ -539,7 +539,7 @@ class CompareTest: FunSpec({
         ),
         Triple(
             listOf(10.toByte(), 100.toShort()),
-            listOf(10.toByte()),
+            listOf(10.toByte(), null),
             KeySchema(
                 listOf(
                     Column("byte", ColumnType.BYTE, descending = true),
@@ -589,7 +589,7 @@ class CompareTest: FunSpec({
         ),
         Triple(
             listOf(10.0F, 100.0),
-            listOf(10.0F),
+            listOf(10.0F, null),
             KeySchema(
                 listOf(
                     Column("float", ColumnType.FLOAT, descending = true),
@@ -639,7 +639,7 @@ class CompareTest: FunSpec({
         ),
         Triple(
             listOf(LocalDate.of(2024, 1, 1), LocalDateTime.of(2024,1,1,23,0,0)),
-            listOf(LocalDate.of(2024, 1, 1)),
+            listOf(LocalDate.of(2024, 1, 1), null),
             KeySchema(
                 listOf(
                     Column("date", ColumnType.LOCAL_DATE, descending = true),
@@ -689,7 +689,7 @@ class CompareTest: FunSpec({
         ),
         Triple(
             listOf(Instant.ofEpochSecond(100), ByteBuffer.allocate(2).putShort(10).array()),
-            listOf(Instant.ofEpochSecond(100)),
+            listOf(Instant.ofEpochSecond(100), null),
             KeySchema(
                 listOf(
                     Column("instant", ColumnType.INSTANT, descending = true),

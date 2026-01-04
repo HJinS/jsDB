@@ -5,7 +5,9 @@ import index.exception.DecodeException
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.text.Collator
+import kotlin.experimental.inv
 import kotlin.experimental.xor
+import kotlin.text.set
 import kotlin.text.toByteArray
 
 
@@ -89,8 +91,12 @@ fun decodeVarInt(bytes: ByteArray, offset: Int = 0): Pair<Int, Int> {
  * 인덱스는 기본적으로 오름차순으로 정렬됨. 이를 DESC 로 정렬하기 위해 저장 할 떄의 Byte 순서를 반전(invert) 해서 저장
  * 0xFF = 0000 0000 0000 0000 0000 0000 1111 1111
  * */
-fun ByteArray.invert(descending: Boolean): ByteArray{
-    return if (descending) this.map { (it.toInt() xor 0xFF).toByte() }.toByteArray() else this
+fun ByteArray.invert(): ByteArray{
+    val resultBytes = ByteArray(this.size)
+    for(idx in this.indices){
+        resultBytes[idx] = resultBytes[idx].inv()
+    }
+    return resultBytes
 }
 
 /**
@@ -133,17 +139,17 @@ fun Double.encodeSortable(): ByteArray{
 
 
 /**
- * string encode 할 경우 바로 사전식 비교를 할 수 있도록 길이 정보를 encoding 하는 것이 아닌 terminator(0x00) 을 끝에 붙이는 방식 사용
- * 문자열 중간에 0x00 이 있는 경우에는 0x00 을 0x00 0xFF 로 Escape 처리 하여 사용
+ * 0x00을 0x00 0xFF 로 escape 처리 + Termination mark 추가
+ *
  * */
-fun String.encodeSortable(collator: Collator?): ByteArray{
-    val bytes = collator?.getCollationKey(this)?.toByteArray() ?: this.toByteArray(StandardCharsets.UTF_8)
+fun escapeZeroBytes(bytes: ByteArray): ByteArray{
     val length = bytes.size
     var zeroByteCount = 0
     for(idx in 0 until length){
         if(bytes[idx] == 0.toByte()) zeroByteCount++
     }
 
+    // get extra byte for termination mark used later
     val resultBytes = ByteArray(length + zeroByteCount + 1)
     var sourceBytesIdx = 0
     var targetBytesIdx = 0
@@ -176,44 +182,16 @@ fun String.encodeSortable(collator: Collator?): ByteArray{
     return resultBytes
 }
 
-fun ByteArray.encodeSortable(): ByteArray{
-    val length = this.size
-    var zeroByteCount = 0
-    for(idx in 0 until length){
-        if(this[idx] == 0.toByte()) zeroByteCount++
-    }
-
-    val resultBytes = ByteArray(length + zeroByteCount + 1)
-    var sourceBytesIdx = 0
-    var targetBytesIdx = 0
-    var lengthToCopy = length
-
-    while(sourceBytesIdx < length){
-        var nextZeroIndex = -1
-
-        if(zeroByteCount > 0 ){
-            for(idx in sourceBytesIdx until length){
-                if(this[idx] == 0.toByte()){
-                    nextZeroIndex = idx
-                    break
-                }
-            }
-            lengthToCopy = if(nextZeroIndex == -1) length - sourceBytesIdx else nextZeroIndex - sourceBytesIdx
-        }
-
-        System.arraycopy(this, sourceBytesIdx, resultBytes, targetBytesIdx, lengthToCopy)
-        targetBytesIdx += lengthToCopy
-        if(nextZeroIndex == -1){
-            break
-        } else {
-            resultBytes[targetBytesIdx++] = 0x00
-            resultBytes[targetBytesIdx++] = 0xFF.toByte()
-            sourceBytesIdx = nextZeroIndex + 1
-        }
-    }
-    resultBytes[targetBytesIdx] = 0
-    return resultBytes
+/**
+ * string encode 할 경우 바로 사전식 비교를 할 수 있도록 길이 정보를 encoding 하는 것이 아닌 terminator(0x00) 을 끝에 붙이는 방식 사용
+ * 문자열 중간에 0x00 이 있는 경우에는 0x00 을 0x00 0xFF 로 Escape 처리 하여 사용
+ * */
+fun String.encodeSortable(collator: Collator?): ByteArray{
+    val bytes = collator?.getCollationKey(this)?.toByteArray() ?: this.toByteArray(StandardCharsets.UTF_8)
+    return escapeZeroBytes(bytes)
 }
+
+fun ByteArray.encodeSortable() = escapeZeroBytes(this)
 
 
 fun ByteArray.decodeSortableInt(): Int{
@@ -247,52 +225,35 @@ fun ByteArray.decodeSortableDouble(): Double{
     return Double.fromBits(originalBits)
 }
 
-fun ByteArray.decodeSortableString(collator: Collator?): String{
+fun unescapeZeroBytes(bytes: ByteArray): ByteArray{
     var fromIdx = 0
     var toIdx = 0
-    val size = this.size
-    val resultBytes = ByteArray(this.size)
+    val size = bytes.size
     var validCharCount = 0
     while (fromIdx  < size){
-        val byte = this[fromIdx]
-        if(fromIdx + 1 < size && byte == 0x00.toByte() && this[fromIdx+1] == 0xFF.toByte()){
+        val byte = bytes[fromIdx]
+        if(fromIdx + 1 < size && byte == 0x00.toByte() && bytes[fromIdx+1] == 0xFF.toByte()){
             fromIdx++
         } else if(byte == 0x00.toByte()) {
             break
         }
-        resultBytes[toIdx] = byte
+        bytes[toIdx] = byte
         validCharCount++
         toIdx++
         fromIdx++
     }
     val results = ByteArray(validCharCount)
-    System.arraycopy(resultBytes, 0, results, 0, validCharCount)
+    System.arraycopy(bytes, 0, results, 0, validCharCount)
+    return results
+}
+
+fun ByteArray.decodeSortableString(collator: Collator?): String{
+    val unescaped = unescapeZeroBytes(this)
     return if (collator != null){
-        "[CollationKey(${results.joinToString(""){ "%02x".format(it) }})]"
+        "[CollationKey(${unescaped.joinToString(""){ "%02x".format(it) }})]"
     } else{
-        results.toString(StandardCharsets.UTF_8)
+        unescaped.toString(StandardCharsets.UTF_8)
     }
 }
 
-fun ByteArray.decodeSortableByteArray(): ByteArray{
-    var fromIdx = 0
-    var toIdx = 0
-    val size = this.size
-    val resultBytes = ByteArray(this.size)
-    var validCharCount = 0
-    while (fromIdx  < size){
-        val byte = this[fromIdx]
-        if(fromIdx + 1 < size && byte == 0x00.toByte() && this[fromIdx+1] == 0xFF.toByte()){
-            fromIdx++
-        } else if(byte == 0x00.toByte()) {
-            break
-        }
-        resultBytes[toIdx] = byte
-        validCharCount++
-        toIdx++
-        fromIdx++
-    }
-    val results = ByteArray(validCharCount)
-    System.arraycopy(resultBytes, 0, results, 0, validCharCount)
-    return results
-}
+fun ByteArray.decodeSortableByteArray() = unescapeZeroBytes(this)

@@ -181,4 +181,15 @@ class EncoderTest: BehaviorSpec({
             }
         }
     }
+
+    var originalBytes: ByteArray = ByteBuffer.allocate(2).putShort(10).array()
+    given("a long $originalBytes encoded with encodeSortable"){
+        val encodedBytes = originalBytes.encodeSortable()
+        `when`("decode the long"){
+            val decodedBytes = encodedBytes.decodeSortableByteArray()
+            then("the decoded long $decodedBytes should be equal with $originalBytes"){
+                decodedBytes shouldBe originalBytes
+            }
+        }
+    }
 })

@@ -130,7 +130,7 @@ class SerializerTest: FunSpec({
         for ((key1, key2) in key.zip(deSerialized)){
             if (key1 == "Alice"){
                 val collatedBytes = collatorInstance.getCollationKey("Alice").toByteArray()
-                key2 shouldBe "[CollationKey(${collatedBytes.joinToString(" ")})]"
+                key2 shouldBe "[CollationKey(${collatedBytes.joinToString(""){ "%02x".format(it) }})]"
             } else {
                 key1 shouldBe key2
             }
