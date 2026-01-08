@@ -18,12 +18,12 @@ abstract class BaseKeySerializer<K>(protected val schema: KeySchema): KeySeriali
         if(key == null) return byteArrayOf(0x00)
         val serialized = when (column.type){
             ColumnType.BOOLEAN -> {
-                val packedKey  = byteArrayOf(if (key as Boolean) 1 else 0)
+                val packedKey = (key as Boolean).encodeSortable()
                 (byteArrayOf(0x01)) + packedKey
             }
 
             ColumnType.BYTE -> {
-                val packedKey = byteArrayOf(key as Byte)
+                val packedKey = (key as Byte).encodeSortable()
                 (byteArrayOf(0x01)) + packedKey
             }
 
@@ -68,16 +68,19 @@ abstract class BaseKeySerializer<K>(protected val schema: KeySchema): KeySeriali
                 (byteArrayOf(0x01)) + packedKey
             }
             ColumnType.UUID -> {
-                val packedKey = ByteBuffer.allocate(16)
-                    .putLong((key as UUID).mostSignificantBits)
-                    .putLong(key.leastSignificantBits)
-                    .array()
+                val packedKey = (key as UUID).encodeSortable()
                 (byteArrayOf(0x01)) + packedKey
             }
             ColumnType.BYTES -> {
                 val packedKey = (key as ByteArray).encodeSortable()
                 (byteArrayOf(0x01)) + packedKey
             }
+        }
+        if(column.descending) {
+            logger.info { "===========================================" }
+            logger.info { key }
+            logger.info { serialized.contentToString() }
+            logger.info { serialized.invert().contentToString() }
         }
         return if(column.descending) serialized.invert() else serialized
     }
@@ -121,26 +124,32 @@ abstract class BaseKeySerializer<K>(protected val schema: KeySchema): KeySeriali
         }
 
         val result: Any? = when (columnType){
-            ColumnType.BOOLEAN -> bytesInverted[position++].toInt() != 0
-            ColumnType.BYTE -> bytesInverted[position++]
+            ColumnType.BOOLEAN -> {
+                val array = readVarType(bytesInverted)
+                array.decodeSortableBoolean()
+            }
+            ColumnType.BYTE -> {
+                val array = readVarType(bytesInverted)
+                array.decodeSortableByte()
+            }
             ColumnType.SHORT -> {
-                val array = readBytes(bytesInverted, 2)
+                val array = readVarType(bytesInverted)
                 array.decodeSortableShort()
             }
             ColumnType.INT -> {
-                val array = readBytes(bytesInverted, 4)
+                val array = readVarType(bytesInverted)
                 array.decodeSortableInt()
             }
             ColumnType.LONG -> {
-                val array = readBytes(bytesInverted, 8)
+                val array = readVarType(bytesInverted)
                 array.decodeSortableLong()
             }
             ColumnType.FLOAT -> {
-                val array = readBytes(bytesInverted, 4)
+                val array = readVarType(bytesInverted)
                 array.decodeSortableFloat()
             }
             ColumnType.DOUBLE -> {
-                val array = readBytes(bytesInverted, 8)
+                val array = readVarType(bytesInverted)
                 array.decodeSortableDouble()
             }
 
@@ -150,27 +159,26 @@ abstract class BaseKeySerializer<K>(protected val schema: KeySchema): KeySeriali
             }
 
             ColumnType.LOCAL_DATE -> {
-                val array = readBytes(bytesInverted, 8)
+                val array = readVarType(bytesInverted)
                 val epochDay = array.decodeSortableLong()
                 LocalDate.ofEpochDay(epochDay)
             }
 
             ColumnType.LOCAL_DATE_TIME -> {
-                val array = readBytes(bytesInverted, 8)
+                val array = readVarType(bytesInverted)
                 val epochSecond = array.decodeSortableLong()
                 LocalDateTime.ofEpochSecond(epochSecond, 0, ZoneOffset.UTC)
             }
 
             ColumnType.INSTANT -> {
-                val array = readBytes(bytesInverted, 8)
+                val array = readVarType(bytesInverted)
                 val epochSecond = array.decodeSortableLong()
                 Instant.ofEpochSecond(epochSecond)
             }
 
             ColumnType.UUID -> {
-                val array = readBytes(bytesInverted, 16)
-                val bb = ByteBuffer.wrap(array)
-                UUID(bb.long, bb.long)
+                val array = readVarType(bytesInverted)
+                array.decodeSortableUUID()
             }
             ColumnType.BYTES -> {
                 val bytes = readVarType(bytesInverted)

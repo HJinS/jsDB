@@ -15,12 +15,28 @@ class MultiColumnKeySerializer(schema: KeySchema): BaseKeySerializer<List<Any?>>
 
     override fun serialize(key: List<Any?>): ByteArray {
         require(key.size <= schema.columns.size) { "Too many key values for schema" }
-        return buildList{
-            for (idx in key.indices){
+        var totalByteSize = 0
+        val tempArray = ArrayList<ByteArray>(schema.columns.size)
+        for(idx in schema.columns.indices){
+            if(idx >= key.size) {
+                val padding = if(schema.columns[idx].descending) byteArrayOf(0xFF.toByte()) else byteArrayOf(0x00.toByte())
+                tempArray.add(padding)
+                totalByteSize += 1
+                break
+            } else{
                 val packed = packKeyItem(key[idx], schema.columns[idx])
-                addAll(packed.toList())
+                tempArray.add(packed)
+                totalByteSize += packed.size
             }
-        }.toByteArray()
+        }
+
+        val resultArray = ByteArray(totalByteSize)
+        var offset = 0
+        for(byteArray in tempArray){
+            System.arraycopy(byteArray, 0, resultArray, offset, byteArray.size)
+            offset += byteArray.size
+        }
+        return resultArray
     }
     override fun deserialize(bytes: ByteArray): List<Any?> {
         val unpackedKeys = mutableListOf<Any?>()
