@@ -63,9 +63,9 @@ import kotlin.text.toHexString
  * |                    Page Header                  |
  * |         [Record count: 3] freeSpaceEnd          |
  * +-------------------------------------------------+ <--- Slot array start.
- * |         Slot 1: [Record 1 offset, size]       |
- * |         Slot 2: [Record 2 offset, size]       |
- * |         Slot 3: [Record 3 offset, size]       |
+ * |         Slot 1: [Record 1 offset, size]         |
+ * |         Slot 2: [Record 2 offset, size]         |
+ * |         Slot 3: [Record 3 offset, size]         |
  * +-------------------------------------------------+ <--- Slot array end(freeSpaceStart).
  * |                                                 |
  * |                    Free Space                   |

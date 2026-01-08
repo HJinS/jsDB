@@ -1,14 +1,13 @@
 package index.util
 
-import index.btree.logger
 import index.exception.DecodeException
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.charset.StandardCharsets
 import java.text.Collator
 import java.util.UUID
 import kotlin.experimental.inv
 import kotlin.experimental.xor
-import kotlin.text.set
 import kotlin.text.toByteArray
 
 
@@ -107,19 +106,19 @@ fun ByteArray.invert(): ByteArray{
  * */
 fun Int.encodeSortable(): ByteArray{
     val sortableBits = this xor Int.MIN_VALUE
-    val bytes = ByteBuffer.allocate(Int.SIZE_BYTES).putInt(sortableBits).array()
+    val bytes = ByteBuffer.allocate(Int.SIZE_BYTES).order(ByteOrder.BIG_ENDIAN).putInt(sortableBits).array()
     return escapeZeroBytes(bytes)
 }
 
 fun Long.encodeSortable(): ByteArray{
     val sortableBits = this xor Long.MIN_VALUE
-    val bytes = ByteBuffer.allocate(Long.SIZE_BYTES).putLong(sortableBits).array()
+    val bytes = ByteBuffer.allocate(Long.SIZE_BYTES).order(ByteOrder.BIG_ENDIAN).putLong(sortableBits).array()
     return escapeZeroBytes(bytes)
 }
 
 fun Short.encodeSortable(): ByteArray{
     val sortableBits = this xor Short.MIN_VALUE
-    val bytes = ByteBuffer.allocate(Short.SIZE_BYTES).putShort(sortableBits).array()
+    val bytes = ByteBuffer.allocate(Short.SIZE_BYTES).order(ByteOrder.BIG_ENDIAN).putShort(sortableBits).array()
     return escapeZeroBytes(bytes)
 }
 
@@ -136,6 +135,7 @@ fun Boolean.encodeSortable(): ByteArray {
 
 fun UUID.encodeSortable(): ByteArray{
     val bytes = ByteBuffer.allocate(16)
+        .order(ByteOrder.BIG_ENDIAN)
         .putLong(this.mostSignificantBits)
         .putLong(this.leastSignificantBits)
         .array()
@@ -151,14 +151,14 @@ fun UUID.encodeSortable(): ByteArray{
 fun Float.encodeSortable(): ByteArray{
     val bits = this.toRawBits()
     val sortableBits = if(this > 0f) bits xor Int.MIN_VALUE else bits.inv()
-    val bytes = ByteBuffer.allocate(4).putInt(sortableBits).array()
+    val bytes = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN).putInt(sortableBits).array()
     return escapeZeroBytes(bytes)
 }
 
 fun Double.encodeSortable(): ByteArray{
     val bits = this.toRawBits()
     val sortableBits = if(this > 0.0) bits xor Long.MIN_VALUE else bits.inv()
-    val bytes = ByteBuffer.allocate(8).putLong(sortableBits).array()
+    val bytes = ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN).putLong(sortableBits).array()
     return escapeZeroBytes(bytes)
 }
 
@@ -221,19 +221,19 @@ fun ByteArray.encodeSortable() = escapeZeroBytes(this)
 
 fun ByteArray.decodeSortableInt(): Int{
     val unEscaped = unescapeZeroBytes(this)
-    val sortableBits = ByteBuffer.wrap(unEscaped).int
+    val sortableBits = ByteBuffer.wrap(unEscaped).order(ByteOrder.BIG_ENDIAN).int
     return sortableBits xor Int.MIN_VALUE
 }
 
 fun ByteArray.decodeSortableLong(): Long{
     val unEscaped = unescapeZeroBytes(this)
-    val sortableBits = ByteBuffer.wrap(unEscaped).long
+    val sortableBits = ByteBuffer.wrap(unEscaped).order(ByteOrder.BIG_ENDIAN).long
     return sortableBits xor Long.MIN_VALUE
 }
 
 fun ByteArray.decodeSortableShort(): Short{
     val unEscaped = unescapeZeroBytes(this)
-    val sortableBits = ByteBuffer.wrap(unEscaped).short
+    val sortableBits = ByteBuffer.wrap(unEscaped).order(ByteOrder.BIG_ENDIAN).short
     return sortableBits xor Short.MIN_VALUE
 }
 
@@ -250,14 +250,14 @@ fun ByteArray.decodeSortableByte(): Byte {
  * */
 fun ByteArray.decodeSortableFloat(): Float{
     val unEscaped = unescapeZeroBytes(this)
-    val sortableBits = ByteBuffer.wrap(unEscaped).int
+    val sortableBits = ByteBuffer.wrap(unEscaped).order(ByteOrder.BIG_ENDIAN).int
     val originalBits = if(sortableBits < 0) sortableBits xor Int.MIN_VALUE else sortableBits.inv()
     return Float.fromBits(originalBits)
 }
 
 fun ByteArray.decodeSortableDouble(): Double{
     val unEscaped = unescapeZeroBytes(this)
-    val sortableBits = ByteBuffer.wrap(unEscaped).long
+    val sortableBits = ByteBuffer.wrap(unEscaped).order(ByteOrder.BIG_ENDIAN).long
     val originalBits = if(sortableBits < 0) sortableBits xor Long.MIN_VALUE else sortableBits.inv()
     return Double.fromBits(originalBits)
 }
@@ -272,7 +272,7 @@ fun ByteArray.decodeSortableUUID(): UUID{
     val unEscaped = unescapeZeroBytes(this)
     if(unEscaped.size != 16) throw DecodeException("UUID should be 16 bytes", null)
 
-    val byteBuffer = ByteBuffer.wrap(unEscaped)
+    val byteBuffer = ByteBuffer.wrap(unEscaped).order(ByteOrder.BIG_ENDIAN)
     return UUID(byteBuffer.long, byteBuffer.long)
 }
 
