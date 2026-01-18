@@ -8,7 +8,7 @@ import java.lang.System.currentTimeMillis
 class MidpointLRUPolicy(
     midpointLruConfig: MidpointLruConfig
 ): ReplacementPolicy {
-    private val map = HashMap<Int, Frame>()
+    private val map = HashMap<Int, LRUNode>()
     private val generationalList:  GenerationalList = GenerationalList(midpointLruConfig.youngRatio, midpointLruConfig.capacity)
     private val promotionRule: PromotionRule = PromotionRule(
         midpointLruConfig.capacity,
@@ -16,8 +16,8 @@ class MidpointLRUPolicy(
     )
 
     override fun evict(): Int? {
-        val oldFrame = generationalList.removeOldest() ?: return null
-        val frameId = oldFrame.frameId
+        val oldNode = generationalList.removeOldest() ?: return null
+        val frameId = oldNode.frameId
         map.remove(frameId)
         return frameId
     }
@@ -36,31 +36,24 @@ class MidpointLRUPolicy(
      * young, old adjust 필요
      *
      * */
-    override fun access(frameId: Int) {
+    override fun add(frameId: Int) {
         val now = currentTimeMillis()
-        val frame = map[frameId]
-        if(frame == null){
+        val node = map[frameId]
+        if(node == null){
             promotionRule.checkSize(map.size)
-            val newFrame = Frame(frameId, lastAccessTime = now)
+            val newFrame = LRUNode(frameId, lastAccessTime = now)
             generationalList.addOld(newFrame)
             map[frameId] = newFrame
         }else{
-            if(!frame.isPinned){
-                if(frame.isOld){
-                    if(promotionRule.isPromotable(frame)) generationalList.promoteYoung(frame)
-                } else generationalList.touchYoung(frame)
-            }
-            frame.lastAccessTime = now
+            if(node.isOld){
+                if(promotionRule.isPromotable(node)) generationalList.promoteYoung(node)
+            } else generationalList.touchYoung(node)
+            node.lastAccessTime = now
         }
     }
 
-    override fun pin(frameId: Int) {
-        val node = map[frameId] ?: throw MidPointLRUException.IllegalPinStateException(frameId, null)
-        generationalList.pinNode(node)
-    }
-
-    override fun unpin(frameId: Int) {
-        val node = map[frameId] ?: throw MidPointLRUException.IllegalPinStateException(frameId, null)
-        generationalList.unPinNode(node)
+    override fun remove(frameId: Int) {
+        val node = map.remove(frameId) ?: return
+        generationalList.remove(node)
     }
 }

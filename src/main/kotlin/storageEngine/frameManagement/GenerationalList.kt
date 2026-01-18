@@ -11,7 +11,7 @@ class GenerationalList(
     val capacity: Int
 ) {
     private val linkedList = DoublyLinkedList()
-    private var midPoint: Frame? = null
+    private var midPoint: LRUNode? = null
     private val maxYoungCount by lazy { (capacity * youngRatio).toInt() }
 
     var youngCount = 0
@@ -20,65 +20,53 @@ class GenerationalList(
     var oldCount = 0
         private set
 
-    fun promoteYoung(frame: Frame){
-        linkedList.remove(frame)
+    fun promoteYoung(node: LRUNode){
+        linkedList.remove(node)
         oldCount --
-        linkedList.addFirst(frame)
+        linkedList.addFirst(node)
         youngCount ++
-        frame.isOld = false
-        if(midPoint == frame) shrinkOldList()
+        node.isOld = false
+        if(midPoint == node) shrinkOldList()
         adjustRatio()
     }
 
-    fun touchYoung(frame: Frame){
-        linkedList.remove(frame)
-        linkedList.addFirst(frame)
+    fun touchYoung(node: LRUNode){
+        linkedList.remove(node)
+        linkedList.addFirst(node)
     }
 
-    fun addOld(frame: Frame){
+    fun addOld(node: LRUNode){
         val currentMidPoint = midPoint
         if(currentMidPoint == null){
-            linkedList.addLast(frame)
+            linkedList.addLast(node)
         }else {
-            linkedList.add(frame, currentMidPoint)
+            linkedList.add(node, currentMidPoint)
         }
         oldCount ++
-        expandOldList(frame)
+        expandOldList(node)
     }
 
-    fun removeOldest(): Frame? {
-        val frame = linkedList.removeLast() ?: return null
+    fun removeOldest(): LRUNode? {
+        val node = linkedList.removeLast() ?: return null
         oldCount --
-        if(midPoint == frame) midPoint = null
-        return frame
+        if(midPoint == node) midPoint = null
+        return node
     }
 
-    fun pinNode(frame: Frame){
-        if(!frame.isPinned) {
-            linkedList.remove(frame)
-            frame.isPinned = true
-            if(frame.isOld) oldCount -- else youngCount --
-            if(midPoint == frame) shrinkOldList()
-        }
-    }
-
-    fun unPinNode(frame: Frame){
-        if(frame.isPinned) {
-            linkedList.addFirst(frame)
-            frame.isPinned = false
-            if(frame.isOld) oldCount ++ else youngCount ++
-        }
+    fun remove(node: LRUNode){
+        linkedList.remove(node)
+        if(node.isOld) oldCount -- else youngCount --
+        if(midPoint == node) shrinkOldList()
     }
 
     fun adjustRatio(){
-        if (youngCount > maxYoungCount){
-            val nextMidPoint = midPoint?.next
-            if(nextMidPoint != null){
-                nextMidPoint.isOld = true
-                midPoint = nextMidPoint
-                youngCount --
-                oldCount ++
-            }
+        var prevMidPoint = midPoint?.prev
+        while(prevMidPoint != null && youngCount > maxYoungCount){
+            prevMidPoint.isOld = true
+            midPoint = prevMidPoint
+            youngCount --
+            oldCount ++
+            prevMidPoint = midPoint?.prev
         }
     }
 
@@ -89,7 +77,7 @@ class GenerationalList(
         midPoint = oldMidPoint?.next ?: oldMidPoint
     }
 
-    private fun expandOldList(frame: Frame){
-        midPoint = frame
+    private fun expandOldList(node: LRUNode){
+        midPoint = node
     }
 }

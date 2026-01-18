@@ -7,9 +7,9 @@ class PromotionRule(
     private val capacity: Int,
     private val lruOldBlocksTimeMs: Long
 ) {
-    fun isPromotable(frame: Frame): Boolean {
+    fun isPromotable(node: LRUNode): Boolean {
         val now = currentTimeMillis()
-        return now - frame.lastAccessTime > lruOldBlocksTimeMs
+        return now - node.lastAccessTime > lruOldBlocksTimeMs
     }
 
     fun checkSize(currentCount: Int){

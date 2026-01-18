@@ -9,8 +9,8 @@ package storageEngine.frameManagement
  * ```
  * */
 internal class DoublyLinkedList {
-    private val head = Frame(-1)
-    private val tail = Frame(-1)
+    private val head = LRUNode(-1)
+    private val tail = LRUNode(-1)
     private var count: Int = 0
     val size: Int
         get() = count
@@ -20,18 +20,18 @@ internal class DoublyLinkedList {
         tail.prev = head
     }
 
-    fun getLast(): Frame? = tail.prev
+    fun getLast(): LRUNode? = tail.prev
 
-    fun remove(frame: Frame){
-        val prevFrame = frame.prev!!
-        val nextFrame = frame.next!!
+    fun remove(node: LRUNode){
+        val prevFrame = node.prev!!
+        val nextFrame = node.next!!
         prevFrame.next = nextFrame
         nextFrame.prev = prevFrame
         count--
     }
 
 
-    fun removeLast(): Frame?{
+    fun removeLast(): LRUNode?{
         if(count == 0) return null
         val lastFrame = tail.prev!!
         val newLastFrame = lastFrame.prev!!
@@ -42,32 +42,32 @@ internal class DoublyLinkedList {
     }
 
     /**
-     * add [frame] to the left of [targetFrame]
+     * add [node] to the left of [targetNode]
      * */
-    fun add(frame: Frame, targetFrame: Frame){
-        val prevFrame = targetFrame.prev!!
-        prevFrame.next = frame
-        targetFrame.prev = frame
-        frame.next = targetFrame
-        frame.prev = prevFrame
+    fun add(node: LRUNode, targetNode: LRUNode){
+        val prevFrame = targetNode.prev!!
+        prevFrame.next = node
+        targetNode.prev = node
+        node.next = targetNode
+        node.prev = prevFrame
         count++
     }
 
-    fun addFirst(frame: Frame){
+    fun addFirst(node: LRUNode){
         val insertPoint = head.next!!
-        head.next = frame
-        insertPoint.prev = frame
-        frame.next = insertPoint
-        frame.prev = head
+        head.next = node
+        insertPoint.prev = node
+        node.next = insertPoint
+        node.prev = head
         count++
     }
 
-    fun addLast(frame: Frame){
+    fun addLast(node: LRUNode){
         val insertPoint = tail.prev!!
-        tail.prev = frame
-        insertPoint.next = frame
-        frame.next = tail
-        frame.prev = insertPoint
+        tail.prev = node
+        insertPoint.next = node
+        node.next = tail
+        node.prev = insertPoint
         count++
     }
 }

@@ -1,10 +1,12 @@
 package storageEngine.frameManagement
 
-data class Frame(
+import java.nio.ByteBuffer
+
+class Frame(
     val frameId: Int,
-    var prev: Frame? = null,
-    var next: Frame? = null,
-    var isPinned: Boolean = false,
-    var isOld: Boolean = true,
-    var lastAccessTime: Long = 0
-)
+    pageSize: Int,
+    val pageId: Long?,
+    var pinCount: Int = 0,
+){
+    val data: ByteBuffer = ByteBuffer.allocateDirect(pageSize)
+}
