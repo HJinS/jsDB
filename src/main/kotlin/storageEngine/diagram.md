@@ -1,88 +1,70 @@
 ```mermaid
 
 classDiagram
-    class ByteBuffer {
-        <<Java NIO>>
-        +allocateDirect()
-        +put()
-        +get()
-    }
-    
-    class DiskManager {
-        +readPage(pageId, data)
-        +writePage(pageId, data)
-    }
-    
-    class Frame {
+    %% 1. 정책 계층 (Policy Layer)
+    class LRUNode {
         -frameId: Int
-        -data: ByteBuffer
-        -pinCount: AtomicInteger
-        -isDirty: Boolean
-        -latch: ReadWriteLock
-        +reset()
-        +getData(): ByteBuffer
+        -prev: LRUNode
+        -next: LRUNode
+        -isOld: Boolean
+        -lastAccess: Long
     }
-    
-    %% 2. 관리자 계층
+
+    class MidPointReplacer {
+        -nodeMap: Map~Int, LRUNode~
+        -oldList: LinkedList
+        -youngList: LinkedList
+        +recordAccess(frameId)
+        +setEvictable(frameId, isEvictable)
+        +victim(): Int?
+    }
+
+    %% 2. 자원 계층 (Resource Layer)
+    class Frame {
+        +frameId: Int
+        +data: ByteBuffer
+        +pinCount: AtomicInteger
+        +isDirty: Boolean
+        +latch: ReadWriteLock
+        +reset()
+    }
+
+    class DiskManager {
+        +readPage(pageId, buffer)
+        +writePage(pageId, buffer)
+    }
+
+    %% 3. 관리 계층 (Management Layer)
     class BufferPoolManager {
-        -frames: Array<Frame>
-        -pageTable: Map<Int, Int>
+        -frames: Array~Frame~
+        -pageTable: Map~Int, Int~
+        -replacer: MidPointReplacer
         -diskManager: DiskManager
-        +fetchPage<T>(pageId): PageHandle<T>
-        +unpinPage(frameId, isDirty)
+        +fetchPage(pageId): PageHandle
+        +unpinPage(pageId, isDirty)
         -evict()
     }
-    
-    %% 3. 인터페이스 및 핸들 계층
-    class PageHandle~T~ {
-        <<AutoCloseable>>
+
+    %% 4. 인터페이스 계층 (Access Layer)
+    class PageHandle {
         -frame: Frame
         -bpm: BufferPoolManager
-        +page: T
+        +getBuffer(): ByteBuffer
         +close()
     }
-    
-    class Page {
-        <<Interface>>
-        +getBuffer(): ByteBuffer
-        +getPageId(): Int
-    }
-    
-    %% 4. 논리적 구현체 계층 (데이터 해석)
+
+    %% 5. 논리적 뷰 (View Layer)
     class SlottedPage {
-        +insertTuple(tuple)
-        +deleteTuple(slotId)
-        +getFreeSpace()
+        +insertTuple()
+        +getTuple()
     }
-    
-    class BTreePage {
-        <<Abstract>>
-        +isLeaf()
-    }
-    
-    class BTreeLeafNode {
-        +insert(key, value)
-        +lookup(key)
-    }
-    
-    class BTreeInternalNode {
-        +lookup(key): PageId
-    }
-    
-    %% 관계 정의
-    Frame *-- ByteBuffer : Owns (Composition)
-    Frame --* BufferPoolManager : Managed by
+
+    %% 관계
+    MidPointReplacer *-- LRUNode : Manages
+    BufferPoolManager o-- Frame : Owns
+    BufferPoolManager o-- MidPointReplacer : Uses
     BufferPoolManager --> DiskManager : Uses
     BufferPoolManager ..> PageHandle : Creates
-    
-    PageHandle --> Frame : Holds Reference
-    PageHandle --> BufferPoolManager : Calls unpin()
-    PageHandle --> Page : Wraps (View)
-    
-    SlottedPage ..|> Page : Implements
-    BTreePage ..|> Page : Implements
-    BTreeLeafNode --|> BTreePage : Inherits
-    BTreeInternalNode --|> BTreePage : Inherits
-    
-    Page ..> ByteBuffer : Reads/Writes (Dependency)
+    PageHandle --> Frame : Wraps
+    SlottedPage ..> ByteBuffer : Interprets
 ```

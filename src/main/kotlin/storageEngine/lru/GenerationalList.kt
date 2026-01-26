@@ -1,4 +1,4 @@
-package storageEngine.frameManagement
+package storageEngine.lru
 
 
 /**
@@ -33,6 +33,12 @@ class GenerationalList(
     fun touchYoung(node: LRUNode){
         linkedList.remove(node)
         linkedList.addFirst(node)
+    }
+
+    fun addYoung(node: LRUNode){
+        linkedList.addFirst(node)
+        youngCount ++
+        node.isOld = false
     }
 
     fun addOld(node: LRUNode){

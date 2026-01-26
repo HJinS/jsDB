@@ -5,7 +5,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.shouldBe
-import storageEngine.Page
+import storageEngine.page.Page
 import storageEngine.util.PageHeaderOffset
 import java.lang.reflect.Field
 import java.nio.ByteBuffer

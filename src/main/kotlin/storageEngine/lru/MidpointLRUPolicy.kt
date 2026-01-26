@@ -1,4 +1,4 @@
-package storageEngine.frameManagement
+package storageEngine.lru
 
 import config.MidpointLruConfig
 import storageEngine.exception.MidPointLRUException
@@ -9,14 +9,22 @@ class MidpointLRUPolicy(
     midpointLruConfig: MidpointLruConfig
 ): ReplacementPolicy {
     private val map = HashMap<Int, LRUNode>()
-    private val generationalList:  GenerationalList = GenerationalList(midpointLruConfig.youngRatio, midpointLruConfig.capacity)
+    private val generationalList:  GenerationalList = GenerationalList(
+        midpointLruConfig.youngRatio,
+        midpointLruConfig.capacity
+    )
     private val promotionRule: PromotionRule = PromotionRule(
         midpointLruConfig.capacity,
         midpointLruConfig.lruOldBlocksTimeMs
     )
 
-    override fun evict(): Int? {
-        val oldNode = generationalList.removeOldest() ?: return null
+    override fun evict(): Int {
+        val oldNode = generationalList.removeOldest() ?: throw MidPointLRUException.LRUListFullException(
+            generationalList.capacity,
+            generationalList.youngCount,
+            generationalList.oldCount,
+            null
+        )
         val frameId = oldNode.frameId
         map.remove(frameId)
         return frameId
@@ -52,8 +60,27 @@ class MidpointLRUPolicy(
         }
     }
 
-    override fun remove(frameId: Int) {
-        val node = map.remove(frameId) ?: return
-        generationalList.remove(node)
+    override fun unpin(frameId: Int) {
+        val node = map[frameId]
+        val now = currentTimeMillis()
+        if(node != null){
+            generationalList.addYoung(node)
+            node.lastAccessTime = now
+        } else{
+            promotionRule.checkSize(map.size)
+            val lruNode = LRUNode(frameId, lastAccessTime = now)
+            generationalList.addOld(lruNode)
+            map[frameId] = lruNode
+        }
+    }
+
+    override fun pin(frameId: Int) {
+        val node = map[frameId]
+        if(node != null && !(node.prev == null && node.next == null)){
+            generationalList.remove(node)
+            node.resetLink()
+        } else {
+            map[frameId] = LRUNode(frameId)
+        }
     }
 }

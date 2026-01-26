@@ -1,9 +1,8 @@
-package storageEngine
+package storageEngine.page
 
 import config.PageConfig
 import index.util.decodeVarInt
 import index.util.encodeVarInt
-import mu.KotlinLogging
 import storageEngine.util.PageHeaderOffset
 import storageEngine.util.PageType
 import java.nio.ByteBuffer
@@ -77,94 +76,42 @@ import kotlin.text.toHexString
  * +-------------------------------------------------+
  * ```
  * */
-class Page(
-    val pageConfig: PageConfig,
+class SlottedPage(
+    pageConfig: PageConfig,
     pageId: Long = -1,
-    pageType: PageType = PageType.EMPTY,
-){
-    private val data: ByteArray = ByteArray(pageConfig.pageSize)
-    private val logger = KotlinLogging.logger {}
+    data: ByteBuffer,
+    pageType: PageType = PageType.EMPTY
+): Page(pageConfig, data, pageId, pageType){
 
-    // Do not use a relative path function. The data will be saved incorrectly.
-    private val buffer: ByteBuffer by lazy {
-        ByteBuffer.wrap(data)
-    }
-    init {
-        val buffer: ByteBuffer = ByteBuffer.wrap(data)
-        buffer.putLong(PageHeaderOffset.PAGE_ID.offset, pageId)
-        buffer.put(PageHeaderOffset.PAGE_TYPE.offset, pageType.value)
-        buffer.put(PageHeaderOffset.RESERVED_ONE.offset, 0)
-        buffer.putShort(PageHeaderOffset.RECORD_COUNT.offset, 0)
-        buffer.putShort(PageHeaderOffset.FREE_SPACE_START.offset, HEADER_SIZE.toShort())
-        buffer.putShort(PageHeaderOffset.FREE_SPACE_END.offset, (pageConfig.pageSize-1).toShort())
-        buffer.putShort(PageHeaderOffset.FREE_SLOT_HEAD.offset, (-1).toShort())
-        buffer.putShort(PageHeaderOffset.RESERVED_TWO.offset, 0)
-        buffer.putLong(PageHeaderOffset.PARENT_PAGE_ID.offset, 0)
-        buffer.putLong(PageHeaderOffset.LEFT_SIBLING_PAGE_ID.offset, 0)
-        buffer.putLong(PageHeaderOffset.RIGHT_SIBLING_PAGE_ID.offset, 0)
-        buffer.putLong(PageHeaderOffset.LSN.offset, 0)
-    }
-    val type: PageType
-        get() = PageType.fromValue(data[PageHeaderOffset.PAGE_TYPE.offset]) ?: throw IllegalStateException("Page type should be set")
-
-    private val freeSpaceEnd: Int
-        get() = buffer.getShort(PageHeaderOffset.FREE_SPACE_END.offset).toInt()
-
-    val recordCount: Int
-        get() = buffer.getShort(PageHeaderOffset.RECORD_COUNT.offset).toInt()
-
-    val leftSiblingPageId: Long
-        get() = buffer.getLong(PageHeaderOffset.LEFT_SIBLING_PAGE_ID.offset)
-
-    val rightSiblingPageId: Long
-        get() = buffer.getLong(PageHeaderOffset.RIGHT_SIBLING_PAGE_ID.offset)
-
-    private val currentFreeSpaceStart: Int
-        get() = buffer.getShort(PageHeaderOffset.FREE_SPACE_START.offset).toInt()
-s
-    private fun increaseRecordCount(){
-        val recordCount = buffer.getShort(PageHeaderOffset.RECORD_COUNT.offset)
-        buffer.putShort(PageHeaderOffset.RECORD_COUNT.offset, (recordCount + 1).toShort())
-    }
-
-    private fun decreaseRecordCount(){
-        val recordCount = buffer.getShort(PageHeaderOffset.RECORD_COUNT.offset)
-        buffer.putShort(PageHeaderOffset.RECORD_COUNT.offset, (recordCount - 1).toShort())
-    }
-
-    private fun getSlotId(slotArrayOffset: Int): Int{
-        val slotArrayStartBytes = HEADER_SIZE
-        return (slotArrayOffset - slotArrayStartBytes) / SLOT_SIZE
-    }
 
     /**
     * slot 삭제시 미사용 슬롯 등록
     * */
     private fun retrieveFreeSlotId(slotId: Int){
         var slotLocation = PageHeaderOffset.FREE_SLOT_HEAD.offset
-        var freeSlotId = buffer.getShort(slotLocation).toInt()
+        var freeSlotId = data.getShort(slotLocation).toInt()
         while(freeSlotId != -1){
             slotLocation = HEADER_SIZE + freeSlotId * SLOT_SIZE
-            freeSlotId = buffer.getShort(slotLocation).toInt()
+            freeSlotId = data.getShort(slotLocation).toInt()
         }
-        buffer.putShort(slotLocation, slotId.toShort())
-        buffer.putShort(HEADER_SIZE + slotId * SLOT_SIZE, (-1).toShort())
+        data.putShort(slotLocation, slotId.toShort())
+        data.putShort(HEADER_SIZE + slotId * SLOT_SIZE, (-1).toShort())
     }
 
     /**
      * 사용할 미사용 슬롯 하나 획득
      * */
     private fun getFreeSlotId(): Int{
-        val freeSlotId = buffer.getShort(PageHeaderOffset.FREE_SLOT_HEAD.offset).toInt()
+        val freeSlotId = data.getShort(PageHeaderOffset.FREE_SLOT_HEAD.offset).toInt()
         return freeSlotId.takeIf { it != -1 }?.also { id ->
-            val nextFreeSlotId = buffer.getShort(HEADER_SIZE + id * SLOT_SIZE).toInt()
-            buffer.putShort(PageHeaderOffset.FREE_SLOT_HEAD.offset, nextFreeSlotId.toShort())
+            val nextFreeSlotId = data.getShort(HEADER_SIZE + id * SLOT_SIZE).toInt()
+            data.putShort(PageHeaderOffset.FREE_SLOT_HEAD.offset, nextFreeSlotId.toShort())
         } ?: -1
     }
 
     private fun getNewSlotId(): Int{
-        val newSlotLocation = buffer.getShort(PageHeaderOffset.FREE_SPACE_START.offset)
-        buffer.putShort(PageHeaderOffset.FREE_SPACE_START.offset, (newSlotLocation + SLOT_SIZE).toShort())
+        val newSlotLocation = data.getShort(PageHeaderOffset.FREE_SPACE_START.offset)
+        data.putShort(PageHeaderOffset.FREE_SPACE_START.offset, (newSlotLocation + SLOT_SIZE).toShort())
         return (newSlotLocation - HEADER_SIZE) / SLOT_SIZE
     }
 
@@ -177,8 +124,8 @@ s
         // slotID 는 0 부터 시작
         // 따라서 recordCount 그대로 반환
         // 반환값은 slotID
-        buffer.putShort(slotLocation, offset)
-        buffer.putShort(slotLocation + 2, length)
+        data.putShort(slotLocation, offset)
+        data.putShort(slotLocation + 2, length)
         return newSlotId
     }
 
@@ -186,15 +133,18 @@ s
     fun getData(slotId: Int): Pair<ByteArray, ByteArray>{
         logger.info("========================[getData 시작]========================")
         val slotLocation = HEADER_SIZE + slotId * SLOT_SIZE
-        val offset = buffer.getShort(slotLocation)
-        val length = buffer.getShort(slotLocation + 2)
+        val offset = data.getShort(slotLocation)
+        val length = data.getShort(slotLocation + 2)
         logger.info("[getData] 조회할 데이터 offset = $offset")
         logger.info("[getData] 조회할 데이터 length = $length")
         logger.info("[getData] 조회할 데이터 slotId = $slotId")
         if(length.toInt() == 0) throw IllegalStateException("No Data")
         // slot 데이터를 가지고 실제 데이터 추출
         // 반만 열린 범위인 것을 주의
-        val recordData = data.slice(offset until (offset+length)).toByteArray()
+        val tempBuffer = data.duplicate()
+        tempBuffer.position(offset)
+        val recordData = ByteArray(length)
+        tempBuffer.get(recordData)
         logger.info("[getData] 조회할 실제 데이터 = ${recordData.toHexString()}")
         // 가장 앞에 있는 부분은 key의 길이 정보를 varInt로 인코딩 한 것
         // keyLengthByteLen는 인코딩된 byte 길이를 말함
@@ -224,7 +174,7 @@ s
         val (_, oldValue) = getData(slotId)
         if(oldValue.size >= value.size){
             val slotLocation = HEADER_SIZE + slotId * SLOT_SIZE
-            val offset = buffer.getShort(slotLocation)
+            val offset = data.getShort(slotLocation)
             val keyLength = key.size
             val valueLength = value.size
             val keyLengthEncoded = encodeVarInt(keyLength)
@@ -232,7 +182,7 @@ s
             val totalLength = keyLength + valueLength + keyLengthEncoded.size + valueLengthEncoded.size
             insertRecord(offset.toInt(), key, value, keyLengthEncoded, valueLengthEncoded)
             // update length information
-            buffer.putShort(slotLocation + 2, totalLength.toShort())
+            data.putShort(slotLocation + 2, totalLength.toShort())
             return slotId
         } else{
             deleteData(slotId)
@@ -262,7 +212,7 @@ s
         logger.info("[insertData 삽입전] 인코딩된 key 길이 = ${keyLengthEncoded.toHexString()}")
         logger.info("[insertData 삽입전] 인코딩된 value 길이 = ${valueLengthEncoded.toHexString()}")
         insertRecord(initialInsertOffset, key, value, keyLengthEncoded, valueLengthEncoded)
-        buffer.putShort(PageHeaderOffset.FREE_SPACE_END.offset, (initialInsertOffset - 1).toShort())
+        data.putShort(PageHeaderOffset.FREE_SPACE_END.offset, (initialInsertOffset - 1).toShort())
         val slotId = insertSlot(initialInsertOffset.toShort(), totalLength.toShort())
         logger.info("insertData slotId=$slotId")
         increaseRecordCount()
@@ -276,19 +226,19 @@ s
         var insertLocation = offset
         logger.info("[insertRecord 삽입] key 길이 삽입 위치 = $insertLocation")
         logger.info("[insertRecord 삽입] 인코딩된 key 길이 = ${keyLengthEncoded.toHexString()}")
-        buffer.put(insertLocation, keyLengthEncoded)
+        data.put(insertLocation, keyLengthEncoded)
         insertLocation += keyLengthEncoded.size
         logger.info("[insertRecord 삽입] key 삽입 위치 = $insertLocation")
         logger.info("[insertRecord 삽입] 인코딩된 key = ${key.toHexString()}")
-        buffer.put(insertLocation, key)
+        data.put(insertLocation, key)
         insertLocation += key.size
         logger.info("[insertRecord 삽입] value 길이 삽입 위치 = $insertLocation")
         logger.info("[insertRecord 삽입] 인코딩된 value 길이 = ${valueLengthEncoded.toHexString()}")
-        buffer.put(insertLocation, valueLengthEncoded)
+        data.put(insertLocation, valueLengthEncoded)
         insertLocation += valueLengthEncoded.size
         logger.info("[insertRecord 삽입] value 삽입 위치 = $insertLocation")
         logger.info("[insertRecord 삽입] 인코딩된 value = ${value.toHexString()}")
-        buffer.put(insertLocation, value)
+        data.put(insertLocation, value)
         logger.info("========================[insertRecord 종료]========================")
     }
 
@@ -297,8 +247,8 @@ s
      * */
     fun deleteData(slotId: Int): Int{
         val slotLocation = HEADER_SIZE + slotId * SLOT_SIZE
-        buffer.putShort(slotLocation, 0)
-        buffer.putShort(slotLocation+2, 0)
+        data.putShort(slotLocation, 0)
+        data.putShort(slotLocation+2, 0)
         retrieveFreeSlotId(slotId)
         decreaseRecordCount()
         return slotId
@@ -314,15 +264,15 @@ s
     * 3. 슬롯의 offset 갱신
     * */
     fun compaction(){
-        val slotArrayEndBytes = buffer.getShort(PageHeaderOffset.FREE_SPACE_START.offset).toInt()
+        val slotArrayEndBytes = data.getShort(PageHeaderOffset.FREE_SPACE_START.offset).toInt()
         var slotArrayStartBytes = HEADER_SIZE
         val slotArrayTemp = mutableListOf<Triple<Int, Int, Int>>()
 
         var slotNumber = 0
         // slotArray 데이터를 memory에 로드
         while(slotArrayStartBytes < slotArrayEndBytes){
-            var offset = buffer.getShort(slotArrayStartBytes).toInt()
-            val length = buffer.getShort(slotArrayStartBytes + 2).toInt()
+            var offset = data.getShort(slotArrayStartBytes).toInt()
+            val length = data.getShort(slotArrayStartBytes + 2).toInt()
             if(length == 0) offset = 0
             slotArrayTemp.addLast(Triple(slotNumber, offset, length))
             slotArrayStartBytes += SLOT_SIZE
@@ -331,6 +281,9 @@ s
         // offset 기준 내림차순 -> 끝에서 부터
         slotArrayTemp.sortByDescending { it.second }
 
+        val readOnlyView = data.duplicate()
+        val writeOnlyView = data.duplicate()
+
         var writePointer = pageConfig.pageSize - 1
         slotArrayStartBytes = HEADER_SIZE
         // iterate 하면서 write pointer는 끝에서 사이즈를 통해 점차 내려감
@@ -338,10 +291,15 @@ s
         slotArrayTemp.forEach { (slotNumber, readPointer, length) ->
             if(length == 0 && readPointer == 0) return@forEach
             writePointer -= length
-            data.copyInto(data, writePointer, readPointer, readPointer+length)
-            buffer.putShort(slotArrayStartBytes + SLOT_SIZE * slotNumber, writePointer.toShort())
+            readOnlyView.clear()
+            readOnlyView.position(readPointer)
+            readOnlyView.limit(readPointer + length)
+            writeOnlyView.clear()
+            writeOnlyView.position(writePointer)
+            writeOnlyView.put(readOnlyView)
+            data.putShort(slotArrayStartBytes + SLOT_SIZE * slotNumber, writePointer.toShort())
         }
-        buffer.putShort(PageHeaderOffset.FREE_SPACE_END.offset, writePointer.toShort())
+        data.putShort(PageHeaderOffset.FREE_SPACE_END.offset, writePointer.toShort())
     }
 
     companion object{
