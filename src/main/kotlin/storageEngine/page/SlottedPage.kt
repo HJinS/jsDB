@@ -3,9 +3,11 @@ package storageEngine.page
 import config.PageConfig
 import index.util.decodeVarInt
 import index.util.encodeVarInt
+import storageEngine.exception.SlottedPageException
 import storageEngine.util.PageHeaderOffset
 import storageEngine.util.PageType
 import java.nio.ByteBuffer
+import java.util.Arrays
 import kotlin.text.toHexString
 
 
@@ -116,17 +118,42 @@ class SlottedPage(
     }
 
     /**
+     * slot을 특정 index 에 삽입(shift 필요)
      * @return the slotID of the last record
      * */
-    private fun insertSlot(offset: Short, length: Short): Int{
-        val newSlotId = getFreeSlotId().takeIf { it != -1 } ?: getNewSlotId()
-        val slotLocation = HEADER_SIZE + newSlotId * SLOT_SIZE
-        // slotID 는 0 부터 시작
-        // 따라서 recordCount 그대로 반환
-        // 반환값은 slotID
-        data.putShort(slotLocation, offset)
-        data.putShort(slotLocation + 2, length)
-        return newSlotId
+    private fun insertSlot(index: Int, offset: Short, length: Short){
+        val writeOnlyView = data.duplicate()
+        val readOnlyView = data.duplicate()
+        readOnlyView.position(index)
+        readOnlyView.limit(freeSpaceStart)
+
+        writeOnlyView.position(index + SLOT_SIZE)
+        writeOnlyView.put(readOnlyView)
+        writeOnlyView.clear()
+        writeOnlyView.putShort(index, offset)
+        writeOnlyView.putShort(index + 2, length)
+    }
+
+    @OptIn(ExperimentalStdlibApi::class)
+    private fun insertRecord(offset: Int, key: ByteArray, value: ByteArray, keyLengthEncoded: ByteArray, valueLengthEncoded: ByteArray){
+        logger.info("========================[insertRecord 시작]========================")
+        var insertLocation = offset
+        logger.info("[insertRecord 삽입] key 길이 삽입 위치 = $insertLocation")
+        logger.info("[insertRecord 삽입] 인코딩된 key 길이 = ${keyLengthEncoded.toHexString()}")
+        data.put(insertLocation, keyLengthEncoded)
+        insertLocation += keyLengthEncoded.size
+        logger.info("[insertRecord 삽입] key 삽입 위치 = $insertLocation")
+        logger.info("[insertRecord 삽입] 인코딩된 key = ${key.toHexString()}")
+        data.put(insertLocation, key)
+        insertLocation += key.size
+        logger.info("[insertRecord 삽입] value 길이 삽입 위치 = $insertLocation")
+        logger.info("[insertRecord 삽입] 인코딩된 value 길이 = ${valueLengthEncoded.toHexString()}")
+        data.put(insertLocation, valueLengthEncoded)
+        insertLocation += valueLengthEncoded.size
+        logger.info("[insertRecord 삽입] value 삽입 위치 = $insertLocation")
+        logger.info("[insertRecord 삽입] 인코딩된 value = ${value.toHexString()}")
+        data.put(insertLocation, value)
+        logger.info("========================[insertRecord 종료]========================")
     }
 
     @OptIn(ExperimentalStdlibApi::class)
@@ -136,14 +163,14 @@ class SlottedPage(
         val offset = data.getShort(slotLocation)
         val length = data.getShort(slotLocation + 2)
         logger.info("[getData] 조회할 데이터 offset = $offset")
-        logger.info("[getData] 조회할 데이터 length = $length")
+        logger.info("ㄴ[getData] 조회할 데이터 length = $length")
         logger.info("[getData] 조회할 데이터 slotId = $slotId")
         if(length.toInt() == 0) throw IllegalStateException("No Data")
         // slot 데이터를 가지고 실제 데이터 추출
         // 반만 열린 범위인 것을 주의
         val tempBuffer = data.duplicate()
-        tempBuffer.position(offset)
-        val recordData = ByteArray(length)
+        tempBuffer.position(offset.toInt())
+        val recordData = ByteArray(length.toInt())
         tempBuffer.get(recordData)
         logger.info("[getData] 조회할 실제 데이터 = ${recordData.toHexString()}")
         // 가장 앞에 있는 부분은 key의 길이 정보를 varInt로 인코딩 한 것
@@ -171,76 +198,69 @@ class SlottedPage(
      * @return the slotID of the last one
      * */
     fun updateData(slotId: Int, key: ByteArray, value: ByteArray): Int{
-        val (_, oldValue) = getData(slotId)
-        if(oldValue.size >= value.size){
-            val slotLocation = HEADER_SIZE + slotId * SLOT_SIZE
-            val offset = data.getShort(slotLocation)
-            val keyLength = key.size
-            val valueLength = value.size
-            val keyLengthEncoded = encodeVarInt(keyLength)
-            val valueLengthEncoded = encodeVarInt(valueLength)
-            val totalLength = keyLength + valueLength + keyLengthEncoded.size + valueLengthEncoded.size
-            insertRecord(offset.toInt(), key, value, keyLengthEncoded, valueLengthEncoded)
-            // update length information
-            data.putShort(slotLocation + 2, totalLength.toShort())
-            return slotId
-        } else{
-            deleteData(slotId)
-            return insertData(key, value)
+        deleteData(slotId)
+        return insertData(key, value)
+    }
+
+    fun binarySearch(key: ByteArray): Int{
+        var low = 0
+        var high = recordCount - 1
+        while(low < high) {
+            val mid = (high + low) / 2
+            val midKey = getData(mid).first
+            val compareResult = Arrays.compareUnsigned(key, midKey)
+            when {
+                compareResult < 0 -> low = mid + 1
+                compareResult > 0 -> high = mid - 1
+                else -> return mid
+            }
         }
+        return -(low + 1)
+
     }
 
-    /**
-     * @return the slotID of the last one
-     * */
     @OptIn(ExperimentalStdlibApi::class)
-    fun insertData(key: ByteArray, value: ByteArray): Int{
-        logger.info("========================[insertData 시작]========================")
-        val keyLength = key.size
-        val valueLength = value.size
-        val keyLengthEncoded = encodeVarInt(keyLength)
-        val valueLengthEncoded = encodeVarInt(valueLength)
-        val totalLength = keyLength + valueLength + keyLengthEncoded.size + valueLengthEncoded.size
-        // 0부터 시작하는 특성 상 + 1을 해줘야 위치가 맞음
-        // 자라나는 방향이 반대인 것을 잊지 말것
-        val initialInsertOffset = freeSpaceEnd - totalLength + 1
-        logger.info("[insertData 삽입전] 삽입 위치 = $initialInsertOffset")
-        logger.info("[insertData 삽입전] key = ${key.toHexString()}")
-        logger.info("[insertData 삽입전] value = ${value.toHexString()}")
-        logger.info("[insertData 삽입전] key 길이 = $keyLength")
-        logger.info("[insertData 삽입전] value 길이 = $valueLength")
-        logger.info("[insertData 삽입전] 인코딩된 key 길이 = ${keyLengthEncoded.toHexString()}")
-        logger.info("[insertData 삽입전] 인코딩된 value 길이 = ${valueLengthEncoded.toHexString()}")
-        insertRecord(initialInsertOffset, key, value, keyLengthEncoded, valueLengthEncoded)
-        data.putShort(PageHeaderOffset.FREE_SPACE_END.offset, (initialInsertOffset - 1).toShort())
-        val slotId = insertSlot(initialInsertOffset.toShort(), totalLength.toShort())
-        logger.info("insertData slotId=$slotId")
+    fun insertData(key: ByteArray, value: ByteArray): Int {
+        // 1. [공간 확인] 헤더, 슬롯, 데이터가 들어갈 공간이 충분한지 확인
+        // (Total Length + Slot Size) <= Free Space
+        // ... (생략) ...
+
+        // 2. [위치 찾기] 이진 탐색으로 키가 들어갈 슬롯 인덱스(Insert Index) 검색
+        // 만약 이미 키가 존재하면(EQ), 중복 키 처리 정책에 따름 (여기선 덮어쓰기나 에러)
+        val searchResult = binarySearch(key)
+        val insertIndex = if (searchResult >= 0) {
+            // 중복 키 대응은 당장은 처리하지 않음
+            throw SlottedPageException.DuplicatedKeyException(pageId, pageType, null)
+        } else {
+            // 키가 없음 -> 삽입 위치 반환 (binarySearch의 반환값 규칙 활용)
+            -(searchResult + 1)
+        }
+
+        // 3. [데이터 준비] 직렬화 (VarInt 등 인코딩)
+        val keyLengthEncoded = encodeVarInt(key.size)
+        val valueLengthEncoded = encodeVarInt(value.size)
+        val totalDataLength = keyLengthEncoded.size + key.size + valueLengthEncoded.size + value.size
+
+        // 4. [데이터 쓰기] FreeSpace 포인터 이동 및 데이터 기록
+        // 데이터는 페이지 끝에서 앞으로 자라납니다.
+        // freeSpaceEnd는 "현재 데이터가 시작되는 지점"을 가리키고 있다고 가정
+        val dataOffset = freeSpaceEnd - totalDataLength
+
+        // 실제 데이터 기록 (순서: KeyLen -> Key -> ValLen -> Val)
+        insertRecord(dataOffset, key, value, keyLengthEncoded, valueLengthEncoded)
+
+        data.putShort(PageHeaderOffset.FREE_SPACE_END.offset, (dataOffset - 1).toShort())
+
+        // 5. [슬롯 삽입] 슬롯 배열 정렬 유지 (Shift & Insert)
+        insertSlot(insertIndex, dataOffset.toShort(), totalDataLength.toShort())
+
+        // 6. [메타데이터 갱신] 레코드 수 증가 등
         increaseRecordCount()
-        logger.info("========================[insertData 종료]========================")
-        return slotId
+        return insertIndex
     }
 
-    @OptIn(ExperimentalStdlibApi::class)
-    private fun insertRecord(offset: Int, key: ByteArray, value: ByteArray, keyLengthEncoded: ByteArray, valueLengthEncoded: ByteArray){
-        logger.info("========================[insertRecord 시작]========================")
-        var insertLocation = offset
-        logger.info("[insertRecord 삽입] key 길이 삽입 위치 = $insertLocation")
-        logger.info("[insertRecord 삽입] 인코딩된 key 길이 = ${keyLengthEncoded.toHexString()}")
-        data.put(insertLocation, keyLengthEncoded)
-        insertLocation += keyLengthEncoded.size
-        logger.info("[insertRecord 삽입] key 삽입 위치 = $insertLocation")
-        logger.info("[insertRecord 삽입] 인코딩된 key = ${key.toHexString()}")
-        data.put(insertLocation, key)
-        insertLocation += key.size
-        logger.info("[insertRecord 삽입] value 길이 삽입 위치 = $insertLocation")
-        logger.info("[insertRecord 삽입] 인코딩된 value 길이 = ${valueLengthEncoded.toHexString()}")
-        data.put(insertLocation, valueLengthEncoded)
-        insertLocation += valueLengthEncoded.size
-        logger.info("[insertRecord 삽입] value 삽입 위치 = $insertLocation")
-        logger.info("[insertRecord 삽입] 인코딩된 value = ${value.toHexString()}")
-        data.put(insertLocation, value)
-        logger.info("========================[insertRecord 종료]========================")
-    }
+
+
 
     /**
      * @return the slotID of the last one

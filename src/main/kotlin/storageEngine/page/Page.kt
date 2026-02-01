@@ -10,8 +10,8 @@ import java.nio.ByteBuffer
 open class Page(
     val pageConfig: PageConfig,
     internal val data: ByteBuffer,
-    private val pageId: Long = -1,
-    private val pageType: PageType = PageType.EMPTY,
+    internal val pageId: Long = -1,
+    internal val pageType: PageType = PageType.EMPTY,
 ){
     internal val logger = KotlinLogging.logger {}
 
@@ -36,6 +36,9 @@ open class Page(
     val freeSpaceEnd: Int
         get() = data.getShort(PageHeaderOffset.FREE_SPACE_END.offset).toInt()
 
+    val freeSpaceStart: Int
+        get() = data.getShort(PageHeaderOffset.FREE_SPACE_START.offset).toInt()
+
     val recordCount: Int
         get() = data.getShort(PageHeaderOffset.RECORD_COUNT.offset).toInt()
 
@@ -44,9 +47,6 @@ open class Page(
 
     val rightSiblingPageId: Long
         get() = data.getLong(PageHeaderOffset.RIGHT_SIBLING_PAGE_ID.offset)
-
-    internal val currentFreeSpaceStart: Int
-        get() = data.getShort(PageHeaderOffset.FREE_SPACE_START.offset).toInt()
 
     internal fun increaseRecordCount(){
         val recordCount = data.getShort(PageHeaderOffset.RECORD_COUNT.offset)
