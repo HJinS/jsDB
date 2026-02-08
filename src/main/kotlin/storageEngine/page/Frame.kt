@@ -5,6 +5,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 
 class Frame(
     val frameId: Int,
+    var pageId: Long?,
     pageSize: Int
 ){
     val data: ByteBuffer = ByteBuffer.allocateDirect(pageSize)
@@ -13,7 +14,6 @@ class Frame(
     @Volatile var isDirty: Boolean = false
 
     fun reset(){
-        pinCount = 0
         isDirty = false
         data.clear()
     }

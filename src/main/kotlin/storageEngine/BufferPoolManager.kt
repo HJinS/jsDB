@@ -3,6 +3,7 @@ import storageEngine.DiskManager
 import storageEngine.lru.MidpointLRUPolicy
 import storageEngine.page.Frame
 import storageEngine.page.PageHandle
+import java.util.concurrent.locks.ReentrantLock
 
 /**
  * frame table
@@ -43,9 +44,10 @@ class BufferPoolManager(
     pageConfig: PageConfig,
     poolSize: Int
 ){
-    private val frames: Array<Frame> = Array(poolSize) { Frame(it, pageConfig.pageSize) }
+    private val frames: Array<Frame> = Array(poolSize) { Frame(it, null, pageConfig.pageSize) }
     private val pageTable = HashMap<Long, Int>()
     private val freeList = ArrayDeque<Int>()
+    private val globalLatch = ReentrantLock()
 
     /**
      * page 있는지 여부 확인
@@ -59,11 +61,48 @@ class BufferPoolManager(
      * freeFrameId의 경우에는 LRU 알고리즘 사용
      * */
     fun fetchPage(pageId: Long): PageHandle{
-        pageTable[pageId]?.let {
-            replacer.pin(it)
-        } ?: {
+        var frame: Frame?
+        var victimPageId: Long? = null
+        var needIO = false
 
+        globalLatch.lock()
+        try{
+            if(pageTable.containsKey(pageId)) {
+                val frameId = pageTable[pageId]!!
+                frame = frames[frameId]
+                replacer.pin(frameId)
+            } else {
+                val freeFrameId = getFreeFrameId()
+                frame = frames[freeFrameId]
+                if(frame.isDirty && frame.pageId != null){
+                    victimPageId = frame.pageId
+                }
+                pageTable.remove(frame.pageId)
+                frame.pageId = pageId
+                frame.pinCount = 1
+                replacer.pin(freeFrameId)
+                pageTable[pageId] = freeFrameId
+                needIO = true
+                frame.latch.writeLock().lock()
+            }
+        } finally {
+            globalLatch.unlock()
         }
+        if(needIO){
+            try{
+                if(victimPageId != null){
+                    diskManager.writePage(victimPageId, frame.data)
+                }
+                frame.reset()
+                diskManager.readPage(pageId, frame.data)
+            } finally {
+                frame.latch.writeLock().unlock()
+            }
+        } else {
+            frame.latch.readLock().lock()
+            frame.latch.readLock().unlock()
+        }
+        return PageHandle(frame, this)
     }
 
     fun newPage(){

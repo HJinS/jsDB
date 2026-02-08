@@ -1,5 +1,8 @@
 package index.btree
 
+import index.btree.node.inMemory.InternalNode
+import index.btree.node.inMemory.LeafNode
+import index.btree.node.inMemory.Node
 import index.comparator.KeyComparator
 import index.exception.BTreeException
 import index.serializer.KeySerializer
@@ -89,7 +92,7 @@ class BTree<K, V> (
      *
      * @param key key to delete from B+tree of type [K].
      * @see handleUnderflow
-     * @see LeafNode.isUnderflow
+     * @see Node.isUnderflow
      * */
     fun delete(key: K){
         val serializedKey = keySerializer.serialize(key)
@@ -192,7 +195,8 @@ class BTree<K, V> (
                 var parentNode: InternalNode
 
                 if(traceNode.isEmpty()){
-                    parentNode = InternalNode(keys = mutableListOf(promotionKey), maxKeys, mutableListOf(currentNode, newNode))
+                    parentNode =
+                        InternalNode(keys = mutableListOf(promotionKey), maxKeys, mutableListOf(currentNode, newNode))
                     root = parentNode
                 } else {
                     // parentNode 의 parentNodeIdx 정보는 나중에 parentNode split 할 때 필요함 -> peek 사용
@@ -228,8 +232,8 @@ class BTree<K, V> (
      * - Searching for 5, go P3.
      *
      * @param key Key to find leaf node
-     * @see LeafNode.search
-     * @see InternalNode.search
+     * @see Node.search
+     * @see Node.search
      **/
     private fun searchLeafNode(key: ByteArray): Triple<LeafNode, Int, Boolean> {
         var node: Node = root ?: throw IllegalStateException("No root node")

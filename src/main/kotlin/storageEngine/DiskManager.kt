@@ -16,13 +16,12 @@ class DiskManager(storageConfig: StorageConfig, private val pageSize: Int) {
      * Read page from disk with given [pageId] and load the data.
      * First page id should be 1.
      * @param pageId ID being read from disk.
-     * @param pageData ByteArray to save the page data. It should be the same size as [pageSize].
+     * @param pageData ByteBuffer to save the page data. It should be the same size as [pageSize].
      */
-    fun readPage(pageId: Long, pageData: ByteArray){
+    fun readPage(pageId: Long, pageData: ByteBuffer){
         val offset = (pageId - 1) * pageSize
 
-        val buffer = ByteBuffer.wrap(pageData)
-        val result = fileChannel.read(buffer, offset)
+        val result = fileChannel.read(pageData, offset)
         if(result == -1){
             throw IllegalArgumentException("No such page")
         }
@@ -33,11 +32,9 @@ class DiskManager(storageConfig: StorageConfig, private val pageSize: Int) {
      * @param pageId Page id to write to.
      * @param pageData Data to write. It should be the same size as [pageSize].
      */
-    fun writePage(pageId: Long, pageData: ByteArray){
+    fun writePage(pageId: Long, pageData: ByteBuffer){
         val offset = (pageId - 1) * pageSize
-
-        val buffer = ByteBuffer.wrap(pageData)
-        fileChannel.write(buffer, offset)
+        fileChannel.write(pageData, offset)
     }
 
     /**

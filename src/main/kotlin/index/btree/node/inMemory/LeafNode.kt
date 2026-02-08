@@ -1,5 +1,6 @@
-package index.btree
+package index.btree.node.inMemory
 
+import index.btree.logger
 import java.util.Collections
 
 class LeafNode(
