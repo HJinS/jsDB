@@ -78,7 +78,7 @@ import kotlin.text.toHexString
  * +-------------------------------------------------+
  * ```
  * */
-class SlottedPage(
+open class SlottedPage(
     pageConfig: PageConfig,
     pageId: Long = -1,
     data: ByteBuffer,
@@ -163,9 +163,9 @@ class SlottedPage(
         val offset = data.getShort(slotLocation)
         val length = data.getShort(slotLocation + 2)
         logger.info("[getData] 조회할 데이터 offset = $offset")
-        logger.info("ㄴ[getData] 조회할 데이터 length = $length")
+        logger.info("[getData] 조회할 데이터 length = $length")
         logger.info("[getData] 조회할 데이터 slotId = $slotId")
-        if(length.toInt() == 0) throw IllegalStateException("No Data")
+        if(length.toInt() == 0) throw SlottedPageException.SlotOutOfBoundException(slotId, pageId, pageType, null)
         // slot 데이터를 가지고 실제 데이터 추출
         // 반만 열린 범위인 것을 주의
         val tempBuffer = data.duplicate()
@@ -216,25 +216,13 @@ class SlottedPage(
             }
         }
         return -(low + 1)
-
     }
 
     @OptIn(ExperimentalStdlibApi::class)
-    fun insertData(key: ByteArray, value: ByteArray): Int {
+    fun insertData(slotId: Int, key: ByteArray, value: ByteArray): Int {
         // 1. [공간 확인] 헤더, 슬롯, 데이터가 들어갈 공간이 충분한지 확인
         // (Total Length + Slot Size) <= Free Space
         // ... (생략) ...
-
-        // 2. [위치 찾기] 이진 탐색으로 키가 들어갈 슬롯 인덱스(Insert Index) 검색
-        // 만약 이미 키가 존재하면(EQ), 중복 키 처리 정책에 따름 (여기선 덮어쓰기나 에러)
-        val searchResult = binarySearch(key)
-        val insertIndex = if (searchResult >= 0) {
-            // 중복 키 대응은 당장은 처리하지 않음
-            throw SlottedPageException.DuplicatedKeyException(pageId, pageType, null)
-        } else {
-            // 키가 없음 -> 삽입 위치 반환 (binarySearch의 반환값 규칙 활용)
-            -(searchResult + 1)
-        }
 
         // 3. [데이터 준비] 직렬화 (VarInt 등 인코딩)
         val keyLengthEncoded = encodeVarInt(key.size)
@@ -252,26 +240,24 @@ class SlottedPage(
         data.putShort(PageHeaderOffset.FREE_SPACE_END.offset, (dataOffset - 1).toShort())
 
         // 5. [슬롯 삽입] 슬롯 배열 정렬 유지 (Shift & Insert)
-        insertSlot(insertIndex, dataOffset.toShort(), totalDataLength.toShort())
+        insertSlot(slotId, dataOffset.toShort(), totalDataLength.toShort())
 
         // 6. [메타데이터 갱신] 레코드 수 증가 등
         increaseRecordCount()
-        return insertIndex
+        return slotId
     }
-
-
-
 
     /**
      * @return the slotID of the last one
      * */
-    fun deleteData(slotId: Int): Int{
+    fun deleteData(slotId: Int): Pair<ByteArray, ByteArray>{
         val slotLocation = HEADER_SIZE + slotId * SLOT_SIZE
+        val (key, value) = getData(slotId)
         data.putShort(slotLocation, 0)
         data.putShort(slotLocation+2, 0)
         retrieveFreeSlotId(slotId)
         decreaseRecordCount()
-        return slotId
+        return key to value
     }
 
     /*

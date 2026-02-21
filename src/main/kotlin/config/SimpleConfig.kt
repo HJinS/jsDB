@@ -23,5 +23,6 @@ data class MidpointLruConfig(
 
 @Serializable
 data class PageConfig(
-    val pageSize: Int = 4096
+    val pageSize: Int = 4096,
+    val maxKeys: Int = 64
 )

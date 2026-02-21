@@ -6,4 +6,8 @@ open class SlottedPageException(message: String?, cause: Throwable?): StorageEng
     class DuplicatedKeyException(
         pageId: Long, pageType: PageType, cause: Throwable?
     ): SlottedPageException("Already exists. $pageId $pageType", cause)
+
+    class SlotOutOfBoundException(
+        slotId: Int, pageId: Long, pageType: PageType, cause: Throwable?
+    ): SlottedPageException("No more data. slotID: $slotId pageID: $pageId pageType: $pageType", cause)
 }

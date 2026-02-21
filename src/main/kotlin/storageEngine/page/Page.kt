@@ -25,8 +25,8 @@ open class Page(
         data.putShort(PageHeaderOffset.FREE_SLOT_HEAD.offset, (-1).toShort())
         data.putShort(PageHeaderOffset.RESERVED_TWO.offset, 0)
         data.putLong(PageHeaderOffset.PARENT_PAGE_ID.offset, 0)
-        data.putLong(PageHeaderOffset.LEFT_SIBLING_PAGE_ID.offset, 0)
-        data.putLong(PageHeaderOffset.RIGHT_SIBLING_PAGE_ID.offset, 0)
+        data.putLong(PageHeaderOffset.LEFT_SIBLING_PAGE_ID.offset, -1)
+        data.putLong(PageHeaderOffset.RIGHT_SIBLING_PAGE_ID.offset, -1)
         data.putLong(PageHeaderOffset.LSN.offset, 0)
     }
 
@@ -42,11 +42,26 @@ open class Page(
     val recordCount: Int
         get() = data.getShort(PageHeaderOffset.RECORD_COUNT.offset).toInt()
 
-    val leftSiblingPageId: Long
+    /**
+     * internal node일 경우에는 leftSiblingPageId를 leftMostChildPageId로 사용
+     * */
+    var leftMostChildPageId: Long
         get() = data.getLong(PageHeaderOffset.LEFT_SIBLING_PAGE_ID.offset)
+        set(leftMostPageId) {
+            data.putLong(PageHeaderOffset.LEFT_SIBLING_PAGE_ID.offset, leftMostPageId)
+        }
 
-    val rightSiblingPageId: Long
+    var leftSiblingPageId: Long
+        get() = data.getLong(PageHeaderOffset.LEFT_SIBLING_PAGE_ID.offset)
+        set(siblingPageId) {
+            data.putLong(PageHeaderOffset.LEFT_SIBLING_PAGE_ID.offset, siblingPageId)
+        }
+
+    var rightSiblingPageId: Long
         get() = data.getLong(PageHeaderOffset.RIGHT_SIBLING_PAGE_ID.offset)
+        set(siblingPageId) {
+            data.putLong(PageHeaderOffset.RIGHT_SIBLING_PAGE_ID.offset, siblingPageId)
+        }
 
     internal fun increaseRecordCount(){
         val recordCount = data.getShort(PageHeaderOffset.RECORD_COUNT.offset)

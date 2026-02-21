@@ -19,3 +19,11 @@ enum class ColumnType {
 
 // degree = maxKeys
 const val MAX_KEYS = 64
+
+
+data class NodeSplitData(
+    val splitKeyList: MutableList<ByteArray>,
+    val splitChildrenId: MutableList<ByteArray>,
+    val promotionKey: ByteArray,
+    val leftMostChildPageId: ByteArray
+)

@@ -1,32 +1,41 @@
 package index.btree.node
 
-import index.btree.logger
-import index.btree.node.inMemory.InternalNode
-import java.util.Collections
+import config.PageConfig
+import index.serializer.BaseKeySerializer
+import index.serializer.ValueSerializer
+import storageEngine.exception.SlottedPageException
+import storageEngine.page.SlottedPage
+import storageEngine.util.PageType
+import java.nio.ByteBuffer
 import kotlin.math.floor
 
-/**
- * @param isLeaf: leaf 노드 여부
- * @param keys: 노드의 키
- * @param maxKeys: 노드가 가질 수 있는 최대 key 개수
-* */
-sealed class AbstractNode(
-    val isLeaf: Boolean,
-    internal val keys: MutableList<ByteArray>,
-    private val maxKeys: Int
-){
+abstract class Node<K, V>(
+    pageConfig: PageConfig,
+    pageId: Long = -1,
+    data: ByteBuffer,
+    pageType: PageType,
+    protected val keySerializer: BaseKeySerializer<K>,
+    protected val valueSerializer: ValueSerializer<V>
+): SlottedPage(pageConfig, pageId, data, pageType) {
 
     val keyView: List<ByteArray>
-        get() = Collections.unmodifiableList(keys)
+        get() = object : AbstractList<ByteArray>() {
+            override val size: Int
+                get() = recordCount
+
+            override fun get(index: Int): ByteArray {
+                return getData(index).first
+            }
+        }
 
     val isOverflow: Boolean
-        get() = keys.size > maxKeys
+        get() = recordCount > pageConfig.maxKeys
 
     val isUnderflow: Boolean
-        get() = keys.size < maxKeys / 2
+        get() = recordCount < pageConfig.maxKeys / 2
 
     val hasSurplusKey: Boolean
-        get() = keys.size > maxKeys / 2
+        get() = recordCount > pageConfig.maxKeys / 2
 
     /**
      * Find value or child pointer using key.
@@ -44,27 +53,23 @@ sealed class AbstractNode(
      * @param exactIndex Use this parameter to get the exact node from the leaf node.
      * @return Search result. Pair of index, isExist.
      * */
-    fun search(key: ByteArray, comparator: Comparator<ByteArray>, exactIndex: Boolean=false): Pair<Int, Boolean>{
-        val idx = keys.binarySearch(key, comparator)
-        logger.info { "Binary search result: $idx keyLength: ${keys.size}" }
+    fun search(key: ByteArray, exactIndex: Boolean=false): Pair<Int, Boolean>{
+        val idx = binarySearch(key)
+        index.btree.logger.info { "Binary search result: $idx keyLength: $recordCount" }
         return if(idx >= 0) {if(exactIndex) idx to true else idx+1 to true} else -(idx + 1) to false
     }
 
-    fun isLeft(targetNode: AbstractNode, parentNode: InternalNode, keyIdx: Int): Boolean{
+    fun isLeft(targetPageId: Long, parentNode: InternalNode<K>, keyIdx: Int): Boolean{
         return try {
-            val rightChild = parentNode.moveToChild(keyIdx+1)
-            targetNode === rightChild
-        } catch (_: IndexOutOfBoundsException){
-            val leftChild = parentNode.moveToChild(keyIdx-1)
-            targetNode !== leftChild
+            val rightChildId = parentNode.childPageId(keyIdx + 1)
+            targetPageId == rightChildId
+        } catch (_: SlottedPageException.SlotOutOfBoundException){
+            val leftChildId = parentNode.childPageId(keyIdx-1)
+            targetPageId != leftChildId
         }
     }
 
-    fun removeLastKey(): ByteArray = keys.removeLast()
-
-    fun removeFirstKey(): ByteArray = keys.removeFirst()
-
-    abstract fun redistribute(targetNode: AbstractNode, parentNode: InternalNode, keyIdx: Int)
+    abstract fun redistribute(targetNode: index.btree.node.inMemory.Node, parentNode: InternalNode<K>, keyIdx: Int)
 
     /**
      * Merge the right node into the left node.
@@ -83,10 +88,10 @@ sealed class AbstractNode(
      * @param parentNode My parent node. It should be the internal node.
      * @param keyIdx Index which I used to get to the leaf node.
      * */
-    abstract fun merge(targetNode: AbstractNode, parentNode: InternalNode, keyIdx: Int)
+    abstract fun merge(targetNode: Node<K, V>, parentNode: InternalNode<K>, keyIdx: Int)
 
-    fun promotionKeyIdx() = floor(keys.size.toDouble() / 2.0).toInt()
-    fun promotionKey() = keys[promotionKeyIdx()]
+    fun promotionKeyIdx() = floor(recordCount.toDouble() / 2.0).toInt()
+    fun promotionKey() = getData(promotionKeyIdx()).first
 
 
     /**
@@ -97,7 +102,11 @@ sealed class AbstractNode(
      *
      * @return Triple<separationKey, leftNode, rightNode>
      * */
-    internal fun orderNode(targetNode: AbstractNode, parentNode: InternalNode, keyIdx: Int): Triple<Int, AbstractNode, AbstractNode> = if(isLeft(targetNode, parentNode, keyIdx)) {
+    internal fun orderNode(
+        targetNode: Node<K, V>,
+        parentNode: InternalNode<K>,
+        keyIdx: Int
+    ): Triple<Int, Node<K, V>, Node<K, V>> = if(isLeft(targetNode.pageId, parentNode, keyIdx)) {
         Triple(keyIdx, this, targetNode)
     } else {
         Triple(keyIdx-1, targetNode, this)
