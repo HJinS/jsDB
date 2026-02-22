@@ -9,13 +9,12 @@ import storageEngine.util.PageType
 import java.nio.ByteBuffer
 import kotlin.math.floor
 
-abstract class Node<K, V>(
+abstract class Node<K>(
     pageConfig: PageConfig,
     pageId: Long = -1,
     data: ByteBuffer,
     pageType: PageType,
-    protected val keySerializer: BaseKeySerializer<K>,
-    protected val valueSerializer: ValueSerializer<V>
+    protected val keySerializer: BaseKeySerializer<K>
 ): SlottedPage(pageConfig, pageId, data, pageType) {
 
     val keyView: List<ByteArray>
@@ -69,7 +68,7 @@ abstract class Node<K, V>(
         }
     }
 
-    abstract fun redistribute(targetNode: index.btree.node.inMemory.Node, parentNode: InternalNode<K>, keyIdx: Int)
+    abstract fun redistribute(targetNode: Node<K>, parentNode: InternalNode<K>, keyIdx: Int)
 
     /**
      * Merge the right node into the left node.
@@ -103,10 +102,10 @@ abstract class Node<K, V>(
      * @return Triple<separationKey, leftNode, rightNode>
      * */
     internal fun orderNode(
-        targetNode: Node<K, V>,
+        targetNode: Node<K>,
         parentNode: InternalNode<K>,
         keyIdx: Int
-    ): Triple<Int, Node<K, V>, Node<K, V>> = if(isLeft(targetNode.pageId, parentNode, keyIdx)) {
+    ): Triple<Int, Node<K>, Node<K>> = if(isLeft(targetNode.pageId, parentNode, keyIdx)) {
         Triple(keyIdx, this, targetNode)
     } else {
         Triple(keyIdx-1, targetNode, this)

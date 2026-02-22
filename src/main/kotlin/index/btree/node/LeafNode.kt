@@ -1,23 +1,21 @@
 package index.btree.node
 
 import config.PageConfig
-import index.btree.logger
 import index.serializer.BaseKeySerializer
-import index.serializer.ValueSerializer
+import index.serializer.PageIDSerializer
 import index.util.NodeSplitData
 import storageEngine.util.PageType
 import java.nio.ByteBuffer
-import java.util.Collections
 
 
-class LeafNode<K, V>(
+class LeafNode<K>(
     pageConfig: PageConfig,
     pageId: Long = -1,
     data: ByteBuffer,
     pageType: PageType = PageType.LEAF_NODE,
     keySerializer: BaseKeySerializer<K>,
-    valueSerializer: ValueSerializer<V>
-): Node<K, V>(pageConfig, pageId, data, pageType, keySerializer, valueSerializer){
+    private val valueSerializer: PageIDSerializer = PageIDSerializer()
+): Node<K>(pageConfig, pageId, data, pageType, keySerializer){
 
     val next: Long
         get() = rightSiblingPageId
@@ -85,7 +83,7 @@ class LeafNode<K, V>(
     /**
      * Update the linked list of the leaf node.
      * */
-    fun linkNewSiblingNode(siblingNode: LeafNode<K, V>){
+    fun linkNewSiblingNode(siblingNode: LeafNode<K>){
         val nextTemp = rightSiblingPageId
         siblingNode.rightSiblingPageId = nextTemp
         siblingNode.leftSiblingPageId = this.pageId
@@ -116,25 +114,20 @@ class LeafNode<K, V>(
      * @param parentNode Parent node to update new separation key.
      * @param keyIdx Separation key.
      * */
-    override fun redistribute(targetNode: Node, parentNode: InternalNode, keyIdx: Int){
-        val node: LeafNode = targetNode as LeafNode
-        logger.info { "Redistribute: ${node.keys} ${node._values}" }
+    override fun redistribute(targetNode: Node<K>, parentNode: InternalNode<K>, keyIdx: Int){
+        val node: LeafNode<K> = targetNode as LeafNode<K>
         // borrow from right sibling
-        if(isLeft(node, parentNode, keyIdx)){
-            logger.info { "Redistribute: leftNode ${this._values} rightNode ${node._values}" }
-            removeLastKey()
-            val key = node.removeFirstKey()
-            val value = node.removeFirstValue()
-            keys.addLast(key)
-            _values.addLast(value)
-            parentNode.keys[keyIdx] = node.keys[0]
+        if(isLeft(node.pageId, parentNode, keyIdx)){
+            val (key, value) = node.deleteData(0)
+            val insertSlotId = search(key).first
+            insertData(insertSlotId, key, value)
+            parentNode.updateKey(keyIdx, key)
         } else{
-            logger.info { "Redistribute: leftNode ${node._values} rightNode ${this._values}" }
-            val key = node.removeLastKey()
-            val value = node.removeLastValue()
-            keys.addFirst(key)
-            _values.addFirst(value)
-            parentNode.keys[keyIdx-1] = key
+            val recordCount = node.recordCount
+            val (key, value) = node.deleteData(recordCount - 1)
+            val insertSlotId = search(key).first
+            insertData(insertSlotId, key, value)
+            parentNode.updateKey(keyIdx-1, key)
         }
     }
 

@@ -16,8 +16,8 @@ class InternalNode<K>(
     data: ByteBuffer,
     pageType: PageType = PageType.INTERNAL_NODE,
     keySerializer: BaseKeySerializer<K>,
-    valueSerializer: ValueSerializer<Long> = PageIDSerializer()
-): Node<K, Long>(pageConfig, pageId, data, pageType, keySerializer, valueSerializer) {
+    private val valueSerializer: PageIDSerializer = PageIDSerializer()
+): Node<K>(pageConfig, pageId, data, pageType, keySerializer) {
 
     val childCount: Int
         get() = recordCount + 1
@@ -27,6 +27,16 @@ class InternalNode<K>(
     fun insert(idx: Int, key: ByteArray, childNode: Node) {
         children.add(idx+1, childNode)
         keys.add(idx, key)
+    }
+
+    fun updateValue(slotId: Int, newChildPageId: Long) {
+        val (key, _) = getData(slotId)
+        updateData(slotId, key, valueSerializer.serialize(newChildPageId))
+    }
+
+    fun updateKey(slotId: Int, key: ByteArray){
+        val (_, value) = getData(slotId)
+        updateData(slotId, key, value)
     }
 
     /**
@@ -90,25 +100,28 @@ class InternalNode<K>(
      * @param parentNode Parent node to update new separation key.
      * @param keyIdx Separation key.
      * */
-    override fun redistribute(targetNode: Node, parentNode: InternalNode, keyIdx: Int){
-        val node: InternalNode = targetNode as InternalNode
+    override fun redistribute(targetNode: Node<K>, parentNode: InternalNode<K>, keyIdx: Int){
+        val node: InternalNode<K> = targetNode as InternalNode<K>
 
         // Borrow from right sibling
-        if(isLeft(targetNode, parentNode, keyIdx)){
+        if(isLeft(targetNode.pageId, parentNode, keyIdx)){
             // Delete separation key from parent node.
-            val removedParentKey = parentNode.keys.removeAt(keyIdx)
-            // Add the separation key as the biggest key to me.
-            keys.addLast(removedParentKey)
+            val removedParentKey = parentNode.getData(0).first
 
+//            val removedParentKey = parentNode.keys.removeAt(keyIdx)
+            // Add the separation key as the biggest key to me.
+//            keys.addLast(removedParentKey)
+            val (siblingKey, siblingValue) = node.getData(0)
+            val recordCount = recordCount
+            insertData(recordCount+1, removedParentKey, siblingValue)
             // Delete the smallest key from right sibling.
-            val siblingKey = node.removeFirstKey()
+//            val siblingKey = node.removeFirstKey()
             // Insert the smallest key to parent node as new separation key.
             parentNode.keys.add(keyIdx, siblingKey)
 
             // Delete the smallest child pointer from the right sibling.
             val siblingChild = node.removeFirstChild()
             // Insert the pointer to me as the biggest one.
-            children.addLast(siblingChild)
         } else{
             // Delete separation key from parent node.
             // In this case, the separation key should be keyIdx - 1
