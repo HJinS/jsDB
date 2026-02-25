@@ -90,6 +90,24 @@ class LeafNode<K>(
         rightSiblingPageId = siblingNode.pageId
     }
 
+    override fun deleteAllData(): Pair<List<ByteArray>, List<ByteArray>>{
+        val endSlotId = recordCount - 1
+        val resultKey = MutableList(recordCount){ByteArray(0x00)}
+        val resultValue = MutableList(recordCount){ByteArray(0x00)}
+        for(slotId in 0 .. endSlotId){
+            val (key, value) = deleteData(slotId)
+            resultKey[slotId] = key
+            resultValue[slotId] = value
+        }
+        return resultKey to resultValue
+    }
+
+    override fun appendAllData(keys: List<ByteArray>, values: List<ByteArray>) {
+        for(slotId in keys.indices){
+            insertData(recordCount + slotId, keys[slotId], values[slotId])
+        }
+    }
+
     /**
      * ### Leaf Redistribution
      * Do not rotate keys.
@@ -115,16 +133,15 @@ class LeafNode<K>(
      * @param keyIdx Separation key.
      * */
     override fun redistribute(targetNode: Node<K>, parentNode: InternalNode<K>, keyIdx: Int){
-        val node: LeafNode<K> = targetNode as LeafNode<K>
         // borrow from right sibling
-        if(isLeft(node.pageId, parentNode, keyIdx)){
-            val (key, value) = node.deleteData(0)
+        if(isLeft(targetNode.pageId, parentNode, keyIdx)){
+            val (key, value) = targetNode.deleteData(0)
             val insertSlotId = search(key).first
             insertData(insertSlotId, key, value)
             parentNode.updateKey(keyIdx, key)
         } else{
-            val recordCount = node.recordCount
-            val (key, value) = node.deleteData(recordCount - 1)
+            val recordCount = targetNode.recordCount
+            val (key, value) = targetNode.deleteData(recordCount - 1)
             val insertSlotId = search(key).first
             insertData(insertSlotId, key, value)
             parentNode.updateKey(keyIdx-1, key)
@@ -136,25 +153,19 @@ class LeafNode<K>(
      *
      * @see Node.merge
      * */
-    override fun merge(targetNode: Node, parentNode: InternalNode, keyIdx: Int) {
-        val node: LeafNode = targetNode as LeafNode
-        val leftNode: LeafNode
-        val rightNode: LeafNode
-        logger.info { "Merge: ${node.keys} ${node._values}" }
-        orderNode(node, parentNode, keyIdx).let {
+    override fun merge(targetNode: Node<K>, parentNode: InternalNode<K>, keyIdx: Int) {
+        orderNode(targetNode, parentNode, keyIdx).let {
             (separationKey, lNode, rNode) ->
-            leftNode = lNode as LeafNode
-            rightNode = rNode as LeafNode
-            logger.info { "Merge: leftNode ${leftNode._values} rightNode ${rightNode._values}" }
-            val extractedKey = rightNode.keys
-            val newNextNode = rightNode.next
-            leftNode.keys.addAll(extractedKey)
-            leftNode._values.addAll(rightNode.values)
-            parentNode.keys.removeAt(separationKey)
-            parentNode.removeChildrenAt(separationKey+1)
 
-            leftNode._next = newNextNode
-            newNextNode?._prev = leftNode
+            val leftNode = lNode as LeafNode<K>
+            val rightNode = rNode as LeafNode<K>
+            val (rKey, rValue) = rightNode.deleteAllData()
+            logger.info { "Merge Internal: leftNode: ${leftNode.hashCode()} rightNode: ${rightNode.hashCode()}" }
+            lNode.appendAllData(rKey, rValue)
+
+            val newRightSiblingPageId = rNode.rightSiblingPageId
+            lNode.rightSiblingPageId = newRightSiblingPageId
+            parentNode.deleteData(separationKey)
         }
     }
 }

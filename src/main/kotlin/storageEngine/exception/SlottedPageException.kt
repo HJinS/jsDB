@@ -10,4 +10,8 @@ open class SlottedPageException(message: String?, cause: Throwable?): StorageEng
     class SlotOutOfBoundException(
         slotId: Int, pageId: Long, pageType: PageType, cause: Throwable?
     ): SlottedPageException("No more data. slotID: $slotId pageID: $pageId pageType: $pageType", cause)
+
+    class SlotShiftException(
+        pageId: Long, pageType: PageType, cause: Throwable?
+    ): SlottedPageException("Invalid shift count. pageID: $pageId pageType: $pageType", cause)
 }

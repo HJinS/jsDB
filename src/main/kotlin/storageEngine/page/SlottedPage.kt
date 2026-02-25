@@ -124,14 +124,17 @@ open class SlottedPage(
     private fun insertSlot(index: Int, offset: Short, length: Short){
         val writeOnlyView = data.duplicate()
         val readOnlyView = data.duplicate()
-        readOnlyView.position(index)
-        readOnlyView.limit(freeSpaceStart)
+        val slotLocation = HEADER_SIZE + index * SLOT_SIZE
+        if(index < recordCount){
+            readOnlyView.position(slotLocation)
+            readOnlyView.limit(freeSpaceStart)
 
-        writeOnlyView.position(index + SLOT_SIZE)
-        writeOnlyView.put(readOnlyView)
-        writeOnlyView.clear()
-        writeOnlyView.putShort(index, offset)
-        writeOnlyView.putShort(index + 2, length)
+            writeOnlyView.position(slotLocation + SLOT_SIZE)
+            writeOnlyView.put(readOnlyView)
+            writeOnlyView.clear()
+        }
+        writeOnlyView.putShort(slotLocation, offset)
+        writeOnlyView.putShort(slotLocation + 2, length)
     }
 
     @OptIn(ExperimentalStdlibApi::class)
@@ -216,6 +219,34 @@ open class SlottedPage(
             }
         }
         return -(low + 1)
+    }
+
+    fun shiftSlot(src: Int, srcLength: Int, shiftLength: Int): Int{
+        try{
+            if(shiftLength == 0) return -1
+            else if(shiftLength > 0 ){
+                val end = src + srcLength
+                for (i in end - 1 downTo src) {
+                    val srcOffset = HEADER_SIZE + (i * SLOT_SIZE)
+                    val destOffset = srcOffset + SLOT_SIZE * shiftLength
+
+                    val slotData = data.getInt(srcOffset)
+                    data.putInt(destOffset, slotData)
+                }
+            } else {
+                val end = src + srcLength
+                for(i in src until end){
+                    val srcOffset = HEADER_SIZE + (i * SLOT_SIZE)
+                    val destOffset = srcOffset + SLOT_SIZE * shiftLength
+
+                    val slotData = data.getInt(srcOffset)
+                    data.putInt(destOffset, slotData)
+                }
+            }
+        } catch (e: IndexOutOfBoundsException){
+            throw SlottedPageException.SlotShiftException(pageId, pageType, e)
+        }
+        return src
     }
 
     @OptIn(ExperimentalStdlibApi::class)

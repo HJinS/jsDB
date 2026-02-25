@@ -148,6 +148,10 @@ class BTree<K, V> (
                 }
                 prevSibling != null -> currentNode.merge(prevSibling, parentNode, keyIdx)
                 nextSibling != null -> currentNode.merge(nextSibling, parentNode, keyIdx)
+                /*
+                * merge 후에 right node 삭제 처리
+                * leaf node의 경우 sibling 재연결 처리 필요
+                * */
             }
 
             currentTrace = traceNode.pop()

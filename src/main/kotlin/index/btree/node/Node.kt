@@ -87,7 +87,11 @@ abstract class Node<K>(
      * @param parentNode My parent node. It should be the internal node.
      * @param keyIdx Index which I used to get to the leaf node.
      * */
-    abstract fun merge(targetNode: Node<K, V>, parentNode: InternalNode<K>, keyIdx: Int)
+    abstract fun merge(targetNode: Node<K>, parentNode: InternalNode<K>, keyIdx: Int)
+
+    abstract fun deleteAllData(): Pair<List<ByteArray>, List<ByteArray>>
+
+    abstract fun appendAllData(keys: List<ByteArray>, values: List<ByteArray>)
 
     fun promotionKeyIdx() = floor(recordCount.toDouble() / 2.0).toInt()
     fun promotionKey() = getData(promotionKeyIdx()).first

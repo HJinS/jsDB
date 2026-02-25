@@ -1,10 +1,8 @@
 package index.btree.node
 
 import config.PageConfig
-import index.btree.logger
 import index.serializer.BaseKeySerializer
 import index.serializer.PageIDSerializer
-import index.serializer.ValueSerializer
 import index.util.NodeSplitData
 import storageEngine.util.PageType
 import java.nio.ByteBuffer
@@ -19,15 +17,7 @@ class InternalNode<K>(
     private val valueSerializer: PageIDSerializer = PageIDSerializer()
 ): Node<K>(pageConfig, pageId, data, pageType, keySerializer) {
 
-    val childCount: Int
-        get() = recordCount + 1
-
     fun childPageId(index: Int): Long = if(index == 0) leftMostChildPageId else valueSerializer.deserialize(getData(index).second)
-
-    fun insert(idx: Int, key: ByteArray, childNode: Node) {
-        children.add(idx+1, childNode)
-        keys.add(idx, key)
-    }
 
     fun updateValue(slotId: Int, newChildPageId: Long) {
         val (key, _) = getData(slotId)
@@ -59,6 +49,25 @@ class InternalNode<K>(
         return NodeSplitData(
             splitKeyList, splitChildrenId, promotionKey, leftMostChildPageId
         )
+    }
+
+    override fun deleteAllData(): Pair<MutableList<ByteArray>, MutableList<ByteArray>>{
+        val endSlotId = recordCount - 1
+        val resultKey = MutableList(recordCount){ByteArray(0x00)}
+        val resultValue = MutableList(recordCount+1){ByteArray(0x00)}
+        resultValue[0] = valueSerializer.serialize(leftMostChildPageId)
+        for(slotId in 0 .. endSlotId){
+            val (key, value) = deleteData(slotId)
+            resultKey[slotId] = key
+            resultValue[slotId+1] = value
+        }
+        return resultKey to resultValue
+    }
+
+    override fun appendAllData(keys: List<ByteArray>, values: List<ByteArray>) {
+        for(slotId in keys.indices){
+            insertData(recordCount + slotId, keys[slotId], values[slotId])
+        }
     }
 
     /**
@@ -101,43 +110,23 @@ class InternalNode<K>(
      * @param keyIdx Separation key.
      * */
     override fun redistribute(targetNode: Node<K>, parentNode: InternalNode<K>, keyIdx: Int){
-        val node: InternalNode<K> = targetNode as InternalNode<K>
-
         // Borrow from right sibling
         if(isLeft(targetNode.pageId, parentNode, keyIdx)){
-            // Delete separation key from parent node.
-            val removedParentKey = parentNode.getData(0).first
-
-//            val removedParentKey = parentNode.keys.removeAt(keyIdx)
-            // Add the separation key as the biggest key to me.
-//            keys.addLast(removedParentKey)
-            val (siblingKey, siblingValue) = node.getData(0)
-            val recordCount = recordCount
-            insertData(recordCount+1, removedParentKey, siblingValue)
-            // Delete the smallest key from right sibling.
-//            val siblingKey = node.removeFirstKey()
-            // Insert the smallest key to parent node as new separation key.
-            parentNode.keys.add(keyIdx, siblingKey)
-
-            // Delete the smallest child pointer from the right sibling.
-            val siblingChild = node.removeFirstChild()
-            // Insert the pointer to me as the biggest one.
+            val removedParentKey = parentNode.getData(keyIdx).first
+            val (siblingKey, siblingValue) = targetNode.deleteData(0)
+            val siblingLeftMostChild = targetNode.leftMostChildPageId
+            insertData(recordCount, removedParentKey, valueSerializer.serialize(siblingLeftMostChild))
+            parentNode.updateKey(keyIdx, siblingKey)
+            targetNode.shiftSlot(0, targetNode.recordCount, -1)
+            targetNode.leftMostChildPageId = valueSerializer.deserialize(siblingValue)
         } else{
-            // Delete separation key from parent node.
-            // In this case, the separation key should be keyIdx - 1
-            val removedParentKey = parentNode.keys.removeAt(keyIdx-1)
-            // Add the separation key as the smallest key to me.
-            keys.addFirst(removedParentKey)
-
-            // Delete the biggest key from left sibling.
-            val siblingKey = node.keys.removeLast()
-            // Insert the biggest key to parent node as new separation key.
-            parentNode.keys.add(keyIdx-1, siblingKey)
-
-            // Delete the biggest child pointer from the left sibling.
-            val siblingChild = node.removeLastChild()
-            // Insert the pointer to me as the smallest one.
-            children.addFirst(siblingChild)
+            shiftSlot(0, recordCount, 1)
+            val leftMostChild = valueSerializer.serialize(leftMostChildPageId)
+            val removedParentKey = parentNode.getData(keyIdx-1).first
+            val (siblingKey, siblingValue) = targetNode.deleteData(targetNode.recordCount - 1)
+            insertData(0, removedParentKey, leftMostChild)
+            leftMostChildPageId = valueSerializer.deserialize(siblingValue)
+            parentNode.updateKey(keyIdx-1, siblingKey)
         }
     }
 
@@ -146,20 +135,16 @@ class InternalNode<K>(
      *
      * @see Node.merge
      * */
-    override fun merge(targetNode: Node, parentNode: InternalNode, keyIdx: Int) {
-        val leftNode: InternalNode
-        val rightNode: InternalNode
+    override fun merge(targetNode: Node<K>, parentNode: InternalNode<K>, keyIdx: Int) {
         orderNode(targetNode, parentNode, keyIdx).let {
-            (separationKey, lNode, rNode) ->
-            leftNode = lNode as InternalNode
-            rightNode = rNode as InternalNode
-            val extractedKey = rightNode.keys
+            (separationKeyIdx, lNode, rNode) ->
+            val separationKey = parentNode.deleteData(separationKeyIdx).first
+            val leftNode = lNode as InternalNode<K>
+            val rightNode = rNode as InternalNode<K>
+            val (rKey, rValue) = rightNode.deleteAllData()
             logger.info { "Merge Internal: leftNode: ${leftNode.hashCode()} rightNode: ${rightNode.hashCode()}" }
-            leftNode.keys.addLast(parentNode.keys[separationKey])
-            leftNode.keys.addAll(extractedKey)
-            leftNode.children.addAll(rightNode.children)
-            parentNode.keys.removeAt(separationKey)
-            parentNode.children.removeAt(separationKey+1)
+            rKey.addFirst(separationKey)
+            lNode.appendAllData(rKey, rValue)
         }
     }
 }
