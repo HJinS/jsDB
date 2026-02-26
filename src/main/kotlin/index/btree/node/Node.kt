@@ -1,8 +1,7 @@
 package index.btree.node
 
-import config.PageConfig
+import config.IndexConfig
 import index.serializer.BaseKeySerializer
-import index.serializer.ValueSerializer
 import storageEngine.exception.SlottedPageException
 import storageEngine.page.SlottedPage
 import storageEngine.util.PageType
@@ -10,12 +9,12 @@ import java.nio.ByteBuffer
 import kotlin.math.floor
 
 abstract class Node<K>(
-    pageConfig: PageConfig,
+    indexConfig: IndexConfig,
     pageId: Long = -1,
     data: ByteBuffer,
     pageType: PageType,
     protected val keySerializer: BaseKeySerializer<K>
-): SlottedPage(pageConfig, pageId, data, pageType) {
+): SlottedPage(indexConfig, pageId, data, pageType) {
 
     val keyView: List<ByteArray>
         get() = object : AbstractList<ByteArray>() {
@@ -28,13 +27,13 @@ abstract class Node<K>(
         }
 
     val isOverflow: Boolean
-        get() = recordCount > pageConfig.maxKeys
+        get() = recordCount > indexConfig.maxKeys
 
     val isUnderflow: Boolean
-        get() = recordCount < pageConfig.maxKeys / 2
+        get() = recordCount < indexConfig.maxKeys / 2
 
     val hasSurplusKey: Boolean
-        get() = recordCount > pageConfig.maxKeys / 2
+        get() = recordCount > indexConfig.maxKeys / 2
 
     /**
      * Find value or child pointer using key.
@@ -54,7 +53,7 @@ abstract class Node<K>(
      * */
     fun search(key: ByteArray, exactIndex: Boolean=false): Pair<Int, Boolean>{
         val idx = binarySearch(key)
-        index.btree.logger.info { "Binary search result: $idx keyLength: $recordCount" }
+        index.btree.inMemory.logger.info { "Binary search result: $idx keyLength: $recordCount" }
         return if(idx >= 0) {if(exactIndex) idx to true else idx+1 to true} else -(idx + 1) to false
     }
 

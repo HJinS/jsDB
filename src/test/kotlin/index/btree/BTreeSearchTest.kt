@@ -1,5 +1,6 @@
 package index.btree
 
+import index.btree.inMemory.BTree
 import index.comparator.MultiColumnKeyComparator
 import index.serializer.LocalDateSerializer
 import index.serializer.MultiColumnKeySerializer

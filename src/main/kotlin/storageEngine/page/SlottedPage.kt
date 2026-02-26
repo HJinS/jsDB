@@ -1,6 +1,6 @@
 package storageEngine.page
 
-import config.PageConfig
+import config.IndexConfig
 import index.util.decodeVarInt
 import index.util.encodeVarInt
 import storageEngine.exception.SlottedPageException
@@ -79,11 +79,11 @@ import kotlin.text.toHexString
  * ```
  * */
 open class SlottedPage(
-    pageConfig: PageConfig,
+    indexConfig: IndexConfig,
     pageId: Long = -1,
     data: ByteBuffer,
     pageType: PageType = PageType.EMPTY
-): Page(pageConfig, data, pageId, pageType){
+): Page(indexConfig, data, pageId, pageType){
 
 
     /**
@@ -321,7 +321,7 @@ open class SlottedPage(
         val readOnlyView = data.duplicate()
         val writeOnlyView = data.duplicate()
 
-        var writePointer = pageConfig.pageSize - 1
+        var writePointer = indexConfig.pageSize - 1
         slotArrayStartBytes = HEADER_SIZE
         // iterate 하면서 write pointer는 끝에서 사이즈를 통해 점차 내려감
         // read pointer는 slot array 데이터의 offset을 사용

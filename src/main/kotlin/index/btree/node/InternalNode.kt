@@ -1,6 +1,6 @@
 package index.btree.node
 
-import config.PageConfig
+import config.IndexConfig
 import index.serializer.BaseKeySerializer
 import index.serializer.PageIDSerializer
 import index.util.NodeSplitData
@@ -9,13 +9,13 @@ import java.nio.ByteBuffer
 
 
 class InternalNode<K>(
-    pageConfig: PageConfig,
+    indexConfig: IndexConfig,
     pageId: Long = -1,
     data: ByteBuffer,
     pageType: PageType = PageType.INTERNAL_NODE,
     keySerializer: BaseKeySerializer<K>,
     private val valueSerializer: PageIDSerializer = PageIDSerializer()
-): Node<K>(pageConfig, pageId, data, pageType, keySerializer) {
+): Node<K>(indexConfig, pageId, data, pageType, keySerializer) {
 
     fun childPageId(index: Int): Long = if(index == 0) leftMostChildPageId else valueSerializer.deserialize(getData(index).second)
 

@@ -1,6 +1,6 @@
 package storage
 
-import config.PageConfig
+import config.IndexConfig
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.comparables.shouldBeLessThan
@@ -88,6 +88,6 @@ class PageTest:BehaviorSpec({
     }
 }){
     companion object{
-        val page = Page(pageConfig = PageConfig(), pageId=0)
+        val page = Page(indexConfig = IndexConfig, pageId=0)
     }
 }

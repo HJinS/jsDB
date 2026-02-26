@@ -1,6 +1,6 @@
 package storageEngine.page
 
-import config.PageConfig
+import config.IndexConfig
 import mu.KotlinLogging
 import storageEngine.util.PageHeaderOffset
 import storageEngine.util.PageType
@@ -8,7 +8,7 @@ import java.nio.ByteBuffer
 
 
 open class Page(
-    val pageConfig: PageConfig,
+    val indexConfig: IndexConfig,
     internal val data: ByteBuffer,
     internal val pageId: Long = -1,
     internal val pageType: PageType = PageType.EMPTY,
@@ -21,7 +21,7 @@ open class Page(
         data.put(PageHeaderOffset.RESERVED_ONE.offset, 0)
         data.putShort(PageHeaderOffset.RECORD_COUNT.offset, 0)
         data.putShort(PageHeaderOffset.FREE_SPACE_START.offset, HEADER_SIZE.toShort())
-        data.putShort(PageHeaderOffset.FREE_SPACE_END.offset, (pageConfig.pageSize-1).toShort())
+        data.putShort(PageHeaderOffset.FREE_SPACE_END.offset, (indexConfig.pageSize-1).toShort())
         data.putShort(PageHeaderOffset.FREE_SLOT_HEAD.offset, (-1).toShort())
         data.putShort(PageHeaderOffset.RESERVED_TWO.offset, 0)
         data.putLong(PageHeaderOffset.PARENT_PAGE_ID.offset, 0)

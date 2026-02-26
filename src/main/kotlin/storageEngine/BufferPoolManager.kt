@@ -1,4 +1,6 @@
-import config.PageConfig
+package storageEngine
+
+import config.IndexConfig
 import storageEngine.DiskManager
 import storageEngine.lru.MidpointLRUPolicy
 import storageEngine.page.Frame
@@ -41,10 +43,10 @@ import java.util.concurrent.locks.ReentrantLock
 class BufferPoolManager(
     private val diskManager: DiskManager,
     private val replacer: MidpointLRUPolicy,
-    pageConfig: PageConfig,
+    indexConfig: IndexConfig,
     poolSize: Int
 ){
-    private val frames: Array<Frame> = Array(poolSize) { Frame(it, null, pageConfig.pageSize) }
+    private val frames: Array<Frame> = Array(poolSize) { Frame(it, null, indexConfig.pageSize) }
     private val pageTable = HashMap<Long, Int>()
     private val freeList = ArrayDeque<Int>()
     private val globalLatch = ReentrantLock()
@@ -83,6 +85,7 @@ class BufferPoolManager(
                 replacer.pin(freeFrameId)
                 pageTable[pageId] = freeFrameId
                 needIO = true
+                // writeLock을 여기서 미리 잡아둠. 밑에서 IO 작업 진행 필요
                 frame.latch.writeLock().lock()
             }
         } finally {
@@ -99,12 +102,20 @@ class BufferPoolManager(
                 frame.latch.writeLock().unlock()
             }
         } else {
+            // Case A (이미 존재)의 경우:
+            // 만약 I/O 중인 프레임을 만났다면 데이터가 유효해질 때까지 기다려야 함
+            // ReadLock을 잠깐 잡았다 놓음으로써 WriteLock(I/O)이 끝날 때까지 대기 효과
             frame.latch.readLock().lock()
             frame.latch.readLock().unlock()
         }
         return PageHandle(frame, this)
     }
 
+    /**
+     * 1. 새로운 PageID 할당(pageID 관리는 보통 disk manager 가 관리함)
+     * 2. 빈 Frame 탐색 -> 빈 프레임이 없으면 eviction 실행 후 공간 확보(disk flush 필요.)
+     * 3. pageTable 업데이트, page pin, dirty 마킹, 페이지 초기화(헤더 등)
+     * */
     fun newPage(){
 
     }

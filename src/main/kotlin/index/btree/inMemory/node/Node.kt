@@ -1,6 +1,6 @@
-package index.btree.node.inMemory
+package index.btree.inMemory.node
 
-import index.btree.logger
+import index.btree.inMemory.logger
 import java.util.Collections
 import kotlin.math.floor
 

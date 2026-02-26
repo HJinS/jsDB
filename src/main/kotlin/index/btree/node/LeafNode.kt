@@ -1,21 +1,19 @@
 package index.btree.node
 
-import config.PageConfig
+import config.IndexConfig
 import index.serializer.BaseKeySerializer
-import index.serializer.PageIDSerializer
 import index.util.NodeSplitData
 import storageEngine.util.PageType
 import java.nio.ByteBuffer
 
 
 class LeafNode<K>(
-    pageConfig: PageConfig,
+    indexConfig: IndexConfig,
     pageId: Long = -1,
     data: ByteBuffer,
     pageType: PageType = PageType.LEAF_NODE,
     keySerializer: BaseKeySerializer<K>,
-    private val valueSerializer: PageIDSerializer = PageIDSerializer()
-): Node<K>(pageConfig, pageId, data, pageType, keySerializer){
+): Node<K>(indexConfig, pageId, data, pageType, keySerializer){
 
     val next: Long
         get() = rightSiblingPageId
@@ -29,7 +27,7 @@ class LeafNode<K>(
     val valueCount: Int
         get() = recordCount
 
-    fun insert(slotId: Int, key: ByteArray, data: ByteArray, keySerializer: BaseKeySerializer<K>){
+    fun insert(slotId: Int, key: ByteArray, data: ByteArray){
         insertData(slotId, key, data)
     }
 

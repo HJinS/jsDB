@@ -1,15 +1,14 @@
-package index.btree
+package index.btree.inMemory
 
-import config.IndexConfig
-import index.btree.node.InternalNode
-import index.btree.node.LeafNode
-import index.btree.node.Node
+import index.btree.inMemory.node.InternalNode
+import index.btree.inMemory.node.LeafNode
+import index.btree.inMemory.node.Node
 import index.comparator.KeyComparator
 import index.exception.BTreeException
 import index.serializer.KeySerializer
 import index.serializer.ValueSerializer
+import index.util.MAX_KEYS
 import mu.KotlinLogging
-import storageEngine.BufferPoolManager
 import java.util.EmptyStackException
 import java.util.Stack
 import kotlin.collections.plusAssign
@@ -27,17 +26,18 @@ val logger = KotlinLogging.logger {}
  * @property keySerializer Serializer to serialize keys to ByteArray, comparable format.
  * @property valueSerializer Serializer to serialize values to ByteArray. IT's different form serializing keys.
  * @property keyComparator Comparator for comparing keys.
- * @property indexConfig Index configuration.
+ * @property maxKeys MaxKeys in one node except root.
+ * @property allowDuplicate Flag to allow duplicate or not.
  * @constructor Create empty B tree.
  */
 class BTree<K, V> (
     val name: String,
     val targetTable: String,
-    val bufferPoolManager: BufferPoolManager,
     private val keySerializer: KeySerializer<K>,
     private val valueSerializer: ValueSerializer<V>,
     private val keyComparator: KeyComparator,
-    private val indexConfig: IndexConfig = IndexConfig
+    private val maxKeys: Int = MAX_KEYS,
+    private val allowDuplicate: Boolean = true
 ){
     private var root: Node? = null
     private val comparator = Comparator<ByteArray> {
@@ -74,8 +74,7 @@ class BTree<K, V> (
             traceNode.clear()
             // check overflow and do split
         } else {
-            bufferPoolManager.newPage()
-            root = LeafNode(mutableListOf(serializedKey), indexConfig.maxKeys, mutableListOf(serializedValue))
+            root = LeafNode(mutableListOf(serializedKey), maxKeys, mutableListOf(serializedValue))
         }
         logger.info { "-------------------------------------------" }
         printTree()
@@ -188,20 +187,20 @@ class BTree<K, V> (
                 val newNode = when(currentNode){
                     is LeafNode -> {
                         val (splitKeys, splitValues) = currentNode.split()
-                        val newNodeTemp = LeafNode(splitKeys, indexConfig.maxKeys, splitValues)
+                        val newNodeTemp = LeafNode(splitKeys, maxKeys, splitValues)
                         currentNode.linkNewSiblingNode(newNodeTemp)
                         newNodeTemp
                     }
                     is InternalNode -> {
                         val (splitKeys, splitChildren) = currentNode.split()
-                        InternalNode(splitKeys, indexConfig.maxKeys, splitChildren)
+                        InternalNode(splitKeys, maxKeys, splitChildren)
                     }
                 }
                 var parentNode: InternalNode
 
                 if(traceNode.isEmpty()){
                     parentNode =
-                        InternalNode(keys = mutableListOf(promotionKey), indexConfig.maxKeys, mutableListOf(currentNode, newNode))
+                        InternalNode(keys = mutableListOf(promotionKey), maxKeys, mutableListOf(currentNode, newNode))
                     root = parentNode
                 } else {
                     // parentNode 의 parentNodeIdx 정보는 나중에 parentNode split 할 때 필요함 -> peek 사용
