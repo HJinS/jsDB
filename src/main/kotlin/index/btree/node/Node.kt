@@ -1,39 +1,70 @@
 package index.btree.node
 
 import config.IndexConfig
-import index.serializer.BaseKeySerializer
+import index.exception.IndexException
+import index.serializer.KeySerializer
 import storageEngine.exception.SlottedPageException
 import storageEngine.page.SlottedPage
 import storageEngine.util.PageType
-import java.nio.ByteBuffer
 import kotlin.math.floor
 
 abstract class Node<K>(
-    indexConfig: IndexConfig,
-    pageId: Long = -1,
-    data: ByteBuffer,
-    pageType: PageType,
-    protected val keySerializer: BaseKeySerializer<K>
-): SlottedPage(indexConfig, pageId, data, pageType) {
+    val indexConfig: IndexConfig,
+    val page: SlottedPage,
+    protected val keySerializer: KeySerializer<K>
+){
+
+    companion object {
+        fun <K> from(
+            indexConfig: IndexConfig,
+            page: SlottedPage,
+            keySerializer: KeySerializer<K>
+        ): Node<K>{
+            return when(page.type){
+                PageType.LEAF_NODE -> LeafNode(indexConfig, page, keySerializer)
+                PageType.INTERNAL_NODE -> InternalNode(indexConfig, page, keySerializer)
+                else -> throw IndexException.InvalidNodeTypeException(page.type, null)
+            }
+        }
+    }
 
     val keyView: List<ByteArray>
         get() = object : AbstractList<ByteArray>() {
             override val size: Int
-                get() = recordCount
+                get() = page.recordCount
 
             override fun get(index: Int): ByteArray {
-                return getData(index).first
+                return page.getData(index).first
             }
         }
 
+    val valueView: List<ByteArray>
+        get() = object : AbstractList<ByteArray>() {
+            override val size: Int
+                get() = page.recordCount
+
+            override fun get(index: Int): ByteArray {
+                return page.getData(index).second
+            }
+        }
+
+    val isLeaf: Boolean
+        get() = page.type == PageType.LEAF_NODE
+
     val isOverflow: Boolean
-        get() = recordCount > indexConfig.maxKeys
+        get() = page.recordCount > indexConfig.maxKeys
 
     val isUnderflow: Boolean
-        get() = recordCount < indexConfig.maxKeys / 2
+        get() = page.recordCount < indexConfig.maxKeys / 2
 
     val hasSurplusKey: Boolean
-        get() = recordCount > indexConfig.maxKeys / 2
+        get() = page.recordCount > indexConfig.maxKeys / 2
+
+    val pageId: Long
+        get() = page.pageId
+
+    val keyCount: Int
+        get() = page.recordCount
 
     /**
      * Find value or child pointer using key.
@@ -52,8 +83,8 @@ abstract class Node<K>(
      * @return Search result. Pair of index, isExist.
      * */
     fun search(key: ByteArray, exactIndex: Boolean=false): Pair<Int, Boolean>{
-        val idx = binarySearch(key)
-        index.btree.inMemory.logger.info { "Binary search result: $idx keyLength: $recordCount" }
+        val idx = page.binarySearch(key)
+        index.btree.inMemory.logger.info { "Binary search result: $idx keyLength: $page.recordCount" }
         return if(idx >= 0) {if(exactIndex) idx to true else idx+1 to true} else -(idx + 1) to false
     }
 
@@ -65,6 +96,21 @@ abstract class Node<K>(
             val leftChildId = parentNode.childPageId(keyIdx-1)
             targetPageId != leftChildId
         }
+    }
+
+    fun insert(key: ByteArray, value: ByteArray){
+        val insertSlotId = search(key).first
+        page.insertData(insertSlotId, key, value)
+    }
+
+    fun insertAt(slotId: Int, key: ByteArray, data: ByteArray){
+        page.insertData(slotId, key, data)
+    }
+
+    fun deleteData(slotId: Int) = page.deleteData(0)
+
+    fun deleteAt(slotId: Int){
+        page.deleteData(slotId)
     }
 
     abstract fun redistribute(targetNode: Node<K>, parentNode: InternalNode<K>, keyIdx: Int)
@@ -85,15 +131,16 @@ abstract class Node<K>(
      * @param targetNode One of my sibling nodes.
      * @param parentNode My parent node. It should be the internal node.
      * @param keyIdx Index which I used to get to the leaf node.
+     * @return Page ID pair of left, right node.
      * */
-    abstract fun merge(targetNode: Node<K>, parentNode: InternalNode<K>, keyIdx: Int)
+    abstract fun merge(targetNode: Node<K>, parentNode: InternalNode<K>, keyIdx: Int): Pair<Long, Long>
 
     abstract fun deleteAllData(): Pair<List<ByteArray>, List<ByteArray>>
 
     abstract fun appendAllData(keys: List<ByteArray>, values: List<ByteArray>)
 
-    fun promotionKeyIdx() = floor(recordCount.toDouble() / 2.0).toInt()
-    fun promotionKey() = getData(promotionKeyIdx()).first
+    fun promotionKeyIdx() = floor(page.recordCount.toDouble() / 2.0).toInt()
+    fun promotionKey() = page.getData(promotionKeyIdx()).first
 
 
     /**
@@ -108,7 +155,7 @@ abstract class Node<K>(
         targetNode: Node<K>,
         parentNode: InternalNode<K>,
         keyIdx: Int
-    ): Triple<Int, Node<K>, Node<K>> = if(isLeft(targetNode.pageId, parentNode, keyIdx)) {
+    ): Triple<Int, Node<K>, Node<K>> = if(isLeft(targetNode.page.pageId, parentNode, keyIdx)) {
         Triple(keyIdx, this, targetNode)
     } else {
         Triple(keyIdx-1, targetNode, this)

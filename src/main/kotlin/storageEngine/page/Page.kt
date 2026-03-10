@@ -10,14 +10,13 @@ import java.nio.ByteBuffer
 open class Page(
     val indexConfig: IndexConfig,
     internal val data: ByteBuffer,
-    internal val pageId: Long = -1,
-    internal val pageType: PageType = PageType.EMPTY,
+    internal val pageId: Long = -1
 ){
     internal val logger = KotlinLogging.logger {}
 
     fun initData(){
         data.putLong(PageHeaderOffset.PAGE_ID.offset, pageId)
-        data.put(PageHeaderOffset.PAGE_TYPE.offset, pageType.value)
+        data.put(PageHeaderOffset.PAGE_TYPE.offset, PageType.EMPTY.value)
         data.put(PageHeaderOffset.RESERVED_ONE.offset, 0)
         data.putShort(PageHeaderOffset.RECORD_COUNT.offset, 0)
         data.putShort(PageHeaderOffset.FREE_SPACE_START.offset, HEADER_SIZE.toShort())
@@ -30,8 +29,11 @@ open class Page(
         data.putLong(PageHeaderOffset.LSN.offset, 0)
     }
 
-    val type: PageType
+    var type: PageType
         get() = PageType.fromValue(data[PageHeaderOffset.PAGE_TYPE.offset]) ?: throw IllegalStateException("Page type should be set")
+        set(value) {
+            data.put(PageHeaderOffset.PAGE_TYPE.offset, value.value)
+        }
 
     val freeSpaceEnd: Int
         get() = data.getShort(PageHeaderOffset.FREE_SPACE_END.offset).toInt()

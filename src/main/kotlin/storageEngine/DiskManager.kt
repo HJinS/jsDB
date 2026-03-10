@@ -42,7 +42,13 @@ class DiskManager(storageConfig: StorageConfig, private val pageSize: Int) {
      * The file will be managed automatically by FileChannel.
      * @return New page id.
      */
-    fun allocatePage(): Long = fileChannel.size() / pageSize + 1
+    fun allocatePage(): Long{
+        val offset = fileChannel.size()
+        val newPageId = fileChannel.size() / pageSize
+        val buffer = ByteBuffer.allocateDirect(pageSize)
+        fileChannel.write(buffer, offset)
+        return newPageId
+    }
 
     /**
      * Return current last page ID

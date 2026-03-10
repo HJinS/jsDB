@@ -81,10 +81,8 @@ import kotlin.text.toHexString
 open class SlottedPage(
     indexConfig: IndexConfig,
     pageId: Long = -1,
-    data: ByteBuffer,
-    pageType: PageType = PageType.EMPTY
-): Page(indexConfig, data, pageId, pageType){
-
+    data: ByteBuffer
+): Page(indexConfig, data, pageId){
 
     /**
     * slot 삭제시 미사용 슬롯 등록
@@ -168,7 +166,7 @@ open class SlottedPage(
         logger.info("[getData] 조회할 데이터 offset = $offset")
         logger.info("[getData] 조회할 데이터 length = $length")
         logger.info("[getData] 조회할 데이터 slotId = $slotId")
-        if(length.toInt() == 0) throw SlottedPageException.SlotOutOfBoundException(slotId, pageId, pageType, null)
+        if(length.toInt() == 0) throw SlottedPageException.SlotOutOfBoundException(slotId, pageId, type, null)
         // slot 데이터를 가지고 실제 데이터 추출
         // 반만 열린 범위인 것을 주의
         val tempBuffer = data.duplicate()
@@ -244,7 +242,7 @@ open class SlottedPage(
                 }
             }
         } catch (e: IndexOutOfBoundsException){
-            throw SlottedPageException.SlotShiftException(pageId, pageType, e)
+            throw SlottedPageException.SlotShiftException(pageId, type, e)
         }
         return src
     }

@@ -5,7 +5,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 
 class Frame(
     val frameId: Int,
-    var pageId: Long?,
+    var pageId: Long = -1,
     pageSize: Int
 ){
     val data: ByteBuffer = ByteBuffer.allocateDirect(pageSize)

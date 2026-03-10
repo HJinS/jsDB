@@ -1,63 +1,66 @@
 package index.btree.node
 
 import config.IndexConfig
-import index.serializer.BaseKeySerializer
+import index.serializer.KeySerializer
 import index.serializer.PageIDSerializer
 import index.util.NodeSplitData
-import storageEngine.util.PageType
-import java.nio.ByteBuffer
+import mu.KotlinLogging
+import storageEngine.page.SlottedPage
+import storageEngine.util.PageHeaderOffset
 
 
 class InternalNode<K>(
     indexConfig: IndexConfig,
-    pageId: Long = -1,
-    data: ByteBuffer,
-    pageType: PageType = PageType.INTERNAL_NODE,
-    keySerializer: BaseKeySerializer<K>,
+    page: SlottedPage,
+    keySerializer: KeySerializer<K>,
     private val valueSerializer: PageIDSerializer = PageIDSerializer()
-): Node<K>(indexConfig, pageId, data, pageType, keySerializer) {
+): Node<K>(indexConfig, page, keySerializer) {
 
-    fun childPageId(index: Int): Long = if(index == 0) leftMostChildPageId else valueSerializer.deserialize(getData(index).second)
+    val logger = KotlinLogging.logger {}
+
+    fun childPageId(index: Int): Long = if(index == 0) page.leftMostChildPageId else valueSerializer.deserialize(page.getData(index).second)
 
     fun updateValue(slotId: Int, newChildPageId: Long) {
-        val (key, _) = getData(slotId)
-        updateData(slotId, key, valueSerializer.serialize(newChildPageId))
+        val (key, _) = page.getData(slotId)
+        page.updateData(slotId, key, valueSerializer.serialize(newChildPageId))
     }
 
     fun updateKey(slotId: Int, key: ByteArray){
-        val (_, value) = getData(slotId)
-        updateData(slotId, key, value)
+        val (_, value) = page.getData(slotId)
+        page.updateData(slotId, key, value)
     }
 
     /**
      * Split the internal node into 2 pieces.
      * - PromotionKey: floor(len / 2)
      * - PromotionKey goes to parent node.
+     * - len: total count of key.
      * - Key separation: [0, promotionKey-1], [promotionKey+1, len-1]
-     * - Children separation: [0, promotionKey], [promotionKey+1, len-1]
+     * - Children separation: [0, promotionKey], [promotionKey+1, len]
      *
-     * @see splitKey
-     * @see splitChildPointer
+     * @see splitData
+     * @see NodeSplitData
      * @see promotionKeyIdx
      * @return key, value for a new node.
      * */
     fun split(): NodeSplitData {
         val promotionKeyIdx = promotionKeyIdx()
         val (splitKeyList, splitChildrenId) = splitData(promotionKeyIdx)
-        val totalRecordCount = recordCount
-        val (promotionKey, leftMostChildPageId) = deleteData(totalRecordCount - 1)
+        val totalRecordCount = page.recordCount
+        val (promotionKey, leftMostChildPageId) = page.deleteData(totalRecordCount - 1)
+        val leftMostChildPageIdDecoded = valueSerializer.deserialize(leftMostChildPageId)
         return NodeSplitData(
-            splitKeyList, splitChildrenId, promotionKey, leftMostChildPageId
+            splitKeyList, splitChildrenId, promotionKey, leftMostChildPageIdDecoded
         )
     }
 
     override fun deleteAllData(): Pair<MutableList<ByteArray>, MutableList<ByteArray>>{
-        val endSlotId = recordCount - 1
-        val resultKey = MutableList(recordCount){ByteArray(0x00)}
-        val resultValue = MutableList(recordCount+1){ByteArray(0x00)}
-        resultValue[0] = valueSerializer.serialize(leftMostChildPageId)
+        val endSlotId = page.recordCount - 1
+        val resultKey = MutableList(page.recordCount){ByteArray(0x00)}
+        val resultValue = MutableList(page.recordCount+1){ByteArray(0x00)}
+        resultValue[0] = valueSerializer.serialize(page.leftMostChildPageId)
         for(slotId in 0 .. endSlotId){
-            val (key, value) = deleteData(slotId)
+            val (key, value) = page.deleteData(slotId)
             resultKey[slotId] = key
             resultValue[slotId+1] = value
         }
@@ -66,7 +69,7 @@ class InternalNode<K>(
 
     override fun appendAllData(keys: List<ByteArray>, values: List<ByteArray>) {
         for(slotId in keys.indices){
-            insertData(recordCount + slotId, keys[slotId], values[slotId])
+            page.insertData(page.recordCount + slotId, keys[slotId], values[slotId])
         }
     }
 
@@ -80,9 +83,9 @@ class InternalNode<K>(
     private fun splitData(promotionKeyIdx: Int): Pair<MutableList<ByteArray>, MutableList<ByteArray>>{
         val keyList = mutableListOf<ByteArray>()
         val childPageIdList = mutableListOf<ByteArray>()
-        val totalRecordCount = recordCount
+        val totalRecordCount = page.recordCount
         for(slotId in promotionKeyIdx + 1 until totalRecordCount){
-            val (key, value) = deleteData(slotId)
+            val (key, value) = page.deleteData(slotId)
             keyList.add(key)
             childPageIdList.add(value)
         }
@@ -111,21 +114,21 @@ class InternalNode<K>(
      * */
     override fun redistribute(targetNode: Node<K>, parentNode: InternalNode<K>, keyIdx: Int){
         // Borrow from right sibling
-        if(isLeft(targetNode.pageId, parentNode, keyIdx)){
-            val removedParentKey = parentNode.getData(keyIdx).first
-            val (siblingKey, siblingValue) = targetNode.deleteData(0)
-            val siblingLeftMostChild = targetNode.leftMostChildPageId
-            insertData(recordCount, removedParentKey, valueSerializer.serialize(siblingLeftMostChild))
+        if(isLeft(targetNode.page.pageId, parentNode, keyIdx)){
+            val removedParentKey = parentNode.page.getData(keyIdx).first
+            val (siblingKey, siblingValue) = targetNode.page.deleteData(0)
+            val siblingLeftMostChild = targetNode.page.leftMostChildPageId
+            page.insertData(page.recordCount, removedParentKey, valueSerializer.serialize(siblingLeftMostChild))
             parentNode.updateKey(keyIdx, siblingKey)
-            targetNode.shiftSlot(0, targetNode.recordCount, -1)
-            targetNode.leftMostChildPageId = valueSerializer.deserialize(siblingValue)
+            targetNode.page.shiftSlot(0, targetNode.page.recordCount, -1)
+            targetNode.page.leftMostChildPageId = valueSerializer.deserialize(siblingValue)
         } else{
-            shiftSlot(0, recordCount, 1)
-            val leftMostChild = valueSerializer.serialize(leftMostChildPageId)
-            val removedParentKey = parentNode.getData(keyIdx-1).first
-            val (siblingKey, siblingValue) = targetNode.deleteData(targetNode.recordCount - 1)
-            insertData(0, removedParentKey, leftMostChild)
-            leftMostChildPageId = valueSerializer.deserialize(siblingValue)
+            page.shiftSlot(0, page.recordCount, 1)
+            val leftMostChild = valueSerializer.serialize(page.leftMostChildPageId)
+            val removedParentKey = parentNode.page.getData(keyIdx-1).first
+            val (siblingKey, siblingValue) = targetNode.page.deleteData(targetNode.page.recordCount - 1)
+            page.insertData(0, removedParentKey, leftMostChild)
+            page.leftMostChildPageId = valueSerializer.deserialize(siblingValue)
             parentNode.updateKey(keyIdx-1, siblingKey)
         }
     }
@@ -135,16 +138,17 @@ class InternalNode<K>(
      *
      * @see Node.merge
      * */
-    override fun merge(targetNode: Node<K>, parentNode: InternalNode<K>, keyIdx: Int) {
+    override fun merge(targetNode: Node<K>, parentNode: InternalNode<K>, keyIdx: Int): Pair<Long, Long> {
         orderNode(targetNode, parentNode, keyIdx).let {
             (separationKeyIdx, lNode, rNode) ->
-            val separationKey = parentNode.deleteData(separationKeyIdx).first
+            val separationKey = parentNode.page.deleteData(separationKeyIdx).first
             val leftNode = lNode as InternalNode<K>
             val rightNode = rNode as InternalNode<K>
             val (rKey, rValue) = rightNode.deleteAllData()
             logger.info { "Merge Internal: leftNode: ${leftNode.hashCode()} rightNode: ${rightNode.hashCode()}" }
             rKey.addFirst(separationKey)
-            lNode.appendAllData(rKey, rValue)
+            leftNode.appendAllData(rKey, rValue)
+            return leftNode.pageId to rightNode.pageId
         }
     }
 }

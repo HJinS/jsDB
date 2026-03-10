@@ -22,8 +22,8 @@ const val MAX_KEYS = 64
 
 
 data class NodeSplitData(
-    val splitKeyList: MutableList<ByteArray>,
-    val splitChildrenId: MutableList<ByteArray>,
+    val splitKeys: MutableList<ByteArray>,
+    val splitValues: MutableList<ByteArray>,
     val promotionKey: ByteArray,
-    val leftMostChildPageId: ByteArray
+    val leftMostChildPageId: Long
 )

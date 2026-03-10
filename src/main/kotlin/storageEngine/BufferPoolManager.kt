@@ -1,10 +1,15 @@
 package storageEngine
 
 import config.IndexConfig
+import index.btree.node.InternalNode
+import index.serializer.MultiColumnKeySerializer
 import storageEngine.DiskManager
 import storageEngine.lru.MidpointLRUPolicy
 import storageEngine.page.Frame
+import storageEngine.page.Page
 import storageEngine.page.PageHandle
+import storageEngine.page.SlottedPage
+import storageEngine.util.PageType
 import java.util.concurrent.locks.ReentrantLock
 
 /**
@@ -46,7 +51,7 @@ class BufferPoolManager(
     indexConfig: IndexConfig,
     poolSize: Int
 ){
-    private val frames: Array<Frame> = Array(poolSize) { Frame(it, null, indexConfig.pageSize) }
+    private val frames: Array<Frame> = Array(poolSize) { Frame(it, -1, indexConfig.pageSize) }
     private val pageTable = HashMap<Long, Int>()
     private val freeList = ArrayDeque<Int>()
     private val globalLatch = ReentrantLock()
@@ -76,7 +81,7 @@ class BufferPoolManager(
             } else {
                 val freeFrameId = getFreeFrameId()
                 frame = frames[freeFrameId]
-                if(frame.isDirty && frame.pageId != null){
+                if(frame.isDirty && frame.pageId != -1L){
                     victimPageId = frame.pageId
                 }
                 pageTable.remove(frame.pageId)
@@ -116,8 +121,15 @@ class BufferPoolManager(
      * 2. 빈 Frame 탐색 -> 빈 프레임이 없으면 eviction 실행 후 공간 확보(disk flush 필요.)
      * 3. pageTable 업데이트, page pin, dirty 마킹, 페이지 초기화(헤더 등)
      * */
-    fun newPage(){
-
+    fun newPage(): PageHandle{
+        val newPageId = diskManager.allocatePage()
+        val frame = frames[getFreeFrameId()]
+        frame.reset()
+        frame.isDirty = true
+        pageTable[newPageId] = frame.frameId
+        frame.pageId = newPageId
+        replacer.pin(frame.frameId)
+        return PageHandle(frame, this)
     }
 
     /**

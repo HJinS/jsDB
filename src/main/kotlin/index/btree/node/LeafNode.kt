@@ -1,39 +1,28 @@
 package index.btree.node
 
 import config.IndexConfig
-import index.serializer.BaseKeySerializer
+import index.serializer.KeySerializer
 import index.util.NodeSplitData
-import storageEngine.util.PageType
-import java.nio.ByteBuffer
+import mu.KotlinLogging
+import storageEngine.page.SlottedPage
 
 
 class LeafNode<K>(
     indexConfig: IndexConfig,
-    pageId: Long = -1,
-    data: ByteBuffer,
-    pageType: PageType = PageType.LEAF_NODE,
-    keySerializer: BaseKeySerializer<K>,
-): Node<K>(indexConfig, pageId, data, pageType, keySerializer){
+    page: SlottedPage,
+    keySerializer: KeySerializer<K>,
+): Node<K>(indexConfig, page, keySerializer) {
+
+    val logger = KotlinLogging.logger {}
 
     val next: Long
-        get() = rightSiblingPageId
+        get() = page.rightSiblingPageId
 
     val prev: Long
-        get() = leftSiblingPageId
-
-    val keyCount: Int
-        get() = recordCount
+        get() = page.leftSiblingPageId
 
     val valueCount: Int
-        get() = recordCount
-
-    fun insert(slotId: Int, key: ByteArray, data: ByteArray){
-        insertData(slotId, key, data)
-    }
-
-    fun delete(slotId: Int){
-        deleteData(slotId)
-    }
+        get() = page.recordCount
 
     /**
      * Split the leaf node into 2 pieces.
@@ -44,18 +33,17 @@ class LeafNode<K>(
      * - Key separation: [0, promotionKey-1], [promotionKey, len-1]
      * - Value separation: [0, promotionKey-1], [promotionKey, len-1]
      *
-     * @see splitKey
-     * @see splitValues
+     * @see splitData
      * @see promotionKeyIdx
      * @return key, value for a new node.
      * */
     fun split(): NodeSplitData {
         val promotionKeyIdx = promotionKeyIdx()
         val (splitKeys, splitValues) = splitData(promotionKeyIdx)
-        val totalRecordCount = recordCount
-        val (promotionKey, leftMostChildPageId) = deleteData(totalRecordCount - 1)
+        val totalRecordCount = page.recordCount
+        val (promotionKey, _) = page.deleteData(totalRecordCount - 1)
         return NodeSplitData(
-            splitKeys, splitValues, promotionKey, leftMostChildPageId
+            splitKeys, splitValues, promotionKey, -1
         )
     }
 
@@ -69,9 +57,9 @@ class LeafNode<K>(
     private fun splitData(promotionKeyIdx: Int): Pair<MutableList<ByteArray>, MutableList<ByteArray>>{
         val keyList = mutableListOf<ByteArray>()
         val values = mutableListOf<ByteArray>()
-        val totalRecordCount = recordCount
+        val totalRecordCount = page.recordCount
         for(slotId in promotionKeyIdx until totalRecordCount){
-            val (key, value) = deleteData(slotId)
+            val (key, value) = page.deleteData(slotId)
             keyList.add(key)
             values.add(value)
         }
@@ -82,18 +70,18 @@ class LeafNode<K>(
      * Update the linked list of the leaf node.
      * */
     fun linkNewSiblingNode(siblingNode: LeafNode<K>){
-        val nextTemp = rightSiblingPageId
-        siblingNode.rightSiblingPageId = nextTemp
-        siblingNode.leftSiblingPageId = this.pageId
-        rightSiblingPageId = siblingNode.pageId
+        val nextTemp = page.rightSiblingPageId
+        siblingNode.page.rightSiblingPageId = nextTemp
+        siblingNode.page.leftSiblingPageId = this.page.pageId
+        page.rightSiblingPageId = siblingNode.page.pageId
     }
 
     override fun deleteAllData(): Pair<List<ByteArray>, List<ByteArray>>{
-        val endSlotId = recordCount - 1
-        val resultKey = MutableList(recordCount){ByteArray(0x00)}
-        val resultValue = MutableList(recordCount){ByteArray(0x00)}
+        val endSlotId = page.recordCount - 1
+        val resultKey = MutableList(page.recordCount){ByteArray(0x00)}
+        val resultValue = MutableList(page.recordCount){ByteArray(0x00)}
         for(slotId in 0 .. endSlotId){
-            val (key, value) = deleteData(slotId)
+            val (key, value) = page.deleteData(slotId)
             resultKey[slotId] = key
             resultValue[slotId] = value
         }
@@ -102,7 +90,7 @@ class LeafNode<K>(
 
     override fun appendAllData(keys: List<ByteArray>, values: List<ByteArray>) {
         for(slotId in keys.indices){
-            insertData(recordCount + slotId, keys[slotId], values[slotId])
+            page.insertData(page.recordCount + slotId, keys[slotId], values[slotId])
         }
     }
 
@@ -132,16 +120,14 @@ class LeafNode<K>(
      * */
     override fun redistribute(targetNode: Node<K>, parentNode: InternalNode<K>, keyIdx: Int){
         // borrow from right sibling
-        if(isLeft(targetNode.pageId, parentNode, keyIdx)){
+        if(isLeft(targetNode.page.pageId, parentNode, keyIdx)){
             val (key, value) = targetNode.deleteData(0)
-            val insertSlotId = search(key).first
-            insertData(insertSlotId, key, value)
+            insert(key, value)
             parentNode.updateKey(keyIdx, key)
         } else{
-            val recordCount = targetNode.recordCount
+            val recordCount = targetNode.keyCount
             val (key, value) = targetNode.deleteData(recordCount - 1)
-            val insertSlotId = search(key).first
-            insertData(insertSlotId, key, value)
+            insert(key, value)
             parentNode.updateKey(keyIdx-1, key)
         }
     }
@@ -151,7 +137,7 @@ class LeafNode<K>(
      *
      * @see Node.merge
      * */
-    override fun merge(targetNode: Node<K>, parentNode: InternalNode<K>, keyIdx: Int) {
+    override fun merge(targetNode: Node<K>, parentNode: InternalNode<K>, keyIdx: Int): Pair<Long, Long> {
         orderNode(targetNode, parentNode, keyIdx).let {
             (separationKey, lNode, rNode) ->
 
@@ -159,11 +145,12 @@ class LeafNode<K>(
             val rightNode = rNode as LeafNode<K>
             val (rKey, rValue) = rightNode.deleteAllData()
             logger.info { "Merge Internal: leftNode: ${leftNode.hashCode()} rightNode: ${rightNode.hashCode()}" }
-            lNode.appendAllData(rKey, rValue)
+            leftNode.appendAllData(rKey, rValue)
 
-            val newRightSiblingPageId = rNode.rightSiblingPageId
-            lNode.rightSiblingPageId = newRightSiblingPageId
+            val newRightSiblingPageId = rightNode.page.rightSiblingPageId
+            leftNode.page.rightSiblingPageId = newRightSiblingPageId
             parentNode.deleteData(separationKey)
+            return leftNode.pageId to rightNode.pageId
         }
     }
 }
