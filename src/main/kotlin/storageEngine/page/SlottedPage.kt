@@ -5,7 +5,6 @@ import index.util.decodeVarInt
 import index.util.encodeVarInt
 import storageEngine.exception.SlottedPageException
 import storageEngine.util.PageHeaderOffset
-import storageEngine.util.PageType
 import java.nio.ByteBuffer
 import java.util.Arrays
 import kotlin.text.toHexString
@@ -200,7 +199,7 @@ open class SlottedPage(
      * */
     fun updateData(slotId: Int, key: ByteArray, value: ByteArray): Int{
         deleteData(slotId)
-        return insertData(key, value)
+        return insertData(slotId, key, value)
     }
 
     fun binarySearch(key: ByteArray): Int{
@@ -226,19 +225,19 @@ open class SlottedPage(
                 val end = src + srcLength
                 for (i in end - 1 downTo src) {
                     val srcOffset = HEADER_SIZE + (i * SLOT_SIZE)
-                    val destOffset = srcOffset + SLOT_SIZE * shiftLength
+                    val dstOffset = srcOffset + SLOT_SIZE * shiftLength
 
                     val slotData = data.getInt(srcOffset)
-                    data.putInt(destOffset, slotData)
+                    data.putInt(dstOffset, slotData)
                 }
             } else {
                 val end = src + srcLength
                 for(i in src until end){
                     val srcOffset = HEADER_SIZE + (i * SLOT_SIZE)
-                    val destOffset = srcOffset + SLOT_SIZE * shiftLength
+                    val dstOffset = srcOffset + SLOT_SIZE * shiftLength
 
                     val slotData = data.getInt(srcOffset)
-                    data.putInt(destOffset, slotData)
+                    data.putInt(dstOffset, slotData)
                 }
             }
         } catch (e: IndexOutOfBoundsException){
