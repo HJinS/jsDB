@@ -10,6 +10,7 @@ import storageEngine.page.Page
 import storageEngine.page.PageHandle
 import storageEngine.page.SlottedPage
 import storageEngine.util.PageType
+import java.nio.ByteBuffer
 import java.util.concurrent.locks.ReentrantLock
 
 /**
@@ -48,7 +49,7 @@ import java.util.concurrent.locks.ReentrantLock
 class BufferPoolManager(
     private val diskManager: DiskManager,
     private val replacer: MidpointLRUPolicy,
-    indexConfig: IndexConfig,
+    private val indexConfig: IndexConfig,
     poolSize: Int
 ){
     private val frames: Array<Frame> = Array(poolSize) { Frame(it, -1, indexConfig.pageSize) }
@@ -121,13 +122,14 @@ class BufferPoolManager(
      * 2. 빈 Frame 탐색 -> 빈 프레임이 없으면 eviction 실행 후 공간 확보(disk flush 필요.)
      * 3. pageTable 업데이트, page pin, dirty 마킹, 페이지 초기화(헤더 등)
      * */
-    fun newPage(): PageHandle{
-        val newPageId = diskManager.allocatePage()
+    fun newPage(pageID: Long): PageHandle{
+        val emptyBuffer = ByteBuffer.allocateDirect(indexConfig.pageSize)
+        diskManager.writePage(pageID, emptyBuffer)
         val frame = frames[getFreeFrameId()]
         frame.reset()
         frame.isDirty = true
-        pageTable[newPageId] = frame.frameId
-        frame.pageId = newPageId
+        pageTable[pageID] = frame.frameId
+        frame.pageId = pageID
         replacer.pin(frame.frameId)
         return PageHandle(frame, this)
     }

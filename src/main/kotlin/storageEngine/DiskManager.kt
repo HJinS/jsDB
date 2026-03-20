@@ -1,6 +1,7 @@
 package storageEngine
 
 import config.StorageConfig
+import storageEngine.util.MetaPageOffset
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
@@ -14,12 +15,12 @@ class DiskManager(storageConfig: StorageConfig, private val pageSize: Int) {
 
     /**
      * Read page from disk with given [pageId] and load the data.
-     * First page id should be 1.
+     * First page id should be 1. PageID of "0"'ll be used as system meta page.
      * @param pageId ID being read from disk.
      * @param pageData ByteBuffer to save the page data. It should be the same size as [pageSize].
      */
     fun readPage(pageId: Long, pageData: ByteBuffer){
-        val offset = (pageId - 1) * pageSize
+        val offset = pageId * pageSize
 
         val result = fileChannel.read(pageData, offset)
         if(result == -1){
@@ -33,21 +34,8 @@ class DiskManager(storageConfig: StorageConfig, private val pageSize: Int) {
      * @param pageData Data to write. It should be the same size as [pageSize].
      */
     fun writePage(pageId: Long, pageData: ByteBuffer){
-        val offset = (pageId - 1) * pageSize
+        val offset = pageId * pageSize
         fileChannel.write(pageData, offset)
-    }
-
-    /**
-     * Return new pageId.
-     * The file will be managed automatically by FileChannel.
-     * @return New page id.
-     */
-    fun allocatePage(): Long{
-        val offset = fileChannel.size()
-        val newPageId = fileChannel.size() / pageSize
-        val buffer = ByteBuffer.allocateDirect(pageSize)
-        fileChannel.write(buffer, offset)
-        return newPageId
     }
 
     /**
