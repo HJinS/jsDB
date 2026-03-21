@@ -9,7 +9,7 @@ plugins {
 
 java {
     toolchain{
-        languageVersion.set(JavaLanguageVersion.of(22))
+        languageVersion.set(JavaLanguageVersion.of(21))
     }
 }
 
@@ -43,7 +43,7 @@ tasks.withType<Test>().configureEach {
 
 kotlin {
     compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_22)
+        jvmTarget.set(JvmTarget.JVM_21)
         // Optional: 자주 사용하는 설정 예시
         freeCompilerArgs.addAll(
             "-Xcontext-receivers",
