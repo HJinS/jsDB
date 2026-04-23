@@ -8,6 +8,10 @@ class PageHandle(
     private val bufferPoolManager: BufferPoolManager
 ): AutoCloseable {
 
+    // internal로 바꾸되, 외부에서는 private처럼 보이도록 인라인만 허용
+    @PublishedApi
+    internal var isDirty: Boolean = false
+
     inline fun <T> asReadView(viewFactory: (ByteBuffer) -> T): T {
         frame.latch.readLock().lock()
         try{
@@ -19,6 +23,7 @@ class PageHandle(
     }
 
     inline fun <T> asWriteView(viewFactory: (ByteBuffer) -> T): T {
+        this.isDirty = true
         frame.latch.writeLock().lock()
         try{
             return viewFactory(frame.data)
@@ -27,7 +32,11 @@ class PageHandle(
         }
     }
 
+    fun setDirty(){
+        this.isDirty = true
+    }
+
     override fun close() {
-        bufferPoolManager.unpinPage()
+        bufferPoolManager.unpinPage(frame.pageId, isDirty)
     }
 }

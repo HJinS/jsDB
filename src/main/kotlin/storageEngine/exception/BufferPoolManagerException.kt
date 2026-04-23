@@ -11,6 +11,11 @@ sealed class BufferManagerException(message: String?, cause: Throwable?): Storag
 
     class BufferPoolExhaustedException(
         capacity: Int, cause: Throwable?
-    ): MidPointLRUException("Buffer pool is full. capacity: $capacity", cause)
+    ): BufferManagerException("Buffer pool is full. capacity: $capacity", cause)
+
+    class PageInUseException(
+        pageId: Long, cause: Throwable?
+    ): MidPointLRUException("Other thread is using page: $pageId", cause)
+
 }
 

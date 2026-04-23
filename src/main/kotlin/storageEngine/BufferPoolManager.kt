@@ -209,6 +209,30 @@ class BufferPoolManager(
 
     }
 
+    fun deletePage(pageId: Long){
+        val frame: Frame
+        val frameId: Int
+        globalLatch.lock()
+        try{
+            frameId = pageTable[pageId] ?: return
+            frame = frames[frameId]
+            if(frame.pinCount.get() > 0) throw BufferManagerException.PageInUseException(pageId, null)
+            frame.latch.writeLock().lock()
+            try{
+                pageTable.remove(pageId)
+                frame.pageId.set(-1L)
+                frame.pinCount.set(0)
+                frame.reset()
+                replacer.unpin(frameId)
+            } finally{
+                frame.latch.writeLock().unlock()
+            }
+        } finally{
+            globalLatch.unlock()
+        }
+
+    }
+
     private fun getFreeFrameId() = if(freeList.isEmpty()) replacer.evict() else freeList.removeFirst()
 
 }
