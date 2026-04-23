@@ -9,6 +9,7 @@ class LRUNode(
     var next: LRUNode? = null
     var prev: LRUNode? = null
     var isOld: Boolean = true
+    var isPinned: Boolean = false
 
     fun resetLink(){
         next = null

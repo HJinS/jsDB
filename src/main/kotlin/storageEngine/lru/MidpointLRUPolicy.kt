@@ -31,9 +31,7 @@ class MidpointLRUPolicy(
     }
 
     /**
-     * key 가 있으면 해당 키를 가장 앞으로
-     * key가 없으면 midpoint에 key 삽입
-
+     * 다시 접근하는 경우만 사용
      * lastAccessTime 갱신
      * pin 상태인 경우 lru list 관련 스킵 -> return
      * frameId in map -> is old list -> get time gap -> promote to young
@@ -46,41 +44,41 @@ class MidpointLRUPolicy(
      * */
     override fun add(frameId: Int) {
         val now = currentTimeMillis()
-        val node = map[frameId]
-        if(node == null){
-            promotionRule.checkSize(map.size)
-            val newFrame = LRUNode(frameId, lastAccessTime = now)
-            generationalList.addOld(newFrame)
-            map[frameId] = newFrame
-        }else{
-            if(node.isOld){
-                if(promotionRule.isPromotable(node)) generationalList.promoteYoung(node)
-            } else generationalList.touchYoung(node)
-            node.lastAccessTime = now
-        }
+        val node = map[frameId]!!
+        node.lastAccessTime = now
+        // 이미 pin 되어 있으면 접근 시각만 갱신하고 종료
+        // pin 되어 있기 때문에 generationalList에 넣으면 안됨
+        if(node.isPinned) return
+        if(node.isOld){
+            if(promotionRule.isPromotable(node)) generationalList.promoteYoung(node)
+        } else generationalList.touchYoung(node)
     }
 
     override fun unpin(frameId: Int) {
-        val node = map[frameId]
+        // 처음 접근할 때는 무조건 pin을 호출하는 것을 전제로 함
+        val node = map[frameId]!!
         val now = currentTimeMillis()
-        if(node != null){
-            generationalList.addYoung(node)
+        // map에 있다는 것은 이미 노드가 있다는 것임
+        // node != null && !node.isPinned 인 케이스는 아무것도 하면 안됨
+        if(node.isPinned){
+            node.isPinned = false
             node.lastAccessTime = now
-        } else{
-            promotionRule.checkSize(map.size)
-            val lruNode = LRUNode(frameId, lastAccessTime = now)
-            generationalList.addOld(lruNode)
-            map[frameId] = lruNode
+            // 원래 old 였는지 young 였는지를 가지고 각각 복귀
+            if(node.isOld) generationalList.addOld(node) else generationalList.addYoung(node)
         }
     }
 
     override fun pin(frameId: Int) {
         val node = map[frameId]
-        if(node != null && !(node.prev == null && node.next == null)){
+        if(node == null){
+            map[frameId] = LRUNode(frameId).apply { 
+                isPinned = true
+                isOld = true
+            }
+        } else if(!node.isPinned){
             generationalList.remove(node)
             node.resetLink()
-        } else {
-            map[frameId] = LRUNode(frameId)
+            node.isPinned = true
         }
     }
 }
