@@ -22,8 +22,7 @@ class MidpointLRUPolicy(
         val oldNode = generationalList.removeOldest() ?: throw LRUException.LRUListFullException(
             generationalList.capacity,
             generationalList.youngCount,
-            generationalList.oldCount,
-            null
+            generationalList.oldCount
         )
         val frameId = oldNode.frameId
         map.remove(frameId)

@@ -165,7 +165,7 @@ open class SlottedPage(
         logger.info("[getData] 조회할 데이터 offset = $offset")
         logger.info("[getData] 조회할 데이터 length = $length")
         logger.info("[getData] 조회할 데이터 slotId = $slotId")
-        if(length.toInt() == 0) throw SlottedPageException.SlotOutOfBoundException(slotId, pageId, type, null)
+        if(length.toInt() == 0) throw SlottedPageException.SlotOutOfBoundException(slotId, pageId, type)
         // slot 데이터를 가지고 실제 데이터 추출
         // 반만 열린 범위인 것을 주의
         val tempBuffer = data.duplicate()

@@ -327,7 +327,7 @@ class BTree<K, V> (
                                     }
                                 }
                             }
-                            else -> throw NodeException.InvalidNodeTypeException(node.page.type, null)
+                            else -> throw NodeException.InvalidNodeTypeException(node.page.type)
                         }
                         if(traceNode.isEmpty()){
                             bufferPoolManager.newPage().use { handle ->
@@ -385,7 +385,7 @@ class BTree<K, V> (
      * @see Node.search
      **/
     private fun searchLeafNode(key: ByteArray): Triple<Long, Int, Boolean> {
-        if(rootPageId == -1L) throw IndexException.EmptyTreeException(name, targetTable, null)
+        if(rootPageId == -1L) throw IndexException.EmptyTreeException(name, targetTable)
         traceNode.push(rootPageId to -1)
         val rootNodeHandle = bufferPoolManager.fetchPage(rootPageId)
 

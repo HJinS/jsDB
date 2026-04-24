@@ -174,7 +174,7 @@ class BufferPoolManager(
 
         globalLatch.lock()
         try{
-            frameId = pageTable[pageId] ?: throw BufferPoolManagerException.PageNotFoundInCacheException(pageId, null)
+            frameId = pageTable[pageId] ?: throw BufferPoolManagerException.PageNotFoundInCacheException(pageId)
             frame = frames[frameId]
             if(frame.pinCount.get() <= 0) return
             val pinCount = frame.pinCount.decrementAndGet()
@@ -190,7 +190,7 @@ class BufferPoolManager(
         val frameId: Int
         globalLatch.lock() 
         try{
-            frameId = pageTable[pageId] ?: throw BufferPoolManagerException.PageNotFoundInCacheException(pageId, null)
+            frameId = pageTable[pageId] ?: throw BufferPoolManagerException.PageNotFoundInCacheException(pageId)
             frame = frames[frameId]
             frame.latch.readLock().lock()
         } finally{
@@ -216,7 +216,7 @@ class BufferPoolManager(
         try{
             frameId = pageTable[pageId] ?: return
             frame = frames[frameId]
-            if(frame.pinCount.get() > 0) throw BufferPoolManagerException.PageInUseException(pageId, null)
+            if(frame.pinCount.get() > 0) throw BufferPoolManagerException.PageInUseException(pageId)
             frame.latch.writeLock().lock()
             try{
                 pageTable.remove(pageId)

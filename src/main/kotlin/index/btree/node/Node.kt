@@ -24,7 +24,7 @@ abstract class Node<K>(
             return when(page.type){
                 PageType.LEAF_NODE -> LeafNode(indexConfig, page, keySerializer)
                 PageType.INTERNAL_NODE -> InternalNode(indexConfig, page, keySerializer)
-                else -> throw NodeException.InvalidNodeTypeException(page.type, null)
+                else -> throw NodeException.InvalidNodeTypeException(page.type)
             }
         }
     }

@@ -13,6 +13,6 @@ class PromotionRule(
     }
 
     fun checkSize(currentCount: Int){
-        if (currentCount >= capacity) throw LRUException.BufferPoolExhaustedException(capacity, null)
+        if (currentCount >= capacity) throw LRUException.BufferPoolExhaustedException(capacity)
     }
 }
