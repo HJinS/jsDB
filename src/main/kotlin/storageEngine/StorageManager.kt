@@ -40,7 +40,7 @@ class StorageManager(
         val pageHandle = bufferPoolManager.fetchPage(pageId)
         pageHandle.asReadView { buffer ->
             val page = SlottedPage(indexConfig, pageId, buffer)
-            if(!(page.type == PageType.INTERNAL_NODE || page.type == PageType.LEAF_NODE)) throw StorageManagerException.InvalidPageTypeException(pageId, pageType, null)
+            if(!(page.type == PageType.INTERNAL_NODE || page.type == PageType.LEAF_NODE)) throw StorageManagerException.InvalidPageTypeException(pageId, page.type, null)
         }
         return pageHandle
     }
@@ -50,6 +50,8 @@ class StorageManager(
      * pin 카운터 해제, 디스크 flush 없이 즉시 삭제
      * */
     fun deletePage(pageId: Long){
+        if(pageId <= 0L) throw StorageManagerException.InvalidPageIdException(pageId, null)
+        
         bufferPoolManager.deletePage(pageId) 
         freeSpaceManager.addFreePageID(pageId)
     }

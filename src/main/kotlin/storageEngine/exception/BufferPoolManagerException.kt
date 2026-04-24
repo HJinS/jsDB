@@ -1,21 +1,15 @@
 package storageEngine.exception
 
-sealed class BufferManagerException(message: String?, cause: Throwable?): StorageEngineException(message, cause){
+sealed class BufferPoolManagerException(message: String?, cause: Throwable?): StorageEngineException(message, cause){
     class PageNotFoundInCacheException(
-        pageId: Long, cause: Throwable?
-    ): BufferManagerException("Unable to find page in buffer pool pageId: $pageId", cause)
+        pageId: Long, cause: Throwable?=null
+    ): BufferPoolManagerException("Unable to find page in buffer pool pageId: $pageId", cause)
 
     class FrameNotFoundException(
-        frameId: Int, cause: Throwable?
-    ): BufferManagerException("Unable to find frame. Maybe frameId is wrong. frameId: $frameId", cause)
-
-    class BufferPoolExhaustedException(
-        capacity: Int, cause: Throwable?
-    ): BufferManagerException("Buffer pool is full. capacity: $capacity", cause)
+        frameId: Int, cause: Throwable?=null
+    ): BufferPoolManagerException("Unable to find frame. Maybe frameId is wrong. frameId: $frameId", cause)
 
     class PageInUseException(
-        pageId: Long, cause: Throwable?
-    ): MidPointLRUException("Other thread is using page: $pageId", cause)
-
+        pageId: Long, cause: Throwable?=null
+    ): BufferPoolManagerException("Page $pageId is currently in use (pin count > 0) and cannot be deleted.", cause)
 }
-

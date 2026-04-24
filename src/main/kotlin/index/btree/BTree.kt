@@ -7,6 +7,7 @@ import index.btree.node.Node
 import index.dto.NodeSearchResult
 import index.exception.BTreeException
 import index.exception.IndexException
+import index.exception.NodeException
 import index.serializer.KeySerializer
 import index.serializer.PageIDSerializer
 import index.serializer.ValueSerializer
@@ -326,7 +327,7 @@ class BTree<K, V> (
                                     }
                                 }
                             }
-                            else -> throw IndexException.InvalidNodeTypeException(node.page.type, null)
+                            else -> throw NodeException.InvalidNodeTypeException(node.page.type, null)
                         }
                         if(traceNode.isEmpty()){
                             bufferPoolManager.newPage().use { handle ->
@@ -456,7 +457,7 @@ class BTree<K, V> (
      * */
     fun traverse(): List<Pair<K, V>>{
         val result = mutableListOf<Pair<K, V>>()
-        var leafNodePageIdCursor: Long? = findLeftMostLeafPageId() ?: throw BTreeException("Empty tree", null)
+        var leafNodePageIdCursor: Long? = findLeftMostLeafPageId() ?: throw BTreeException.LeafNodeNotFoundException(null)
         while(leafNodePageIdCursor != null){
             val nextLeafNodePageId = bufferPoolManager.fetchPage(leafNodePageIdCursor).use{ handle ->
                 handle.asReadView { buffer ->

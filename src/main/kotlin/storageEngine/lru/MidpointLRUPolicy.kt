@@ -1,7 +1,7 @@
 package storageEngine.lru
 
 import config.MidpointLruConfig
-import storageEngine.exception.MidPointLRUException
+import storageEngine.exception.LRUException
 import java.lang.System.currentTimeMillis
 
 
@@ -19,7 +19,7 @@ class MidpointLRUPolicy(
     )
 
     override fun evict(): Int {
-        val oldNode = generationalList.removeOldest() ?: throw MidPointLRUException.LRUListFullException(
+        val oldNode = generationalList.removeOldest() ?: throw LRUException.LRUListFullException(
             generationalList.capacity,
             generationalList.youngCount,
             generationalList.oldCount,

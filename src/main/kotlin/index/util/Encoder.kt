@@ -1,6 +1,5 @@
 package index.util
 
-import index.exception.DecodeException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.charset.StandardCharsets
@@ -64,7 +63,7 @@ fun decodeVarInt(bytes: ByteArray, offset: Int = 0): Pair<Int, Int> {
     while (true) {
         // 배열 범위를 벗어나는지 확인
         if (pos >= bytes.size) {
-            throw DecodeException("Position should be less than total byte size.", null)
+            throw SerializerException.DecodeException.PositionOutOfBoundsException(position, data.size)
         }
 
         val byte = bytes[pos].toInt() and 0xFF
@@ -81,7 +80,7 @@ fun decodeVarInt(bytes: ByteArray, offset: Int = 0): Pair<Int, Int> {
 
         // 32비트 Int를 넘어서는 과도한 데이터 방지
         if (shift >= 32) {
-            throw DecodeException("VarInt is too long", null)
+            throw SerializerException.DecodeException.VarIntTooLongException()
         }
     }
     return result to (pos - offset)
@@ -270,7 +269,7 @@ fun ByteArray.decodeSortableBoolean(): Boolean {
 
 fun ByteArray.decodeSortableUUID(): UUID{
     val unEscaped = unescapeZeroBytes(this)
-    if(unEscaped.size != 16) throw DecodeException("UUID should be 16 bytes", null)
+    if(unEscaped.size != 16) throw SerializerException.DecodeException.InvalidUUIDLengthException(unEscaped.size)
 
     val byteBuffer = ByteBuffer.wrap(unEscaped).order(ByteOrder.BIG_ENDIAN)
     return UUID(byteBuffer.long, byteBuffer.long)

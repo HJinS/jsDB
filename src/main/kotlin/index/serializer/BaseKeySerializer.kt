@@ -89,7 +89,7 @@ abstract class BaseKeySerializer<K>(protected val schema: KeySchema): KeySeriali
         val nullFlag = try {
             bytesInverted[position++]
         } catch( exception: IndexOutOfBoundsException) {
-            throw SerializerException(message="Invalid bytes.", cause=exception)
+            throw SerializerException.InvalidBytesException(exception)
         }
         if (nullFlag.toInt() == 0x00) return null to 1
 

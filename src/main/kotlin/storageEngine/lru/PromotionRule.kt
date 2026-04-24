@@ -1,6 +1,6 @@
 package storageEngine.lru
 
-import storageEngine.exception.MidPointLRUException
+import storageEngine.exception.LRUException
 import java.lang.System.currentTimeMillis
 
 class PromotionRule(
@@ -13,6 +13,6 @@ class PromotionRule(
     }
 
     fun checkSize(currentCount: Int){
-        if (currentCount >= capacity) throw MidPointLRUException.BufferPoolExhaustedException(capacity, null)
+        if (currentCount >= capacity) throw LRUException.BufferPoolExhaustedException(capacity, null)
     }
 }

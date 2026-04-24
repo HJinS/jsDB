@@ -181,7 +181,7 @@ class BTree<K, V> (
      * */
     private fun split(){
         while(traceNode.isNotEmpty()){
-            val (currentNode, currentNodeIdx) = try {traceNode.pop()} catch (e: EmptyStackException) { throw BTreeException("Unexpected node trace data invalid", e)}
+            val (currentNode, currentNodeIdx) = try {traceNode.pop()} catch (e: EmptyStackException) { throw IndexException.InvalidTraceStackException("InMemoryBTree", "Memory", e)}
             if(currentNode.isOverflow){
                 val promotionKey = currentNode.promotionKey()
                 val newNode = when(currentNode){
@@ -278,7 +278,7 @@ class BTree<K, V> (
      * */
     fun traverse(): List<Pair<K, V>>{
         val result = mutableListOf<Pair<K, V>>()
-        var currentNode: Node? = findLeftMostLeaf() ?: throw BTreeException("Empty tree", null)
+        var currentNode: Node? = findLeftMostLeaf() ?: throw BTreeException.LeafNodeNotFoundException(null)
         while(currentNode != null){
             currentNode = currentNode as LeafNode
             val keys = currentNode.keyView
