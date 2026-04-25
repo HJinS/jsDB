@@ -12,7 +12,7 @@ import index.serializer.KeySerializer
 import index.serializer.PageIDSerializer
 import index.serializer.ValueSerializer
 import mu.KotlinLogging
-import storageEngine.BufferPoolManager
+import storageEngine.StorageManager
 import storageEngine.exception.SlottedPageException
 import storageEngine.page.SlottedPage
 import storageEngine.util.PageType
@@ -39,7 +39,7 @@ val logger = KotlinLogging.logger {}
 class BTree<K, V> (
     val name: String,
     val targetTable: String,
-    val bufferPoolManager: BufferPoolManager,
+    private val storageManager: StorageManager,
     private val keySerializer: KeySerializer<K>,
     private val valueSerializer: ValueSerializer<V>,
     private val indexConfig: IndexConfig = IndexConfig
@@ -69,7 +69,7 @@ class BTree<K, V> (
             logger.info { "search key for insert - key: $key" }
             val (leafNodePageId, searchIdx, isExist) = searchLeafNode(serializedKey)
             logger.info { "search result - idx: $searchIdx, isExist: $isExist" }
-            bufferPoolManager.fetchPage(leafNodePageId).use{ handle ->
+            storageManager.fetchPage(leafNodePageId).use{ handle ->
                 handle.asWriteView { buffer ->
                     val page = SlottedPage(indexConfig, leafNodePageId, buffer)
                     val node = Node.from(indexConfig, page, keySerializer)
@@ -83,17 +83,16 @@ class BTree<K, V> (
                         }
                     }
                 }
+
             }
             traceNode.clear()
         } else {
-            val newPageHandle = bufferPoolManager.newPage()
+            val newPageHandle = storageManager.newPage(PageType.LEAF_NODE)
             newPageHandle.use{ handle ->
                 handle.asWriteView { buffer ->
-                    rootPageId = handle.frame.pageId
+                    rootPageId = handle.frame.pageId.get()
                     val newPage = SlottedPage(indexConfig, rootPageId, buffer)
                     val newNode = LeafNode(indexConfig, newPage, keySerializer)
-                    newPage.type = PageType.LEAF_NODE
-                    newPage.initData()
                     newNode.insertAt(0, serializedKey, serializedValue)
                 }
             }
@@ -122,7 +121,7 @@ class BTree<K, V> (
         if(isExist){
             printTree()
             var isUnderflow = false
-            bufferPoolManager.fetchPage(leafNodePageId).use{ handle ->
+            storageManager.fetchPage(leafNodePageId).use{ handle ->
                 handle.asWriteView { buffer ->
                     val page = SlottedPage(indexConfig, leafNodePageId, buffer)
                     val node = Node.from(indexConfig, page, keySerializer)
@@ -161,7 +160,7 @@ class BTree<K, V> (
         var currentPageId: Long = currentTrace.first
         var keyIdx: Int = currentTrace.second
         var isRoot: Boolean = traceNode.isEmpty()
-        var isUnderflow = bufferPoolManager.fetchPage(currentPageId).use{ handle ->
+        var isUnderflow = storageManager.fetchPage(currentPageId).use{ handle ->
             handle.asReadView { buffer ->
                 val page = SlottedPage(indexConfig, currentPageId, buffer)
                 val node = Node.from(indexConfig, page, keySerializer)
@@ -174,13 +173,13 @@ class BTree<K, V> (
             val parentPageId = nextTrace.first
             var isDone = false
 
-            bufferPoolManager.fetchPage(currentPageId).use{ currentHandle ->
+            storageManager.fetchPage(currentPageId).use{ currentHandle ->
                 currentHandle.asWriteView { currentBuffer ->
                     val currentPage = SlottedPage(indexConfig, currentPageId, currentBuffer)
                     val currentNode = Node.from(indexConfig, currentPage, keySerializer)
                     isUnderflow = currentNode.isUnderflow
 
-                    bufferPoolManager.fetchPage(parentPageId).use{ parentHandle ->
+                    storageManager.fetchPage(parentPageId).use{ parentHandle ->
                         parentHandle.asWriteView { parentBuffer ->
                             val parentPage = SlottedPage(indexConfig, currentPageId, parentBuffer)
                             val parentNode = Node.from(indexConfig, parentPage, keySerializer) as InternalNode
@@ -189,7 +188,7 @@ class BTree<K, V> (
                             val siblingPageIds = listOf(leftSiblingPageId, rightSiblingPageId)
                             for(siblingId in siblingPageIds){
                                 if(siblingId != null && !isDone){
-                                    bufferPoolManager.fetchPage(siblingId).use{ siblingHandle ->
+                                    storageManager.fetchPage(siblingId).use{ siblingHandle ->
                                         siblingHandle.asWriteView { siblingBuffer ->
                                             val siblingPage = SlottedPage(indexConfig, siblingId, siblingBuffer)
                                             val siblingNode = Node.from(indexConfig, siblingPage, keySerializer)
@@ -211,7 +210,7 @@ class BTree<K, V> (
                                 var mergeResult: Pair<Long, Long> = -1L to -1L
                                 for(siblingId in siblingPageIds){
                                     if(siblingId != null && !isMerged){
-                                        bufferPoolManager.fetchPage(siblingId).use{ siblingHandle ->
+                                        storageManager.fetchPage(siblingId).use{ siblingHandle ->
                                             siblingHandle.asWriteView { siblingBuffer ->
                                                 val siblingPage = SlottedPage(indexConfig, siblingId, siblingBuffer)
                                                 val siblingNode = Node.from(indexConfig, siblingPage, keySerializer)
@@ -228,15 +227,8 @@ class BTree<K, V> (
                                 // 추후 free frame 회수 및 flush 작업 필요
                                 if(mergeResult != -1L to -1L){
                                     val (leftPageId, rightPageId) = mergeResult
-                                    bufferPoolManager.fetchPage(rightPageId).use { rightPageHandle ->
-                                        rightPageHandle.asWriteView { rightBuffer ->
-                                            if(isMerged){
-                                                val rightPage = SlottedPage(indexConfig, rightPageId, rightBuffer)
-                                                if(isLeafNode){
-                                                    rightPage.leftSiblingPageId = leftPageId
-                                                }
-                                            }
-                                        }
+                                    if(isMerged){
+                                        storageManager.deletePage(rightPageId)
                                     }
                                 }
                             }
@@ -252,27 +244,23 @@ class BTree<K, V> (
         }
 
         if(isRoot){
-            bufferPoolManager.fetchPage(currentPageId).use{ handle ->
-                handle.asWriteView { buffer ->
+            var needChangeRoot = false
+            var newRootId: Long? = null
+            storageManager.fetchPage(currentPageId).use{ handle ->
+                handle.asReadView { buffer ->
                     val page = SlottedPage(indexConfig, currentPageId, buffer)
-                    val node = Node.from(indexConfig, page, keySerializer) as InternalNode
-                    if(node.keyCount == 0){
-                        val childNodePageId = node.childPageId(0)
-                        rootPageId = childNodePageId
-                        bufferPoolManager.fetchPage(childNodePageId).use { childHandle ->
-                            childHandle.asWriteView { childBuffer ->
-                                val childPage = SlottedPage(indexConfig, childNodePageId, childBuffer)
-                                val childNode = Node.from(indexConfig, childPage, keySerializer)
-                                if(childNode.isLeaf){
-                                    childPage.type = PageType.LEAF_NODE
-                                } else {
-                                    childPage.type = PageType.INTERNAL_NODE
-                                }
-                            }
-                        }
-                        // 기존에 key가 없는 root node 삭제 처리 필요
+                    val node = Node.from(indexConfig, page, keySerializer)
+                    if(node is InternalNode && node.keyCount == 0){
+                        newRootId = node.childPageId(0)
+                        needChangeRoot = true
                     }
                 }
+            }
+            if(needChangeRoot && newRootId != null){
+                rootPageId = newRootId!!
+                storageManager.deletePage(currentPageId)
+                // 트리의 메타데이터(rootPageId) 를 디스크에 써주는 내용 추가해야함
+
             }
         }
     }
@@ -293,7 +281,7 @@ class BTree<K, V> (
         while(traceNode.isNotEmpty()){
             val (currentPageId, currentSlotIdx) = try {traceNode.pop()} catch (e: EmptyStackException) { throw IndexException.InvalidTraceStackException(name, targetTable, e) }
             var newPageId: Long = -1L
-            bufferPoolManager.fetchPage(currentPageId).use { handle ->
+            storageManager.fetchPage(currentPageId).use { handle ->
                 handle.asWriteView { buffer ->
                     val page = SlottedPage(indexConfig, currentPageId, buffer)
                     val node = Node.from(indexConfig, page, keySerializer)
@@ -301,11 +289,10 @@ class BTree<K, V> (
                         val nodeSplitData = when(node) {
                             is LeafNode -> {
                                 val nodeSplitData = node.split()
-                                bufferPoolManager.newPage().use { handle ->
+                                storageManager.newPage(PageType.LEAF_NODE).use { handle ->
                                     handle.asWriteView { buffer ->
-                                        newPageId = handle.frame.pageId
+                                        newPageId = handle.frame.pageId.get()
                                         val newPage = SlottedPage(indexConfig, newPageId, buffer)
-                                        newPage.type = PageType.LEAF_NODE
                                         val newNode = Node.from(indexConfig, newPage, keySerializer) as LeafNode
                                         newNode.appendAllData(nodeSplitData.splitKeys, nodeSplitData.splitValues)
                                         node.linkNewSiblingNode(newNode)
@@ -315,11 +302,10 @@ class BTree<K, V> (
                             }
                             is InternalNode -> {
                                 val nodeSplitData = node.split()
-                                bufferPoolManager.newPage().use { handle ->
+                                storageManager.newPage(PageType.INTERNAL_NODE).use { handle ->
                                     handle.asWriteView { buffer ->
-                                        newPageId = handle.frame.pageId
+                                        newPageId = handle.frame.pageId.get()
                                         val newPage = SlottedPage(indexConfig, newPageId, buffer)
-                                        newPage.type = PageType.INTERNAL_NODE
                                         val newNode = Node.from(indexConfig, newPage, keySerializer) as InternalNode
                                         newPage.leftMostChildPageId = nodeSplitData.leftMostChildPageId
                                         newNode.appendAllData(nodeSplitData.splitKeys, nodeSplitData.splitValues)
@@ -330,11 +316,10 @@ class BTree<K, V> (
                             else -> throw NodeException.InvalidNodeTypeException(node.page.type)
                         }
                         if(traceNode.isEmpty()){
-                            bufferPoolManager.newPage().use { handle ->
+                            storageManager.newPage(PageType.INTERNAL_NODE).use { handle ->
                                 handle.asWriteView { buffer ->
-                                    val newRootPageId = handle.frame.pageId
+                                    val newRootPageId = handle.frame.pageId.get()
                                     val newRootPage = SlottedPage(indexConfig, newRootPageId, buffer)
-                                    newRootPage.type = PageType.INTERNAL_NODE
                                     val newRootNode = Node.from(indexConfig, newRootPage, keySerializer) as InternalNode
                                     newRootPage.leftMostChildPageId = currentPageId
                                     newRootNode.insert(nodeSplitData.promotionKey, pageIDSerializer.serialize(newPageId))
@@ -343,7 +328,7 @@ class BTree<K, V> (
                             }
                         } else {
                             val parentPageId = traceNode.peek().first
-                            bufferPoolManager.fetchPage(parentPageId).use { handle ->
+                            storageManager.fetchPage(parentPageId).use { handle ->
                                 handle.asWriteView { buffer ->
                                     val parentPage = SlottedPage(indexConfig, parentPageId, buffer)
                                     val parentNode = Node.from(indexConfig, parentPage, keySerializer) as InternalNode
@@ -387,7 +372,7 @@ class BTree<K, V> (
     private fun searchLeafNode(key: ByteArray): Triple<Long, Int, Boolean> {
         if(rootPageId == -1L) throw IndexException.EmptyTreeException(name, targetTable)
         traceNode.push(rootPageId to -1)
-        val rootNodeHandle = bufferPoolManager.fetchPage(rootPageId)
+        val rootNodeHandle = storageManager.fetchPage(rootPageId)
 
         rootNodeHandle.use{ handle ->
             handle.asReadView { buffer ->
@@ -402,7 +387,7 @@ class BTree<K, V> (
 
         var pageIdCursor: Long = rootPageId
         while(true){
-            val nodeSearchResult: NodeSearchResult = bufferPoolManager.fetchPage(pageIdCursor).use { handle ->
+            val nodeSearchResult: NodeSearchResult = storageManager.fetchPage(pageIdCursor).use { handle ->
                 handle.asReadView { buffer ->
                     val currentPage = SlottedPage(indexConfig, pageIdCursor, buffer)
                     val currentNode = Node.from(indexConfig, currentPage, keySerializer)
@@ -425,7 +410,7 @@ class BTree<K, V> (
 
             pageIdCursor = nodeSearchResult.pageId
         }
-        val nodeSearchResult: NodeSearchResult = bufferPoolManager.fetchPage(pageIdCursor).use { handle ->
+        val nodeSearchResult: NodeSearchResult = storageManager.fetchPage(pageIdCursor).use { handle ->
             handle.asReadView { buffer ->
                 val page = SlottedPage(indexConfig, pageIdCursor, buffer)
                 val node = Node.from(indexConfig, page, keySerializer) as LeafNode
@@ -440,7 +425,7 @@ class BTree<K, V> (
     fun search(key: K): V?{
         val serializedKey = keySerializer.serialize(key)
         val (leafNodePageId, keyIdx, isExist) = searchLeafNode(serializedKey)
-        val value: ByteArray = bufferPoolManager.fetchPage(leafNodePageId).use { handle ->
+        val value: ByteArray = storageManager.fetchPage(leafNodePageId).use { handle ->
             handle.asReadView { buffer ->
                 val currentPage = SlottedPage(indexConfig, leafNodePageId, buffer)
                 currentPage.getData(keyIdx).second
@@ -459,9 +444,9 @@ class BTree<K, V> (
         val result = mutableListOf<Pair<K, V>>()
         var leafNodePageIdCursor: Long? = findLeftMostLeafPageId() ?: throw BTreeException.LeafNodeNotFoundException(null)
         while(leafNodePageIdCursor != null){
-            val nextLeafNodePageId = bufferPoolManager.fetchPage(leafNodePageIdCursor).use{ handle ->
+            val nextLeafNodePageId = storageManager.fetchPage(leafNodePageIdCursor).use{ handle ->
                 handle.asReadView { buffer ->
-                    val page = SlottedPage(indexConfig, leafNodePageIdCursor, buffer)
+                    val page = SlottedPage(indexConfig, leafNodePageIdCursor!!, buffer)
                     val currentNode = Node.from(indexConfig, page, keySerializer)
                     val keys = currentNode.keyView
                     val values = currentNode.valueView
@@ -487,7 +472,7 @@ class BTree<K, V> (
         var pageIdCursor = rootPageId ?: return null
         var leaf = false
         while(true){
-            val nextPageId = bufferPoolManager.fetchPage(pageIdCursor).use { handle ->
+            val nextPageId = storageManager.fetchPage(pageIdCursor).use { handle ->
                 handle.asReadView { buffer ->
                     val currentPage = SlottedPage(indexConfig, pageIdCursor, buffer)
                     val currentNode = Node.from(indexConfig, currentPage, keySerializer)
@@ -520,7 +505,7 @@ class BTree<K, V> (
 
         val startPageId = rootPageId ?: return
         val queue = ArrayDeque<QueueItem>()
-        val isLeaf = bufferPoolManager.fetchPage(startPageId).use{ handle ->
+        val isLeaf = storageManager.fetchPage(startPageId).use{ handle ->
             handle.asReadView { buffer ->
                 val page = SlottedPage(indexConfig, startPageId, buffer)
                 val node = Node.from(indexConfig, page, keySerializer)
@@ -536,7 +521,7 @@ class BTree<K, V> (
             if(prevLevel != level){
                 viewBuilder.append("\n")
             }
-            bufferPoolManager.fetchPage(currentPageId).use { handle ->
+            storageManager.fetchPage(currentPageId).use { handle ->
                 handle.asReadView { buffer ->
                     val currentPage = SlottedPage(indexConfig, currentPageId, buffer)
                     var currentNode = Node.from(indexConfig, currentPage, keySerializer)
@@ -546,7 +531,7 @@ class BTree<K, V> (
                         for(i in 0..< currentNode.keyCount + 1){
                             val childNodePageId = currentNode.childPageId(i)
 
-                            val isLeaf = bufferPoolManager.fetchPage(childNodePageId).use{ childHandle ->
+                            val isLeaf = storageManager.fetchPage(childNodePageId).use{ childHandle ->
                                 childHandle.asReadView { childBuffer ->
                                     val childPage = SlottedPage(indexConfig, childNodePageId, childBuffer)
                                     val childNode = Node.from(indexConfig, childPage, keySerializer)
