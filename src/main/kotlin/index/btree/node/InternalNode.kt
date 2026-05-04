@@ -45,10 +45,10 @@ class InternalNode<K>(
      * */
     fun split(): NodeSplitData {
         val promotionKeyIdx = promotionKeyIdx()
-        val (splitKeyList, splitChildrenId) = splitData(promotionKeyIdx)
-        val totalRecordCount = page.recordCount
-        val (promotionKey, leftMostChildPageId) = page.deleteData(totalRecordCount - 1)
+        val (promotionKey, leftMostChildPageId) = page.getData(promotionKeyIdx)
         val leftMostChildPageIdDecoded = valueSerializer.deserialize(leftMostChildPageId)
+        val (splitKeyList, splitChildrenId) = splitData(promotionKeyIdx)
+        page.deleteData(promotionKeyIdx)
         return NodeSplitData(
             splitKeyList, splitChildrenId, promotionKey, leftMostChildPageIdDecoded
         )
@@ -56,14 +56,15 @@ class InternalNode<K>(
 
     override fun deleteAllData(): Pair<MutableList<ByteArray>, MutableList<ByteArray>>{
         val endSlotId = page.recordCount - 1
-        val resultKey = MutableList(page.recordCount){ByteArray(0x00)}
-        val resultValue = MutableList(page.recordCount+1){ByteArray(0x00)}
-        resultValue[0] = valueSerializer.serialize(page.leftMostChildPageId)
-        for(slotId in 0 .. endSlotId){
+        val resultKey = mutableListOf<ByteArray>()
+        val resultValue = mutableListOf<ByteArray>()
+        val leftMostChildPageIdSerialized = valueSerializer.serialize(page.leftMostChildPageId)
+        for(slotId in endSlotId downTo 0){
             val (key, value) = page.deleteData(slotId)
-            resultKey[slotId] = key
-            resultValue[slotId+1] = value
-        }
+            resultKey.addFirst(key)
+            resultValue.addFirst(value)
+       }
+        resultValue.addFirst(leftMostChildPageIdSerialized)
         return resultKey to resultValue
     }
 
@@ -84,10 +85,10 @@ class InternalNode<K>(
         val keyList = mutableListOf<ByteArray>()
         val childPageIdList = mutableListOf<ByteArray>()
         val totalRecordCount = page.recordCount
-        for(slotId in promotionKeyIdx + 1 until totalRecordCount){
+        for(slotId in totalRecordCount-1 downTo promotionKeyIdx+1){
             val (key, value) = page.deleteData(slotId)
-            keyList.add(key)
-            childPageIdList.add(value)
+            keyList.addFirst(key)
+            childPageIdList.addFirst(value)
         }
         return keyList to childPageIdList
     }
@@ -120,10 +121,8 @@ class InternalNode<K>(
             val siblingLeftMostChild = targetNode.page.leftMostChildPageId
             page.insertData(page.recordCount, removedParentKey, valueSerializer.serialize(siblingLeftMostChild))
             parentNode.updateKey(keyIdx, siblingKey)
-            targetNode.page.shiftSlot(0, targetNode.page.recordCount, -1)
             targetNode.page.leftMostChildPageId = valueSerializer.deserialize(siblingValue)
         } else{
-            page.shiftSlot(0, page.recordCount, 1)
             val leftMostChild = valueSerializer.serialize(page.leftMostChildPageId)
             val removedParentKey = parentNode.page.getData(keyIdx-1).first
             val (siblingKey, siblingValue) = targetNode.page.deleteData(targetNode.page.recordCount - 1)

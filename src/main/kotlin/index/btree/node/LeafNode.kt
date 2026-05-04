@@ -40,8 +40,7 @@ class LeafNode<K>(
     fun split(): NodeSplitData {
         val promotionKeyIdx = promotionKeyIdx()
         val (splitKeys, splitValues) = splitData(promotionKeyIdx)
-        val totalRecordCount = page.recordCount
-        val (promotionKey, _) = page.deleteData(totalRecordCount - 1)
+        val promotionKey = splitKeys.first()
         return NodeSplitData(
             splitKeys, splitValues, promotionKey, -1
         )
@@ -55,13 +54,13 @@ class LeafNode<K>(
      * @return split key array
      * */
     private fun splitData(promotionKeyIdx: Int): Pair<MutableList<ByteArray>, MutableList<ByteArray>>{
-        val keyList = mutableListOf<ByteArray>()
-        val values = mutableListOf<ByteArray>()
+        val keyList: MutableList<ByteArray> = mutableListOf<ByteArray>()
+        val values: MutableList<ByteArray> = mutableListOf<ByteArray>()
         val totalRecordCount = page.recordCount
-        for(slotId in promotionKeyIdx until totalRecordCount){
+        for(slotId in totalRecordCount-1 downTo promotionKeyIdx+1){
             val (key, value) = page.deleteData(slotId)
-            keyList.add(key)
-            values.add(value)
+            keyList.addFirst(key)
+            values.addFirst(value)
         }
         return keyList to values
     }
@@ -78,12 +77,12 @@ class LeafNode<K>(
 
     override fun deleteAllData(): Pair<List<ByteArray>, List<ByteArray>>{
         val endSlotId = page.recordCount - 1
-        val resultKey = MutableList(page.recordCount){ByteArray(0x00)}
-        val resultValue = MutableList(page.recordCount){ByteArray(0x00)}
-        for(slotId in 0 .. endSlotId){
+        val resultKey = mutableListOf<ByteArray>()
+        val resultValue = mutableListOf<ByteArray>()
+        for(slotId in endSlotId downTo 0){
             val (key, value) = page.deleteData(slotId)
-            resultKey[slotId] = key
-            resultValue[slotId] = value
+            resultKey.addFirst(key)
+            resultValue.addFirst(value)
         }
         return resultKey to resultValue
     }
@@ -123,7 +122,7 @@ class LeafNode<K>(
         if(isLeft(targetNode.page.pageId, parentNode, keyIdx)){
             val (key, value) = targetNode.deleteData(0)
             insert(key, value)
-            parentNode.updateKey(keyIdx, key)
+            parentNode.updateKey(keyIdx, targetNode.page.getData(0).first)
         } else{
             val recordCount = targetNode.keyCount
             val (key, value) = targetNode.deleteData(recordCount - 1)

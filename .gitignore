@@ -84,3 +84,7 @@ hs_err_pid*
 .gradletasknamecache
 
 bin
+
+# Gemini & Skills
+*.skill
+.gemini/

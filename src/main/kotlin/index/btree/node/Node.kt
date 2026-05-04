@@ -85,7 +85,7 @@ abstract class Node<K>(
      * */
     fun search(key: ByteArray, exactIndex: Boolean=false): Pair<Int, Boolean>{
         val idx = page.binarySearch(key)
-        index.btree.inMemory.logger.info { "Binary search result: $idx keyLength: $page.recordCount" }
+        index.btree.logger.info { "Binary search result: $idx keyLength: $page.recordCount" }
         return if(idx >= 0) {if(exactIndex) idx to true else idx+1 to true} else -(idx + 1) to false
     }
 
@@ -108,7 +108,7 @@ abstract class Node<K>(
         page.insertData(slotId, key, data)
     }
 
-    fun deleteData(slotId: Int) = page.deleteData(0)
+    fun deleteData(slotId: Int) = page.deleteData(slotId)
 
     fun deleteAt(slotId: Int){
         page.deleteData(slotId)

@@ -45,7 +45,6 @@ class BTree<K, V> (
     private val indexConfig: IndexConfig = IndexConfig
 ){
     private var rootPageId: Long = -1
-    private val traceNode: Stack<Pair<Long, Int>> = Stack()
 
     companion object{
         private val pageIDSerializer: PageIDSerializer = PageIDSerializer()
@@ -64,10 +63,12 @@ class BTree<K, V> (
     fun insert(key: K, value: V) {
         val serializedValue = valueSerializer.serialize(value)
         val serializedKey = keySerializer.serialize(key)
+        val traceNode: Stack<Pair<Long, Int>> = Stack<Pair<Long, Int>>()
+
         if (rootPageId != -1L) {
             logger.info { "-------------------------------------------" }
             logger.info { "search key for insert - key: $key" }
-            val (leafNodePageId, searchIdx, isExist) = searchLeafNode(serializedKey)
+            val (leafNodePageId, searchIdx, isExist) = searchLeafNode(serializedKey, traceNode)
             logger.info { "search result - idx: $searchIdx, isExist: $isExist" }
             storageManager.fetchPage(leafNodePageId).use{ handle ->
                 handle.asWriteView { buffer ->
@@ -77,7 +78,7 @@ class BTree<K, V> (
                     // check overflow and do split
                     if(node.isOverflow){
                         try{
-                            split()
+                            split(traceNode)
                         } catch (e: Exception) {
                             throw e
                         }
@@ -117,7 +118,8 @@ class BTree<K, V> (
      * */
     fun delete(key: K){
         val serializedKey = keySerializer.serialize(key)
-        val (leafNodePageId, keyIdx, isExist) = searchLeafNode(serializedKey)
+        val traceNode: Stack<Pair<Long, Int>> = Stack<Pair<Long, Int>>()
+        val (leafNodePageId, keyIdx, isExist) = searchLeafNode(serializedKey, traceNode)
         if(isExist){
             printTree()
             var isUnderflow = false
@@ -132,7 +134,7 @@ class BTree<K, V> (
                 }
             }
             if(isUnderflow){
-                handleUnderflow()
+                handleUnderflow(traceNode)
             }
         }
         traceNode.clear()
@@ -155,7 +157,7 @@ class BTree<K, V> (
      *
      * Should rebalance continuously to the root node.
      * */
-    private fun handleUnderflow(){
+    private fun handleUnderflow(traceNode: Stack<Pair<Long, Int>>){
         var currentTrace = traceNode.pop()
         var currentPageId: Long = currentTrace.first
         var keyIdx: Int = currentTrace.second
@@ -277,7 +279,7 @@ class BTree<K, V> (
      * @see LeafNode.split
      * @see InternalNode.split
      * */
-    private fun split(){
+    private fun split(traceNode: Stack<Pair<Long, Int>>){
         while(traceNode.isNotEmpty()){
             val (currentPageId, currentSlotIdx) = try {traceNode.pop()} catch (e: EmptyStackException) { throw IndexException.InvalidTraceStackException(name, targetTable, e) }
             var newPageId: Long = -1L
@@ -369,62 +371,39 @@ class BTree<K, V> (
      * @see Node.search
      * @see Node.search
      **/
-    private fun searchLeafNode(key: ByteArray): Triple<Long, Int, Boolean> {
+    private fun searchLeafNode(key: ByteArray, traceNode: Stack<Pair<Long, Int>>): Triple<Long, Int, Boolean> {
         if(rootPageId == -1L) throw IndexException.EmptyTreeException(name, targetTable)
         traceNode.push(rootPageId to -1)
-        val rootNodeHandle = storageManager.fetchPage(rootPageId)
-
-        rootNodeHandle.use{ handle ->
-            handle.asReadView { buffer ->
-                val rootPage = SlottedPage(indexConfig, rootPageId, buffer)
-                val node = Node.from(indexConfig, rootPage, keySerializer)
-                if(node is InternalNode && node.isLeaf){
-                    val (searchIdx, isExist) = node.search(key)
-                    return Triple(node.page.pageId, searchIdx, isExist)
-                }
-            }
-        }
 
         var pageIdCursor: Long = rootPageId
         while(true){
-            val nodeSearchResult: NodeSearchResult = storageManager.fetchPage(pageIdCursor).use { handle ->
+            storageManager.fetchPage(pageIdCursor).use { handle ->
                 handle.asReadView { buffer ->
                     val currentPage = SlottedPage(indexConfig, pageIdCursor, buffer)
                     val currentNode = Node.from(indexConfig, currentPage, keySerializer)
+                    if(pageIdCursor == rootPageId && currentNode is InternalNode && currentNode.isLeaf){
+                        val (searchIdx, isExist) = currentNode.search(key, true)
+                        return Triple(pageIdCursor, searchIdx, isExist)
+                    }
                     val result = currentNode.search(key)
                     if(currentNode.isLeaf){
-                        NodeSearchResult(pageIdCursor, result.first, result.second, true)
+                        val (searchIdx, isExist) = currentNode.search(key, true)
+                        return Triple(pageIdCursor, searchIdx, isExist)
                     } else{
                         val currentInternalNode = currentNode as InternalNode
                         val nextPageId = currentInternalNode.childPageId(result.first)
-                        NodeSearchResult(nextPageId, result.first, result.second, false)
+                        traceNode.push(nextPageId to result.first)
+                        pageIdCursor = nextPageId
                     }
                 }
             }
-            when(nodeSearchResult.isLeaf){
-                true -> break
-                false -> {
-                    traceNode.push(nodeSearchResult.pageId to nodeSearchResult.searchIdx)
-                }
-            }
-
-            pageIdCursor = nodeSearchResult.pageId
         }
-        val nodeSearchResult: NodeSearchResult = storageManager.fetchPage(pageIdCursor).use { handle ->
-            handle.asReadView { buffer ->
-                val page = SlottedPage(indexConfig, pageIdCursor, buffer)
-                val node = Node.from(indexConfig, page, keySerializer) as LeafNode
-                val result = node.search(key)
-                NodeSearchResult(pageIdCursor, result.first, result.second, true)
-            }
-
-        }
-        return Triple(pageIdCursor, nodeSearchResult.searchIdx, nodeSearchResult.isExist)
     }
 
     fun search(key: K): V?{
         val serializedKey = keySerializer.serialize(key)
-        val (leafNodePageId, keyIdx, isExist) = searchLeafNode(serializedKey)
+        val traceNode: Stack<Pair<Long, Int>> = Stack<Pair<Long, Int>>()
+        val (leafNodePageId, keyIdx, isExist) = searchLeafNode(serializedKey, traceNode)
         val value: ByteArray = storageManager.fetchPage(leafNodePageId).use { handle ->
             handle.asReadView { buffer ->
                 val currentPage = SlottedPage(indexConfig, leafNodePageId, buffer)
@@ -470,14 +449,14 @@ class BTree<K, V> (
      * */
     private fun findLeftMostLeafPageId(): Long?{
         var pageIdCursor = rootPageId ?: return null
-        var leaf = false
+        var isLeaf = false
         while(true){
             val nextPageId = storageManager.fetchPage(pageIdCursor).use { handle ->
                 handle.asReadView { buffer ->
                     val currentPage = SlottedPage(indexConfig, pageIdCursor, buffer)
                     val currentNode = Node.from(indexConfig, currentPage, keySerializer)
                     if(currentNode.isLeaf){
-                        leaf = true
+                        isLeaf = true
                         pageIdCursor
                     } else{
                         val currentInternalNode = currentNode as InternalNode
@@ -486,7 +465,7 @@ class BTree<K, V> (
                 }
             }
             pageIdCursor = nextPageId
-            if(leaf) break
+            if(isLeaf) break
         }
         return pageIdCursor
     }
