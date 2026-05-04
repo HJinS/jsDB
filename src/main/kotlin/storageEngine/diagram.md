@@ -40,13 +40,13 @@ classDiagram
         -pageTable: Map~Int, Int~
         -replacer: MidPointReplacer
         -diskManager: DiskManager
-        +fetchPage(pageId): PageHandle
+        +fetchPage(pageId): PageLock
         +unpinPage(pageId, isDirty)
         -evict()
     }
 
     %% 4. 인터페이스 계층 (Access Layer)
-    class PageHandle {
+    class PageLock {
         -frame: Frame
         -bpm: BufferPoolManager
         +getBuffer(): ByteBuffer
@@ -64,7 +64,7 @@ classDiagram
     BufferPoolManager o-- Frame : Owns
     BufferPoolManager o-- MidPointReplacer : Uses
     BufferPoolManager --> DiskManager : Uses
-    BufferPoolManager ..> PageHandle : Creates
-    PageHandle --> Frame : Wraps
+    BufferPoolManager ..> PageLock : Creates
+    PageLock --> Frame : Wraps
     SlottedPage ..> ByteBuffer : Interprets
 ```

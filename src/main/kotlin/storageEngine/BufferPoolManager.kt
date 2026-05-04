@@ -7,7 +7,7 @@ import storageEngine.DiskManager
 import storageEngine.lru.MidpointLRUPolicy
 import storageEngine.page.Frame
 import storageEngine.page.Page
-import storageEngine.page.PageHandle
+import storageEngine.page.PageLock
 import storageEngine.page.SlottedPage
 import storageEngine.util.PageType
 import storageEngine.exception.BufferPoolManagerException 
@@ -69,7 +69,7 @@ class BufferPoolManager(
      *   -> 새로운 매핑 등록
      * freeFrameId의 경우에는 LRU 알고리즘 사용
      * */
-    fun fetchPage(pageId: Long): PageHandle{
+    fun fetchPage(pageId: Long): PageLock{
         var frame: Frame?
         var victimPageId: Long? = null
         var needIO = false
@@ -119,7 +119,7 @@ class BufferPoolManager(
             frame.latch.readLock().lock()
             frame.latch.readLock().unlock()
         }
-        return PageHandle(frame, this)
+        return PageLock(frame, this)
     }
 
 
@@ -128,7 +128,7 @@ class BufferPoolManager(
      * 2. 빈 Frame 탐색 -> 빈 프레임이 없으면 eviction 실행 후 공간 확보(disk flush 필요.)
      * 3. pageTable 업데이트, page pin, dirty 마킹, 페이지 초기화(헤더 등)
      * */
-    fun newPage(pageID: Long): PageHandle{
+    fun newPage(pageID: Long): PageLock{
         var frame: Frame?
         var victimPageId: Long? = null
 
@@ -160,11 +160,11 @@ class BufferPoolManager(
         } finally{
             frame.latch.writeLock().unlock()
         }
-        return PageHandle(frame, this)
+        return PageLock(frame, this)
     }
 
     /**
-     * page 사용 종료시 handle에서 호출
+     * page 사용 종료시 lock에서 호출
      * frame 가져와서 -> pinCount -- -> isDirty 몇 표기
      *
      * */

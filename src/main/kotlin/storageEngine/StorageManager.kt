@@ -1,6 +1,6 @@
 package storageEngine
 
-import storageEngine.page.PageHandle
+import storageEngine.page.PageLock
 import storageEngine.page.SlottedPage
 import storageEngine.util.PageType
 import storageEngine.exception.StorageManagerException
@@ -17,17 +17,17 @@ class StorageManager(
      * 그 후 [BufferPoolManager]에 새로운 페이지 요청
      * Page를 SlottedPage의 형식에 맞게 초기화초기화
      * */
-    fun newPage(pageType: PageType): PageHandle{
+    fun newPage(pageType: PageType): PageLock{
         val freePageID = freeSpaceManager.getFreePageID()
-        val newPageHandle = bufferPoolManager.newPage(freePageID)
-        newPageHandle.use{ pageHandle -> 
-            pageHandle.asWriteView { newBuffer ->
+        val newPageLock = bufferPoolManager.newPage(freePageID)
+        newPageLock.use{ pageLock -> 
+            pageLock.asWriteView { newBuffer ->
                 val page = SlottedPage(indexConfig, freePageID, newBuffer)
                 page.initData()
                 page.type = pageType
             }
         }
-        return newPageHandle
+        return newPageLock
     }
 
 
@@ -35,14 +35,14 @@ class StorageManager(
      * [BufferPoolManager.fetchPage]로 page fetch
      *
      * */
-    fun fetchPage(pageId: Long): PageHandle{
+    fun fetchPage(pageId: Long): PageLock{
         if(pageId <= 0L) throw StorageManagerException.InvalidPageIdException(pageId)
-        val pageHandle = bufferPoolManager.fetchPage(pageId)
-        pageHandle.asReadView { buffer ->
+        val pageLock = bufferPoolManager.fetchPage(pageId)
+        pageLock.asReadView { buffer ->
             val page = SlottedPage(indexConfig, pageId, buffer)
             if(!(page.type == PageType.INTERNAL_NODE || page.type == PageType.LEAF_NODE)) throw StorageManagerException.InvalidPageTypeException(pageId, page.type)
         }
-        return pageHandle
+        return pageLock
     }
 
     /**
