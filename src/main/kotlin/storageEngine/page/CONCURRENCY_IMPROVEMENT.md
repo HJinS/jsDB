@@ -72,4 +72,4 @@ fun flushPage(pageId: Long) {
 - [ ] `flushPage` 호출 시 `frame.latch` 획득 로직 추가
 - [ ] `newPage`에 `globalLatch` 적용 및 동기화 범위 최적화
 - [ ] `fetchPage` 내 I/O 로직을 `globalLatch` 외부로 완전히 분리 (이미 일부 적용됨)
-- [ ] `PageHandle`의 `close`(`unpin`) 시점에 `globalLatch` 없이 `Atomic` 연산으로 처리 가능한지 검토
+- [ ] `PageLock`의 `close`(`unpin`) 시점에 `globalLatch` 없이 `Atomic` 연산으로 처리 가능한지 검토
