@@ -97,17 +97,6 @@ open class SlottedPage(
         data.putShort(HEADER_SIZE + slotId * SLOT_SIZE, (-1).toShort())
     }
 
-    /**
-     * 사용할 미사용 슬롯 하나 획득
-     * */
-    private fun getFreeSlotId(): Int{
-        val freeSlotId = data.getShort(PageHeaderOffset.FREE_SLOT_HEAD.offset).toInt()
-        return freeSlotId.takeIf { it != -1 }?.also { id ->
-            val nextFreeSlotId = data.getShort(HEADER_SIZE + id * SLOT_SIZE).toInt()
-            data.putShort(PageHeaderOffset.FREE_SLOT_HEAD.offset, nextFreeSlotId.toShort())
-        } ?: -1
-    }
-
     private fun getNewSlotId(): Int{
         val newSlotLocation = data.getShort(PageHeaderOffset.FREE_SPACE_START.offset)
         data.putShort(PageHeaderOffset.FREE_SPACE_START.offset, (newSlotLocation + SLOT_SIZE).toShort())
@@ -119,19 +108,12 @@ open class SlottedPage(
      * @return the slotID of the last record
      * */
     private fun insertSlot(index: Int, offset: Short, length: Short){
-        val writeOnlyView = data.duplicate()
-        val readOnlyView = data.duplicate()
         val slotLocation = HEADER_SIZE + index * SLOT_SIZE
         if(index < recordCount){
-            readOnlyView.position(slotLocation)
-            readOnlyView.limit(freeSpaceStart)
-
-            writeOnlyView.position(slotLocation + SLOT_SIZE)
-            writeOnlyView.put(readOnlyView)
-            writeOnlyView.clear()
+            shiftSlot(index, recordCount - index, 1)
         }
-        writeOnlyView.putShort(slotLocation, offset)
-        writeOnlyView.putShort(slotLocation + 2, length)
+        data.putShort(slotLocation, offset)
+        data.putShort(slotLocation + 2, length)
     }
 
     @OptIn(ExperimentalStdlibApi::class)
@@ -205,42 +187,39 @@ open class SlottedPage(
     fun binarySearch(key: ByteArray): Int{
         var low = 0
         var high = recordCount - 1
-        while(low < high) {
+        while(low <= high) {
             val mid = (high + low) / 2
             val midKey = getData(mid).first
             val compareResult = Arrays.compareUnsigned(key, midKey)
             when {
-                compareResult < 0 -> low = mid + 1
-                compareResult > 0 -> high = mid - 1
+                compareResult < 0 -> high = mid - 1
+                compareResult > 0 -> low = mid + 1
                 else -> return mid
             }
         }
         return -(low + 1)
     }
 
-    fun shiftSlot(src: Int, srcLength: Int, shiftLength: Int): Int{
-        try{
-            if(shiftLength == 0) return -1
-            else if(shiftLength > 0 ){
-                val end = src + srcLength
-                for (i in end - 1 downTo src) {
-                    val srcOffset = HEADER_SIZE + (i * SLOT_SIZE)
-                    val dstOffset = srcOffset + SLOT_SIZE * shiftLength
+    /**
+     * SLOT_SIZE(4 Byte) 단위로 slot을 옮김.
+     * */
+    fun shiftSlot(src: Int, srcLength: Int, shiftLength: Int): Int {
+        if (shiftLength == 0 || srcLength <= 0) return -1
+        
+        try {
+            val srcOffset = HEADER_SIZE + (src * SLOT_SIZE)
+            val srcLengthByte = srcLength * SLOT_SIZE
+            val dstOffset = srcOffset + (shiftLength * SLOT_SIZE)
 
-                    val slotData = data.getInt(srcOffset)
-                    data.putInt(dstOffset, slotData)
-                }
-            } else {
-                val end = src + srcLength
-                for(i in src until end){
-                    val srcOffset = HEADER_SIZE + (i * SLOT_SIZE)
-                    val dstOffset = srcOffset + SLOT_SIZE * shiftLength
+            val readView = data.duplicate()
+            val writeView = data.duplicate()
 
-                    val slotData = data.getInt(srcOffset)
-                    data.putInt(dstOffset, slotData)
-                }
-            }
-        } catch (e: IndexOutOfBoundsException){
+            readView.position(srcOffset)
+            readView.limit(srcOffset + srcLengthByte)
+            writeView.position(dstOffset)
+
+            writeView.put(readView)
+        } catch (e: Exception) {
             throw SlottedPageException.SlotShiftException(pageId, type, e)
         }
         return src
@@ -281,9 +260,9 @@ open class SlottedPage(
     fun deleteData(slotId: Int): Pair<ByteArray, ByteArray>{
         val slotLocation = HEADER_SIZE + slotId * SLOT_SIZE
         val (key, value) = getData(slotId)
-        data.putShort(slotLocation, 0)
-        data.putShort(slotLocation+2, 0)
-        retrieveFreeSlotId(slotId)
+        if(slotId < recordCount - 1){
+            shiftSlot(slotId+1, recordCount -  (slotId + 1), -1)
+        }
         decreaseRecordCount()
         return key to value
     }
@@ -308,7 +287,9 @@ open class SlottedPage(
             var offset = data.getShort(slotArrayStartBytes).toInt()
             val length = data.getShort(slotArrayStartBytes + 2).toInt()
             if(length == 0) offset = 0
-            slotArrayTemp.addLast(Triple(slotNumber, offset, length))
+            if(length > 0){
+                slotArrayTemp.add(Triple(slotNumber, offset, length))
+            }
             slotArrayStartBytes += SLOT_SIZE
             slotNumber += 1
         }
@@ -318,22 +299,44 @@ open class SlottedPage(
         val readOnlyView = data.duplicate()
         val writeOnlyView = data.duplicate()
 
-        var writePointer = indexConfig.pageSize - 1
-        slotArrayStartBytes = HEADER_SIZE
+        var writePointer = indexConfig.pageSize
         // iterate 하면서 write pointer는 끝에서 사이즈를 통해 점차 내려감
         // read pointer는 slot array 데이터의 offset을 사용
-        slotArrayTemp.forEach { (slotNumber, readPointer, length) ->
-            if(length == 0 && readPointer == 0) return@forEach
-            writePointer -= length
+        
+        var idx = 0
+        while(idx < slotArrayTemp.size){
+            var totalCopyLength = slotArrayTemp[idx].third
+            // 연속된 그룹의 가장 바깥에 있는 slot의 array idx
+            val copyGroupStartIdx = idx
+
+            // while loop를 사용해 한번에 묶어서 복사할 연속된 slot을 찾음
+            // idx가 커지면, slot 위치상 가장 안쪽임(offset 기존 내림차순 이기 때문)
+            while(idx+1 < slotArrayTemp.size && slotArrayTemp[idx].second == slotArrayTemp[idx+1].second + slotArrayTemp[idx+1].third){
+                totalCopyLength += slotArrayTemp[idx+1].third
+                idx++
+            }
+
+            val groupCopyReadStart = slotArrayTemp[idx].second
+            // 길이만큼 빼서 writePointer지점은 연속된 group의 가장 안쪽 slot임(데이터 위치상 가장 안쪽)
+            writePointer -= totalCopyLength
             readOnlyView.clear()
-            readOnlyView.position(readPointer)
-            readOnlyView.limit(readPointer + length)
-            writeOnlyView.clear()
+            readOnlyView.position(groupCopyReadStart)
+            readOnlyView.limit(groupCopyReadStart + totalCopyLength)
             writeOnlyView.position(writePointer)
             writeOnlyView.put(readOnlyView)
-            data.putShort(slotArrayStartBytes + SLOT_SIZE * slotNumber, writePointer.toShort())
+
+            var currentWritePointer = writePointer
+            // slot에 offset 업데이트, slot배열 은 변경점 없음
+            for(idx2 in idx downTo copyGroupStartIdx){
+                val slotIdx = slotArrayTemp[idx2].first
+                data.putShort(HEADER_SIZE + slotIdx * SLOT_SIZE, currentWritePointer.toShort())
+                currentWritePointer += slotArrayTemp[idx2].third
+            }
+            idx++
+
         }
-        data.putShort(PageHeaderOffset.FREE_SPACE_END.offset, writePointer.toShort())
+
+        data.putShort(PageHeaderOffset.FREE_SPACE_END.offset, (writePointer-1).toShort())
     }
 
     companion object{
