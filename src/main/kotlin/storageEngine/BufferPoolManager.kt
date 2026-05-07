@@ -10,6 +10,7 @@ import storageEngine.page.Page
 import storageEngine.page.PageLock
 import storageEngine.page.SlottedPage
 import storageEngine.util.PageType
+import storageEngine.util.LockMode
 import storageEngine.exception.BufferPoolManagerException 
 import java.nio.ByteBuffer
 import java.util.concurrent.locks.ReentrantLock
@@ -69,36 +70,43 @@ class BufferPoolManager(
      *   -> 새로운 매핑 등록
      * freeFrameId의 경우에는 LRU 알고리즘 사용
      * */
-    fun fetchPage(pageId: Long): PageLock{
-        var frame: Frame?
+    fun fetchPage(pageId: Long, lockMode: LockMode): PageLock{
         var victimPageId: Long? = null
         var needIO = false
-        
+        var frameId: Int = -1
+        var frame: Frame? = null
+        var isReadLocked: Boolean = false
+        var isWriteLocked: Boolean = false
+
+
         globalLatch.lock()
         try{
             if(pageTable.containsKey(pageId)) {
-                val frameId = pageTable[pageId]!!
+                frameId = pageTable[pageId]!!
                 frame = frames[frameId]
                 replacer.add(frameId)
                 replacer.pin(frameId)
                 frame.pinCount.incrementAndGet()
             } else {
-                val freeFrameId = getFreeFrameId()
-                frame = frames[freeFrameId]
+                frameId = getFreeFrameId()
+                frame = frames[frameId]
                 needIO = true
                 // writeLock을 여기서 미리 잡아둠. 밑에서 IO 작업 진행 필요
                 frame.latch.writeLock().lock()
+                isReadLocked = false
+                isWriteLocked = true
                 val currentPageId = frame.pageId.get()
                 if(frame.isDirty.get() && currentPageId != -1L){
                     victimPageId = currentPageId
                 }
                 pageTable.remove(currentPageId)
                 frame.pinCount.set(1)
-                pageTable[pageId] = freeFrameId
-                replacer.pin(freeFrameId)
+                pageTable[pageId] = frameId
+                replacer.pin(frameId)
             }
-        } finally {
+        } catch(e: Exception){
             globalLatch.unlock()
+            throw BufferPoolManagerException.UnExpectedException(pageId, e)
         }
         if(needIO){
             try{
@@ -109,17 +117,30 @@ class BufferPoolManager(
                 frame.pageId.set(pageId)
                 frame.reset()
                 diskManager.readPage(pageId, frame.data)
-            } finally {
+            } catch(e: Exception) {
                 frame.latch.writeLock().unlock()
+                throw e
+            }
+            if(lockMode == LockMode.READ){
+                frame.latch.writeLock().unlock()
+                frame.latch.readLock().lock()
+                isReadLocked = true
+                isWriteLocked = false
             }
         } else {
-            // Case A (이미 존재)의 경우:
-            // 만약 I/O 중인 프레임을 만났다면 데이터가 유효해질 때까지 기다려야 함
-            // ReadLock을 잠깐 잡았다 놓음으로써 WriteLock(I/O)이 끝날 때까지 대기 효과
-            frame.latch.readLock().lock()
-            frame.latch.readLock().unlock()
+            if(lockMode == LockMode.READ){
+                frame.latch.readLock().lock()
+                isReadLocked = true
+                isWriteLocked = false
+            }
+            else{
+                frame.latch.writeLock().lock()
+                isReadLocked = false
+                isWriteLocked = true
+
+            }
         }
-        return PageLock(frame, this)
+        return PageLock(frame, this, isReadLocked, isWriteLocked)
     }
 
 
@@ -128,25 +149,27 @@ class BufferPoolManager(
      * 2. 빈 Frame 탐색 -> 빈 프레임이 없으면 eviction 실행 후 공간 확보(disk flush 필요.)
      * 3. pageTable 업데이트, page pin, dirty 마킹, 페이지 초기화(헤더 등)
      * */
-    fun newPage(pageID: Long): PageLock{
-        var frame: Frame?
+    fun newPage(pageId: Long): PageLock{
+        var frame: Frame? = null
+        var frameId: Int = -1
         var victimPageId: Long? = null
 
         globalLatch.lock()
         try{
-            val freeFrameId = getFreeFrameId()
-            frame = frames[freeFrameId]
+            frameId = getFreeFrameId()
+            frame = frames[frameId]
             frame.latch.writeLock().lock()
             val currentPageId = frame.pageId.get()
             if(frame.isDirty.get() && currentPageId != -1L){
                 victimPageId = currentPageId
             }
             pageTable.remove(currentPageId)
-            pageTable[pageID] = freeFrameId
+            pageTable[pageId] = frameId
             frame.pinCount.set(1)
-            replacer.pin(freeFrameId)
-        } finally{
+            replacer.pin(frameId)
+        } catch(e: Exception){
             globalLatch.unlock()
+            throw BufferPoolManagerException.UnExpectedException(pageId, e)
         }
         try{
             if(victimPageId != null){
@@ -155,12 +178,13 @@ class BufferPoolManager(
             frame.apply { 
                 reset()
                 isDirty.set(true)
-                pageId.set(pageID)
+                this.pageId.set(pageId)
             }
-        } finally{
+        } catch(e: Exception){
             frame.latch.writeLock().unlock()
+            throw BufferPoolManagerException.UnExpectedException(pageId, e)
         }
-        return PageLock(frame, this)
+        return PageLock(frame, this, false, true)
     }
 
     /**

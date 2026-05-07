@@ -39,3 +39,6 @@ enum class MetaPageOffset(val offset: Int, val bytes: Int){
 const val META_PAGE_ID = 0L
 
 const val INVALID_PAGE_ID = -2L
+
+enum class LockMode {WRITE, READ}
+

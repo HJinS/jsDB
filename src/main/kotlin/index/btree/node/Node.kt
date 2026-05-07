@@ -4,6 +4,7 @@ import config.IndexConfig
 import index.exception.IndexException
 import index.exception.NodeException
 import index.serializer.KeySerializer
+import index.util.BTreeOptMode
 import storageEngine.exception.SlottedPageException
 import storageEngine.page.SlottedPage
 import storageEngine.util.PageType
@@ -160,5 +161,19 @@ abstract class Node<K>(
         Triple(keyIdx, this, targetNode)
     } else {
         Triple(keyIdx-1, targetNode, this)
+    }
+
+    /**
+     * 특정 operation을 진행할 때 조상의 Lock 및 pin 을 풀어도 안전한지
+     * INSERT -> 삽입 시에는 하나 더 넣어도 split이 일어나지 않아야 함(keyCount < maxKeyCount)
+     * DELETE -> 삭제 시에는 하나 삭제하여도 underflow 상태가 되지 않아야 함 -> hasSurplusKey
+     * 추후 INSERT시에 용량을 기준으로한 조건 추가 필요.
+     * 그 경우에 UPDATE 시에는 UPDATE에 따른 가변 길이의 데이터 수정 시 용량 확인 필요
+     * */
+    fun isSafeNode(optMode: BTreeOptMode) = when(optMode){
+        BTreeOptMode.INSERT -> keyCount < indexConfig.maxKeys
+        BTreeOptMode.DELETE -> hasSurplusKey
+        BTreeOptMode.UPDATE -> hasSurplusKey
+        BTreeOptMode.SELECT -> true
     }
 }

@@ -27,3 +27,6 @@ data class NodeSplitData(
     val promotionKey: ByteArray,
     val leftMostChildPageId: Long
 )
+
+enum class BTreeOptMode {SELECT, INSERT, DELETE, UPDATE}
+
