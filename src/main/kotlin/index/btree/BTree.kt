@@ -105,6 +105,7 @@ class BTree<K, V> (
             }
         }
         lockManager.close()
+        traceNode.clear()
         logger.info { "-------------------------------------------" }
         printTree()
         logger.info { "-------------------------------------------" }
@@ -146,6 +147,7 @@ class BTree<K, V> (
             }
         }
         traceNode.clear()
+        lockManager.close()
     }
 
     /**
@@ -421,6 +423,7 @@ class BTree<K, V> (
             currentPage.getData(keyIdx).second
         }
         lockManager.close()
+        traceNode.clear()
         return if(isExist) valueSerializer.deserialize(value) else null
     }
 
@@ -514,7 +517,7 @@ class BTree<K, V> (
             val pageLock: PageLock
         )
 
-        val startPageId = rootPageId ?: return
+        val startPageId = rootPageId
         val queue = ArrayDeque<QueueItem>()
         val lockManager = LockManager(LockMode.READ)
         val startLock = storageManager.fetchPage(startPageId, lockManager.lockMode)
@@ -543,6 +546,7 @@ class BTree<K, V> (
                     for(i in 0..< currentNode.keyCount + 1){
                         val childNodePageId = currentNode.childPageId(i)
                         val childPageLock = storageManager.fetchPage(childNodePageId, lockManager.lockMode)
+                        lockManager.lockPush(childPageLock)
                         val childIsLeaf = childPageLock.asReadView { childBuffer ->
                             val childPage = SlottedPage(indexConfig, childNodePageId, childBuffer)
                             val childNode = Node.from(indexConfig, childPage, keySerializer)
@@ -554,6 +558,7 @@ class BTree<K, V> (
             }
             prevLevel = level
         }
+        lockManager.close()
         logger.info { "\n\n$viewBuilder\n\n"}
     }
 
