@@ -132,15 +132,15 @@ class LeafNode(
             logger.info { "Redistribute: leftNode ${this._values} rightNode ${node._values}" }
             val key = node.removeFirstKey()
             val value = node.removeFirstValue()
-            keys.addLast(key)
-            _values.addLast(value)
+            keys.add(key)
+            _values.add(value)
             parentNode.keys[keyIdx] = node.keys[0]
         } else{
             logger.info { "Redistribute: leftNode ${node._values} rightNode ${this._values}" }
             val key = node.removeLastKey()
             val value = node.removeLastValue()
-            keys.addFirst(key)
-            _values.addFirst(value)
+            keys.add(0, key)
+            _values.add(0, value)
             parentNode.keys[keyIdx-1] = key
         }
     }

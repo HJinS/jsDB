@@ -5,6 +5,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.shouldBe
+import storageEngine.page.SlottedPage
 import storageEngine.page.Page
 import storageEngine.util.PageHeaderOffset
 import java.lang.reflect.Field
@@ -22,7 +23,7 @@ class PageTest:BehaviorSpec({
             repeat(3){
                 val dummyKey = ByteArray(30).apply { Random.nextBytes(this) }
                 val dummyValue = ByteArray(30).apply { Random.nextBytes(this) }
-                page.insertData(dummyKey, dummyValue)
+                page.insertData(it, dummyKey, dummyValue)
             }
 
             then("page should have 3 items"){
@@ -58,7 +59,8 @@ class PageTest:BehaviorSpec({
         `when`("insert new data"){
             val dummyNewKey = ByteArray(40).apply { Random.nextBytes(this) }
             val dummyNewValue = ByteArray(40).apply { Random.nextBytes(this) }
-            val slotId = page.insertData(dummyNewKey, dummyNewValue)
+            val slotId = 0
+            page.insertData(slotId, dummyNewKey, dummyNewValue)
             then("the new data should have slotId 1"){
                 slotId shouldBe 1
             }
@@ -72,10 +74,9 @@ class PageTest:BehaviorSpec({
             }
         }
         `when`("compaction has done"){
-            val bufferDelegateField: Field = Page::class.java.getDeclaredField("buffer\$delegate")
-            bufferDelegateField.isAccessible = true
-            val bufferDelegate = bufferDelegateField.get(page) as Lazy<*>
-            val buffer = bufferDelegate.value as ByteBuffer
+            val dataField: Field = SlottedPage::class.java.getDeclaredField("data")
+            dataField.isAccessible = true
+            val buffer = dataField.get(page) as ByteBuffer
             val freeSpaceEndBefore = buffer.getShort(PageHeaderOffset.FREE_SPACE_END.offset)
 
             page.compaction()
@@ -88,6 +89,9 @@ class PageTest:BehaviorSpec({
     }
 }){
     companion object{
-        val page = Page(indexConfig = IndexConfig, pageId=0)
+        val pageSize = IndexConfig.pageSize
+        val pageId = 1
+        val data: ByteBuffer = ByteBuffer.allocate(pageSize)
+        val page = SlottedPage(IndexConfig, 1, data)
     }
 }

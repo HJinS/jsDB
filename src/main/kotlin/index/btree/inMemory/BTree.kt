@@ -5,6 +5,7 @@ import index.btree.inMemory.node.LeafNode
 import index.btree.inMemory.node.Node
 import index.comparator.KeyComparator
 import index.exception.BTreeException
+import index.exception.IndexException
 import index.serializer.KeySerializer
 import index.serializer.ValueSerializer
 import index.util.MAX_KEYS

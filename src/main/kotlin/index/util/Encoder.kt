@@ -8,6 +8,7 @@ import java.util.UUID
 import kotlin.experimental.inv
 import kotlin.experimental.xor
 import kotlin.text.toByteArray
+import index.exception.SerializerException
 
 
 /**
@@ -63,7 +64,7 @@ fun decodeVarInt(bytes: ByteArray, offset: Int = 0): Pair<Int, Int> {
     while (true) {
         // 배열 범위를 벗어나는지 확인
         if (pos >= bytes.size) {
-            throw SerializerException.DecodeException.PositionOutOfBoundsException(position, data.size)
+            throw SerializerException.DecodeException.PositionOutOfBoundsException(pos, bytes.size)
         }
 
         val byte = bytes[pos].toInt() and 0xFF

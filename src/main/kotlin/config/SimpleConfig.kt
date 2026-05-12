@@ -9,7 +9,7 @@ object SimpleConfig{
 
 
 object StorageConfig {
-    val dbPath: String = "var/lib/jsdb"
+    val dbPath: String = "js.db"
     val midPointLruConfig: MidpointLruConfig = MidpointLruConfig
 }
 

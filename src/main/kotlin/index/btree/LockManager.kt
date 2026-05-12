@@ -17,6 +17,10 @@ class LockManager(val lockMode: LockMode): AutoCloseable{
             LockMode.READ -> lock.lockRead()
             LockMode.WRITE -> lock.lockWrite()
         }
+        push(lock)
+    }
+
+    fun push(lock: PageLock){
         lockQueue.add(lock)
     }
     
