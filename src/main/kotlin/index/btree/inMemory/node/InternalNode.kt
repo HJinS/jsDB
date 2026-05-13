@@ -1,4 +1,6 @@
-package index.btree
+package index.btree.inMemory.node
+
+import index.btree.inMemory.logger
 
 
 class InternalNode(

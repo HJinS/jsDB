@@ -1,5 +1,6 @@
-package index.btree
+package index.btree.inMemory.node
 
+import index.btree.inMemory.logger
 import java.util.Collections
 
 class LeafNode(
@@ -100,10 +101,10 @@ class LeafNode(
     }
 
     /**
-     * ### Leaf redistribution
+     * ### Leaf Redistribution
      * Do not rotate keys.
      *
-     * Get the key from sibling directly.
+     * Get the key from the sibling directly.
      *
      * #### borrow from the left sibling
      * separateKey - (keyIdx - 1)
@@ -131,15 +132,15 @@ class LeafNode(
             logger.info { "Redistribute: leftNode ${this._values} rightNode ${node._values}" }
             val key = node.removeFirstKey()
             val value = node.removeFirstValue()
-            keys.addLast(key)
-            _values.addLast(value)
+            keys.add(key)
+            _values.add(value)
             parentNode.keys[keyIdx] = node.keys[0]
         } else{
             logger.info { "Redistribute: leftNode ${node._values} rightNode ${this._values}" }
             val key = node.removeLastKey()
             val value = node.removeLastValue()
-            keys.addFirst(key)
-            _values.addFirst(value)
+            keys.add(0, key)
+            _values.add(0, value)
             parentNode.keys[keyIdx-1] = key
         }
     }

@@ -1,6 +1,6 @@
 ### 기본
 ---
-- 보통 노드 하나는 딤스크 페이지 하나에 저장된다.
+- 보통 노드 하나는 디스크 페이지 하나에 저장된다.
 - 노드 크기는 삽입/삭제에 의해 변하기 때문에 Slotted Page 구조를 사용한다.
 
 ### Slotted Page
@@ -87,8 +87,30 @@ TODO
 > Page 를 가져올 때 캐싱하는 역할도 같이 함. DiskManager 를 사용해서 Page 를 가져오며, Disk I/O 를 최소화하는 것이 목표
 > fetchPage, newPage, unpinPage, flushPage, flushPages 등.
 > bufferPool, pageTable, replacer, freeFrames 등 필요
+> bufferPool managing 의 경우에는 Mysql(InnoDB)의 Midpoint-Insertion LRU
+> flush cycle - write on eviction, write on shutdown + background threwad 사용
 
-### Page
+#### Midpoint-Insertion LRU
+- new, old sublist 로 두개의 list 를 관리.
+- new-list -> 5/8 을 차지하며, 자주 접근되는 페이지들을 관리
+- old-list -> 3/8 을 차지하며, 새롭게 읽어온 페이지나 덜 중요한 페이지들이 위치
+- cache miss
+  - 새로운 페이지를 읽어오면, **old-list** 의 head 에 삽입
+  - eviction 은 old-list 의 tail 에서 선택되어 제거
+- promotion to young
+  - old 리스트에 있던 페이지가 **다시 접근 되면** old-list 에서 빼내어 young-list 의 head 로 이동
+  - young-list 에서 접근된 페이지는 young-list 의 head 로 이동
+  - 테이블 스캔시 - Midpoint 에 삽입 된 후 innodb_old_blocks_time(ms) 시간 안에 다시 접근 되어야 new-list 로 승격 시킨다.
+  - 일반 조회시 - 그런 조건 없음
+- flush
+  - flush list 라는 별도의 리스트를 두어 dirty-page 를 따로 관리
+  - background-thread 가 주기적으로 flush list 를 확인하여, 디스크에 I/O 여우가 있을 때 마다 변경된 내용을 디스크에 기록
 
-> 별도의 클래스 보다는 Page 클래스 혹은 Node 클래스에 통합시키는 것이 맞음.
-> SlottedPage 관리
+
+#### write on eviction
+- LRU 알고리즘에 의해 eviction frame 이 정해졌을 경우 동작
+- dirty 상태면 디스크에 저장. 후에 버퍼 풀에서 제거
+
+#### write on shutdown
+- 데이터베이스가 정상적으로 종료 될 경우 동작
+- 모든 버퍼풀을 순회하면서 모든 frame 을 디스크에 flush

@@ -1,6 +1,5 @@
-package index.btree
+package index.serializer
 
-import index.serializer.MultiColumnKeySerializer
 import index.util.Column
 import index.util.ColumnType
 import index.util.KeySchema
@@ -11,9 +10,10 @@ import java.text.Collator
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
-import java.util.*
+import java.util.Locale
+import java.util.UUID
 
-class BTreeKeyPackingTest: FunSpec({
+class SerializerTest: FunSpec({
     listOf(
         listOf<Number>(10, 5230L) to KeySchema(
             listOf(
@@ -130,7 +130,7 @@ class BTreeKeyPackingTest: FunSpec({
         for ((key1, key2) in key.zip(deSerialized)){
             if (key1 == "Alice"){
                 val collatedBytes = collatorInstance.getCollationKey("Alice").toByteArray()
-                key2 shouldBe "[CollationKey(${collatedBytes.joinToString(" ")})]"
+                key2 shouldBe "[CollationKey(${collatedBytes.joinToString(""){ "%02x".format(it) }})]"
             } else {
                 key1 shouldBe key2
             }

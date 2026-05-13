@@ -18,7 +18,6 @@ Icon
 .Trashes
 .VolumeIcon.icns
 .com.apple.timemachine.donotpresent
-.sdkmanrc
 
 # Directories potentially created on remote AFP share
 .AppleDB
@@ -85,3 +84,7 @@ hs_err_pid*
 .gradletasknamecache
 
 bin
+
+# Gemini & Skills
+*.skill
+.gemini/
