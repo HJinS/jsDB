@@ -1,7 +1,6 @@
 package storage
 
 import config.IndexConfig
-import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.shouldBe
@@ -15,14 +14,18 @@ import kotlin.random.Random
 
 // get, update, insert, delete 테스트
 // compaction 테스트 -> 압축 후에 free space 사이즈가 늘어야함
-class PageTest:BehaviorSpec({
-
+class SlottedPageTest:BehaviorSpec({
+    afterEach {
+        page.checkInvariant()
+    }
     given("a empty page"){
+        page.initData()
+        val dummyItems = mutableListOf<Pair<ByteArray, ByteArray>>()
         `when`("insert 3 key, value items"){
-            val dummyItems = mutableListOf<Pair<ByteArray, ByteArray>>()
             repeat(3){
                 val dummyKey = ByteArray(30).apply { Random.nextBytes(this) }
                 val dummyValue = ByteArray(30).apply { Random.nextBytes(this) }
+                dummyItems.add(dummyKey to dummyValue)
                 page.insertData(it, dummyKey, dummyValue)
             }
 
@@ -33,22 +36,25 @@ class PageTest:BehaviorSpec({
 
         `when`("delete 1 key, value pair"){
             val deleteSlotId = 2
-            page.deleteData(deleteSlotId)
-            then("getData(2) should throw an exception"){
-                shouldThrow<IllegalStateException> { page.getData(deleteSlotId) }
+            val (deletedKey, deletedValue) = page.deleteData(deleteSlotId)
+            then("getData(2) result should be $dummyItems[2]"){
+                val (dummyKey, dummyValue) = dummyItems[2]
+                deletedKey contentEquals dummyKey
+                deletedValue contentEquals dummyValue
             }
+            dummyItems.removeAt(deleteSlotId)
         }
 
-        `when`("update the second data"){
-            val dummyNewKey = ByteArray(40).apply { Random.nextBytes(this) }
+        `when`("update the second key"){
+            val dummyKey = dummyItems[1].first
             val dummyNewValue = ByteArray(40).apply { Random.nextBytes(this) }
-            val slotId = page.updateData(1, dummyNewKey, dummyNewValue)
-            then("the first data should have new data and should use used slot 2"){
-                slotId shouldBe 2
+            val slotId = page.updateData(1, dummyKey, dummyNewValue)
+            then("slot Id should be same"){
+                slotId shouldBe 1
             }
             then("the new data retrieved should be equal to new data"){
                 val (key, value) = page.getData(slotId)
-                key shouldBe dummyNewKey
+                key shouldBe dummyKey
                 value shouldBe dummyNewValue
             }
             then("the record count should be 2"){
@@ -59,11 +65,9 @@ class PageTest:BehaviorSpec({
         `when`("insert new data"){
             val dummyNewKey = ByteArray(40).apply { Random.nextBytes(this) }
             val dummyNewValue = ByteArray(40).apply { Random.nextBytes(this) }
-            val slotId = 0
+            var slotId = page.binarySearch(dummyNewKey)
+            slotId = if(slotId >= 0) slotId+1 else -(slotId + 1)
             page.insertData(slotId, dummyNewKey, dummyNewValue)
-            then("the new data should have slotId 1"){
-                slotId shouldBe 1
-            }
             then("the record count should be 3"){
                 page.recordCount shouldBe 3
             }
@@ -74,7 +78,7 @@ class PageTest:BehaviorSpec({
             }
         }
         `when`("compaction has done"){
-            val dataField: Field = SlottedPage::class.java.getDeclaredField("data")
+            val dataField: Field = Page::class.java.getDeclaredField("data")
             dataField.isAccessible = true
             val buffer = dataField.get(page) as ByteBuffer
             val freeSpaceEndBefore = buffer.getShort(PageHeaderOffset.FREE_SPACE_END.offset)
@@ -84,13 +88,11 @@ class PageTest:BehaviorSpec({
             then("Before value should smaller then after value"){
                 freeSpaceEndBefore shouldBeLessThan freeSpaceEndAfter
             }
-
         }
     }
 }){
     companion object{
         val pageSize = IndexConfig.pageSize
-        val pageId = 1
         val data: ByteBuffer = ByteBuffer.allocate(pageSize)
         val page = SlottedPage(IndexConfig, 1, data)
     }

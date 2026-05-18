@@ -20,11 +20,6 @@ class InternalNode<K>(
 
     fun childPageId(index: Int): Long = if(index == 0) page.leftMostChildPageId else valueSerializer.deserialize(page.getData(index).second)
 
-    fun updateValue(slotId: Int, newChildPageId: Long) {
-        val (key, _) = page.getData(slotId)
-        page.updateData(slotId, key, valueSerializer.serialize(newChildPageId))
-    }
-
     fun updateKey(slotId: Int, key: ByteArray){
         val (_, value) = page.getData(slotId)
         page.updateData(slotId, key, value)

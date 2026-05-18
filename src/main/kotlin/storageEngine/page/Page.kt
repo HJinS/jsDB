@@ -67,12 +67,16 @@ open class Page(
 
     internal fun increaseRecordCount(){
         val recordCount = data.getShort(PageHeaderOffset.RECORD_COUNT.offset)
+        val freeSpaceStartIdx = freeSpaceStart
         data.putShort(PageHeaderOffset.RECORD_COUNT.offset, (recordCount + 1).toShort())
+        data.putShort(PageHeaderOffset.FREE_SPACE_START.offset, (freeSpaceStartIdx + SLOT_SIZE).toShort())
     }
 
     internal fun decreaseRecordCount(){
         val recordCount = data.getShort(PageHeaderOffset.RECORD_COUNT.offset)
+        val freeSpaceStartIdx = freeSpaceStart
         data.putShort(PageHeaderOffset.RECORD_COUNT.offset, (recordCount - 1).toShort())
+        data.putShort(PageHeaderOffset.FREE_SPACE_START.offset, (freeSpaceStartIdx - SLOT_SIZE).toShort())
     }
 
     internal fun getSlotId(slotArrayOffset: Int): Int{
