@@ -239,6 +239,7 @@ open class SlottedPage(
         // 4. [데이터 쓰기] FreeSpace 포인터 이동 및 데이터 기록
         // 데이터는 페이지 끝에서 앞으로 자라납니다.
         // freeSpaceEnd는 "현재 데이터가 시작되는 지점"을 가리키고 있다고 가정
+        logger.info { "freeSpaceEnd: $freeSpaceEnd - totalDataLength totalDataLength: $totalDataLength" }
         val dataOffset = freeSpaceEnd - totalDataLength
 
         // 실제 데이터 기록 (순서: KeyLen -> Key -> ValLen -> Val)
@@ -258,7 +259,6 @@ open class SlottedPage(
      * @return the slotID of the last one
      * */
     fun deleteData(slotId: Int): Pair<ByteArray, ByteArray>{
-        val slotLocation = HEADER_SIZE + slotId * SLOT_SIZE
         val (key, value) = getData(slotId)
         if(slotId < recordCount - 1){
             shiftSlot(slotId+1, recordCount -  (slotId + 1), -1)
