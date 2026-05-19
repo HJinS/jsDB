@@ -2,9 +2,9 @@ package index.btree
 
 import index.btree.inMemory.BTree
 import index.comparator.MultiColumnKeyComparator
-import index.serializer.LocalDateSerializer
+import helper.serializer.LocalDateSerializerHelper
 import index.serializer.MultiColumnKeySerializer
-import index.serializer.RowDataSerializer
+import helper.serializer.RowDataSerializerHelper
 import index.util.Column
 import index.util.ColumnType
 import index.util.KeySchema
@@ -49,7 +49,7 @@ class BTreeSearchTest: BehaviorSpec({
             listOf<Number>(1, 20L) to null,
             listOf<Number>(235, 123123902132L) to null,
         ).forEachIndexed {
-            index, parameter ->
+            _, parameter ->
             val searchKey = parameter.first
             val expectedResult = parameter.second
             When("Search key $searchKey"){
@@ -93,7 +93,7 @@ class BTreeSearchTest: BehaviorSpec({
             listOf("Chloed", LocalDate.of(2020, 12, 26)) to null,
             listOf("Ava", LocalDate.of(2019, 11, 25)) to null,
         ).forEachIndexed {
-                index, parameter ->
+                _, parameter ->
             val searchKey = parameter.first
             val expectedResult = parameter.second
             When("Search key $searchKey"){
@@ -112,7 +112,7 @@ class BTreeSearchTest: BehaviorSpec({
         @Serializable
         data class UserData(
             val name: String,
-            @Serializable(with = LocalDateSerializer::class)
+            @Serializable(with = LocalDateSerializerHelper::class)
             val birthDate: LocalDate
         )
 
@@ -126,8 +126,8 @@ class BTreeSearchTest: BehaviorSpec({
             Column("date", ColumnType.LOCAL_DATE, descending = false)
         ))
 
-        val idValueSerializer = RowDataSerializer(IDData::class)
-        val userDataSerializer = RowDataSerializer(UserData::class)
+        val idValueSerializer = RowDataSerializerHelper(IDData::class)
+        val userDataSerializer = RowDataSerializerHelper(UserData::class)
 
         val keySerializer2 = MultiColumnKeySerializer(schema2)
         val keySerializer = MultiColumnKeySerializer(schema)

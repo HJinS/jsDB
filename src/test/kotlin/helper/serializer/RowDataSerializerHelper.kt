@@ -1,12 +1,12 @@
-package index.serializer
+package helper.serializer
 
+import index.serializer.ValueSerializer
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.serializer
 import kotlin.reflect.KClass
 
-
-class RowDataSerializer<V: Any>(
+class RowDataSerializerHelper<V: Any>(
     kClass: KClass<V>
 ) : ValueSerializer<V> {
 

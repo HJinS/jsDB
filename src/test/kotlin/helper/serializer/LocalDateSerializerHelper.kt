@@ -1,4 +1,4 @@
-package index.serializer
+package helper.serializer
 
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.descriptors.PrimitiveKind
@@ -8,8 +8,7 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import java.time.LocalDate
 
-
-object LocalDateSerializer: KSerializer<LocalDate> {
+object LocalDateSerializerHelper: KSerializer<LocalDate> {
     override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("LocalDate", PrimitiveKind.LONG)
 
     override fun serialize(encoder: Encoder, value: LocalDate) {
