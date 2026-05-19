@@ -2,9 +2,9 @@ package index.btree
 
 import index.btree.inMemory.BTree
 import index.comparator.MultiColumnKeyComparator
-import index.serializer.LocalDateSerializer
+import helper.serializer.LocalDateSerializerHelper
 import index.serializer.MultiColumnKeySerializer
-import index.serializer.RowDataSerializer
+import helper.serializer.RowDataSerializerHelper
 import index.util.Column
 import index.util.ColumnType
 import index.util.KeySchema
@@ -533,7 +533,7 @@ class BTreeDeleteTest: BehaviorSpec({
         @Serializable
         data class UserData(
             val name: String,
-            @Serializable(with = LocalDateSerializer::class)
+            @Serializable(with = LocalDateSerializerHelper::class)
             val birthDate: LocalDate
         )
 
@@ -547,8 +547,8 @@ class BTreeDeleteTest: BehaviorSpec({
             Column("date", ColumnType.LOCAL_DATE, descending = false)
         ))
 
-        val idValueSerializer = RowDataSerializer(IDData::class)
-        val userDataSerializer = RowDataSerializer(UserData::class)
+        val idValueSerializer = RowDataSerializerHelper(IDData::class)
+        val userDataSerializer = RowDataSerializerHelper(UserData::class)
 
         val keySerializer = MultiColumnKeySerializer(schema)
         val keySerializer2 = MultiColumnKeySerializer(schema2)

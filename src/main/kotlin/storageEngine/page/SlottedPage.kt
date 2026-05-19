@@ -84,26 +84,6 @@ open class SlottedPage(
 ): Page(indexConfig, data, pageId){
 
     /**
-    * slot 삭제시 미사용 슬롯 등록
-    * */
-    private fun retrieveFreeSlotId(slotId: Int){
-        var slotLocation = PageHeaderOffset.FREE_SLOT_HEAD.offset
-        var freeSlotId = data.getShort(slotLocation).toInt()
-        while(freeSlotId != -1){
-            slotLocation = HEADER_SIZE + freeSlotId * SLOT_SIZE
-            freeSlotId = data.getShort(slotLocation).toInt()
-        }
-        data.putShort(slotLocation, slotId.toShort())
-        data.putShort(HEADER_SIZE + slotId * SLOT_SIZE, (-1).toShort())
-    }
-
-    private fun getNewSlotId(): Int{
-        val newSlotLocation = data.getShort(PageHeaderOffset.FREE_SPACE_START.offset)
-        data.putShort(PageHeaderOffset.FREE_SPACE_START.offset, (newSlotLocation + SLOT_SIZE).toShort())
-        return (newSlotLocation - HEADER_SIZE) / SLOT_SIZE
-    }
-
-    /**
      * slot을 특정 index 에 삽입(shift 필요)
      * @return the slotID of the last record
      * */
@@ -203,7 +183,7 @@ open class SlottedPage(
     /**
      * SLOT_SIZE(4 Byte) 단위로 slot을 옮김.
      * */
-    fun shiftSlot(src: Int, srcLength: Int, shiftLength: Int): Int {
+    private fun shiftSlot(src: Int, srcLength: Int, shiftLength: Int): Int {
         if (shiftLength == 0 || srcLength <= 0) return -1
         
         try {
