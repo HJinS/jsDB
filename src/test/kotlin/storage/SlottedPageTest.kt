@@ -1,15 +1,25 @@
 package storage
 
 import config.IndexConfig
+import helper.serializer.InstantSerializerHelper
+import index.serializer.MultiColumnKeySerializer
+import helper.serializer.RowDataSerializerHelper
+import index.util.Column
+import index.util.ColumnType
+import index.util.KeySchema
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.shouldBe
+import io.kotest.property.Arb
+import io.kotest.property.arbitrary.*
+import kotlinx.serialization.Serializable
 import storageEngine.page.SlottedPage
 import storageEngine.page.Page
 import storageEngine.util.PageHeaderOffset
 import java.lang.reflect.Field
 import java.nio.ByteBuffer
-import kotlin.random.Random
+import java.time.Instant
+import java.util.Arrays
 
 
 // get, update, insert, delete 테스트
@@ -17,65 +27,90 @@ import kotlin.random.Random
 class SlottedPageTest:BehaviorSpec({
     afterEach {
         page.checkInvariant()
+        page.checkSorted()
     }
     given("a empty page"){
         page.initData()
         val dummyItems = mutableListOf<Pair<ByteArray, ByteArray>>()
-        `when`("insert 3 key, value items"){
-            repeat(3){
-                val dummyKey = ByteArray(30).apply { Random.nextBytes(this) }
-                val dummyValue = ByteArray(30).apply { Random.nextBytes(this) }
-                dummyItems.add(dummyKey to dummyValue)
-                page.insertData(it, dummyKey, dummyValue)
+        val keyGenerator = Arb.bind(
+            Arb.int(),
+            Arb.instant(),
+            Arb.string(maxSize = 6)
+        ){ id, epoch, name -> listOf(id, epoch, name) }
+        val valueGenerator = Arb.bind(
+            Arb.int(),
+            Arb.instant(),
+            Arb.string(maxSize = 6)
+        ){ id, epoch, name -> SampleData(id, epoch, name) }
+        `when`("insert 5 key, value items"){
+            repeat(10){
+                val key = keyGenerator.next()
+                val value = valueGenerator.next()
+                dummyItems.add(serialize(key, value, keySerializer, valueSerializer))
+                page.insertTyped(key, value, keySerializer, valueSerializer)
             }
 
-            then("page should have 3 items"){
-                page.recordCount shouldBe 3
+            then("page should have 5 items"){
+                page.recordCount shouldBe 10
             }
         }
+        val dummyItemsSorted = dummyItems.sortedWith { data1, data2 -> Arrays.compareUnsigned(data1.first, data2.first) }.toMutableList()
 
         `when`("delete 1 key, value pair"){
             val deleteSlotId = 2
             val (deletedKey, deletedValue) = page.deleteData(deleteSlotId)
-            then("getData(2) result should be $dummyItems[2]"){
-                val (dummyKey, dummyValue) = dummyItems[2]
-                deletedKey contentEquals dummyKey
-                deletedValue contentEquals dummyValue
+            val (expectedDeleteKey, expectedDeleteValue) = dummyItemsSorted[2]
+            then("delete result should be $expectedDeleteKey, $expectedDeleteValue"){
+                deletedKey contentEquals expectedDeleteKey
+                deletedValue contentEquals expectedDeleteValue
             }
-            dummyItems.removeAt(deleteSlotId)
+            dummyItemsSorted.removeAt(deleteSlotId)
         }
 
         `when`("update the second key"){
-            val dummyKey = dummyItems[1].first
-            val dummyNewValue = ByteArray(40).apply { Random.nextBytes(this) }
-            val slotId = page.updateData(1, dummyKey, dummyNewValue)
+            val dummyKey = dummyItemsSorted[1].first
+            val dummyNewValue = valueGenerator.next()
+            val dummyNewValueSerialized = serializeValue(dummyNewValue, valueSerializer)
+
+            val slotId = page.updateValueTyped(1, dummyNewValue, valueSerializer)
             then("slot Id should be same"){
                 slotId shouldBe 1
             }
             then("the new data retrieved should be equal to new data"){
                 val (key, value) = page.getData(slotId)
                 key shouldBe dummyKey
-                value shouldBe dummyNewValue
+                value shouldBe dummyNewValueSerialized
             }
             then("the record count should be 2"){
-                page.recordCount shouldBe 2
+                page.recordCount shouldBe 9
             }
         }
 
+        `when`("delete 1 key, value pair"){
+            val deleteSlotId = 1
+            val (deletedKey, deletedValue) = page.deleteData(deleteSlotId)
+            val (expectedDeleteKey, expectedDeleteValue) = dummyItemsSorted[2]
+            then("delete result should be $expectedDeleteKey, $expectedDeleteValue"){
+                deletedKey contentEquals expectedDeleteKey
+                deletedValue contentEquals expectedDeleteValue
+            }
+            dummyItemsSorted.removeAt(deleteSlotId)
+        }
+
         `when`("insert new data"){
-            val dummyNewKey = ByteArray(40).apply { Random.nextBytes(this) }
-            val dummyNewValue = ByteArray(40).apply { Random.nextBytes(this) }
-            var slotId = page.binarySearch(dummyNewKey)
-            slotId = if(slotId >= 0) slotId+1 else -(slotId + 1)
-            page.insertData(slotId, dummyNewKey, dummyNewValue)
-            then("the record count should be 3"){
-                page.recordCount shouldBe 3
+            val dummyNewKey = keyGenerator.next()
+            val dummyNewValue = valueGenerator.next()
+            val (dummyKeySerialized, dummyValueSerialized) = serialize(dummyNewKey, dummyNewValue, keySerializer, valueSerializer)
+            val slotId = page.insertTyped(dummyNewKey, dummyNewValue, keySerializer, valueSerializer)
+            then("the record count should be 2"){
+                page.recordCount shouldBe 9
             }
             then("the data retrieved should be equal to origin data"){
                 val (key, value) = page.getData(slotId)
-                key shouldBe dummyNewKey
-                value shouldBe dummyNewValue
+                key shouldBe dummyKeySerialized
+                value shouldBe dummyValueSerialized
             }
+            dummyItemsSorted.add(slotId, dummyKeySerialized to dummyValueSerialized)
         }
         `when`("compaction has done"){
             val dataField: Field = Page::class.java.getDeclaredField("data")
@@ -90,10 +125,27 @@ class SlottedPageTest:BehaviorSpec({
             }
         }
     }
+
 }){
     companion object{
         val pageSize = IndexConfig.pageSize
         val data: ByteBuffer = ByteBuffer.allocate(pageSize)
+        val keySchema = KeySchema(listOf(
+            Column("id", ColumnType.INT, descending = false),
+            Column("epoch", ColumnType.INSTANT, descending = false),
+            Column("name", ColumnType.STRING, descending = false),
+        ))
+
+        @Serializable
+        data class SampleData(
+            val id: Int,
+            @Serializable(with = InstantSerializerHelper::class)
+            val epoch: Instant,
+            val name: String,
+        )
+
+        val keySerializer = MultiColumnKeySerializer(keySchema)
+        val valueSerializer = RowDataSerializerHelper(SampleData::class)
         val page = SlottedPage(IndexConfig, 1, data)
     }
 }
