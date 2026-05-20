@@ -98,8 +98,9 @@ class BufferPoolManager(
                 replacer.pin(frameId)
             }
         } catch(e: Exception){
-            globalLatch.unlock()
             throw BufferPoolManagerException.UnExpectedException(pageId, e)
+        }finally {
+            globalLatch.unlock()
         }
         if(needIO){
             try{
@@ -161,8 +162,9 @@ class BufferPoolManager(
             frame.pinCount.set(1)
             replacer.pin(frameId)
         } catch(e: Exception){
-            globalLatch.unlock()
             throw BufferPoolManagerException.UnExpectedException(pageId, e)
+        }finally {
+            globalLatch.unlock()
         }
         try{
             if(victimPageId != null){

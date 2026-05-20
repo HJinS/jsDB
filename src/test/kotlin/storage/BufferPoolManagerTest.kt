@@ -15,6 +15,7 @@ import storageEngine.exception.BufferPoolManagerException
 import storageEngine.exception.LRUException
 import storageEngine.lru.MidpointLRUPolicy
 import storageEngine.util.LockMode
+import java.util.concurrent.CountDownLatch
 
 class BufferPoolManagerTest: BehaviorSpec({
     given("an empty BufferPoolManager"){
@@ -236,6 +237,64 @@ class BufferPoolManagerTest: BehaviorSpec({
                 frame4.latch.isWriteLocked shouldBe true
             }
         }
+    }
+
+    given("as empty BufferPoolManager with 2 thread(read/write)"){
+        val replacer = MidpointLRUPolicy(MidpointLruConfig)
+        val bufferPoolManager = BufferPoolManager(diskManager, replacer, IndexConfig, 2)
+        clearMocks(diskManager)
+        val threadLatch1 = CountDownLatch(1)
+        val threadLatch2 = CountDownLatch(1)
+        val thread1 = Thread{
+            bufferPoolManager.fetchPage(1L, LockMode.WRITE)
+            threadLatch1.countDown()
+            while(true) {Thread.sleep(500)}
+        }
+        val thread2 = Thread{
+            threadLatch1.await()
+            threadLatch2.countDown()
+            bufferPoolManager.fetchPage(1L, LockMode.READ)
+        }
+        `when`("1 thread have write lock to page 1L"){
+            thread1.start()
+            then("2 thread should wait to read the page 1L"){
+                thread2.start()
+                threadLatch2.await()
+                Thread.sleep(50)
+                thread2.state shouldBe Thread.State.WAITING
+            }
+        }
+        thread1.interrupt()
+        thread2.interrupt()
+    }
+
+    given("as empty BufferPoolManager with 2 thread(read/read)"){
+        val replacer = MidpointLRUPolicy(MidpointLruConfig)
+        val bufferPoolManager = BufferPoolManager(diskManager, replacer, IndexConfig, 2)
+        clearMocks(diskManager)
+        val threadLatch1 = CountDownLatch(1)
+        val threadLatch2 = CountDownLatch(1)
+        val thread1 = Thread{
+            bufferPoolManager.fetchPage(1L, LockMode.READ)
+            threadLatch1.countDown()
+            while(true) {Thread.sleep(500)}
+        }
+        val thread2 = Thread{
+            threadLatch1.await()
+            threadLatch2.countDown()
+            bufferPoolManager.fetchPage(1L, LockMode.READ)
+        }
+        `when`("1 thread have write lock to page 1L"){
+            thread1.start()
+            then("2 thread should wait to read the page 1L"){
+                thread2.start()
+                threadLatch2.await()
+                Thread.sleep(50)
+                thread2.state shouldBe Thread.State.TERMINATED
+            }
+        }
+        thread1.interrupt()
+        thread2.interrupt()
     }
 
 }){
