@@ -19,7 +19,7 @@ class MidpointLRUPolicy(
     )
 
     override fun evict(): Int {
-        val oldNode = generationalList.removeOldest() ?: throw LRUException.LRUListFullException(
+        val oldNode = generationalList.removeOldest() ?: throw LRUException.LRUEvictException(
             generationalList.capacity,
             generationalList.youngCount,
             generationalList.oldCount

@@ -1,18 +1,11 @@
 package storageEngine
 
 import config.IndexConfig
-import index.btree.node.InternalNode
-import index.serializer.MultiColumnKeySerializer
-import storageEngine.DiskManager
 import storageEngine.lru.MidpointLRUPolicy
 import storageEngine.page.Frame
-import storageEngine.page.Page
 import storageEngine.page.PageLock
-import storageEngine.page.SlottedPage
-import storageEngine.util.PageType
 import storageEngine.util.LockMode
-import storageEngine.exception.BufferPoolManagerException 
-import java.nio.ByteBuffer
+import storageEngine.exception.BufferPoolManagerException
 import java.util.concurrent.locks.ReentrantLock
 
 /**
@@ -56,7 +49,7 @@ class BufferPoolManager(
 ){
     private val frames: Array<Frame> = Array(poolSize) { Frame(frameId=it, pageSize=indexConfig.pageSize) }
     private val pageTable = HashMap<Long, Int>()
-    private val freeList = ArrayDeque<Int>()
+    private val freeList = ArrayDeque<Int>(List(poolSize) {it})
     private val globalLatch = ReentrantLock()
 
     /**
@@ -73,10 +66,10 @@ class BufferPoolManager(
     fun fetchPage(pageId: Long, lockMode: LockMode): PageLock{
         var victimPageId: Long? = null
         var needIO = false
-        var frameId: Int = -1
-        var frame: Frame? = null
-        var isReadLocked: Boolean = false
-        var isWriteLocked: Boolean = false
+        var frameId: Int
+        var frame: Frame?
+        var isReadLocked = false
+        var isWriteLocked = false
 
 
         globalLatch.lock()
@@ -117,7 +110,7 @@ class BufferPoolManager(
                 frame.pageId.set(pageId)
                 frame.reset()
                 diskManager.readPage(pageId, frame.data)
-            } catch(e: Exception) {
+            } catch (e: Exception) {
                 frame.latch.writeLock().unlock()
                 throw e
             }
@@ -150,8 +143,8 @@ class BufferPoolManager(
      * 3. pageTable 업데이트, page pin, dirty 마킹, 페이지 초기화(헤더 등)
      * */
     fun newPage(pageId: Long): PageLock{
-        var frame: Frame? = null
-        var frameId: Int = -1
+        var frame: Frame?
+        var frameId: Int
         var victimPageId: Long? = null
 
         globalLatch.lock()
@@ -229,8 +222,6 @@ class BufferPoolManager(
         } finally{
             frame.latch.readLock().unlock()
         }
-
-
     }
 
     fun deletePage(pageId: Long){
@@ -247,7 +238,7 @@ class BufferPoolManager(
                 frame.pageId.set(-1L)
                 frame.pinCount.set(0)
                 frame.reset()
-                replacer.unpin(frameId)
+                freeList.add(frameId)
             } finally{
                 frame.latch.writeLock().unlock()
             }

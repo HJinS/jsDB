@@ -33,6 +33,7 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect:2.2.20")
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter", "junit-jupiter", "5.6.2")
+    testImplementation("io.mockk:mockk:1.13.17")
     testImplementation("io.kotest:kotest-runner-junit5:$kotestVersion")
     testImplementation("io.kotest:kotest-assertions-core:$kotestVersion")
     testImplementation("io.kotest:kotest-framework-datatest:$kotestVersion")
@@ -41,6 +42,8 @@ dependencies {
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+    systemProperty("kotest.framework.classpath.scanning.autoscan.disable", "true")
+    jvmArgs("-XX:+EnableDynamicAgentLoading")
 }
 
 kotlin {
