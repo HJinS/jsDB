@@ -124,6 +124,62 @@ class SlottedPageTest:BehaviorSpec({
                 freeSpaceEndBefore shouldBeLessThan freeSpaceEndAfter
             }
         }
+        `when`("delete 1 key, value pair"){
+            val deleteSlotId = 2
+            val (deletedKey, deletedValue) = page.deleteData(deleteSlotId)
+            val (expectedDeleteKey, expectedDeleteValue) = dummyItemsSorted[2]
+            then("delete result should be $expectedDeleteKey, $expectedDeleteValue"){
+                deletedKey contentEquals expectedDeleteKey
+                deletedValue contentEquals expectedDeleteValue
+            }
+            dummyItemsSorted.removeAt(deleteSlotId)
+        }
+
+        `when`("update the second key"){
+            val dummyKey = dummyItemsSorted[1].first
+            val dummyNewValue = valueGenerator.next()
+            val dummyNewValueSerialized = serializeValue(dummyNewValue, valueSerializer)
+
+            val slotId = page.updateValueTyped(1, dummyNewValue, valueSerializer)
+            then("slot Id should be same"){
+                slotId shouldBe 1
+            }
+            then("the new data retrieved should be equal to new data"){
+                val (key, value) = page.getData(slotId)
+                key shouldBe dummyKey
+                value shouldBe dummyNewValueSerialized
+            }
+            then("the record count should be 2"){
+                page.recordCount shouldBe 8
+            }
+        }
+
+        `when`("delete 1 key, value pair"){
+            val deleteSlotId = 1
+            val (deletedKey, deletedValue) = page.deleteData(deleteSlotId)
+            val (expectedDeleteKey, expectedDeleteValue) = dummyItemsSorted[2]
+            then("delete result should be $expectedDeleteKey, $expectedDeleteValue"){
+                deletedKey contentEquals expectedDeleteKey
+                deletedValue contentEquals expectedDeleteValue
+            }
+            dummyItemsSorted.removeAt(deleteSlotId)
+        }
+
+        `when`("insert new data"){
+            val dummyNewKey = keyGenerator.next()
+            val dummyNewValue = valueGenerator.next()
+            val (dummyKeySerialized, dummyValueSerialized) = serialize(dummyNewKey, dummyNewValue, keySerializer, valueSerializer)
+            val slotId = page.insertTyped(dummyNewKey, dummyNewValue, keySerializer, valueSerializer)
+            then("the record count should be 2"){
+                page.recordCount shouldBe 8
+            }
+            then("the data retrieved should be equal to origin data"){
+                val (key, value) = page.getData(slotId)
+                key shouldBe dummyKeySerialized
+                value shouldBe dummyValueSerialized
+            }
+            dummyItemsSorted.add(slotId, dummyKeySerialized to dummyValueSerialized)
+        }
     }
 
 }){
