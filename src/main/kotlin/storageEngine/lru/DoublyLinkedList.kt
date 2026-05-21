@@ -70,4 +70,23 @@ internal class DoublyLinkedList {
         node.prev = insertPoint
         count++
     }
+
+    internal fun findNode(frameId: Int): LRUNode?{
+        var nodePointer = head.next
+        while(nodePointer != null &&  nodePointer.next != null){
+            if(nodePointer.frameId == frameId)  return nodePointer
+            nodePointer = nodePointer.next
+        }
+        return null
+    }
+
+    internal fun traverseIds(): List<Int>{
+        val result = mutableListOf<Int>()
+        var nodePointer = head.next
+        while(nodePointer != null && nodePointer.next != null){
+            result.addLast(nodePointer.frameId)
+            nodePointer = nodePointer.next
+        }
+        return result
+    }
 }
