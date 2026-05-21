@@ -2,7 +2,7 @@ package storageEngine
 
 import config.StorageConfig
 import config.IndexConfig
-import storageEngine.util.MetaPageOffset
+import storageEngine.exception.DiskManagerException
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
@@ -19,12 +19,16 @@ class DiskManager(storageConfig: StorageConfig, indexConfig: IndexConfig) {
      * @param pageData ByteBuffer to save the page data. It should be the same size as [pageSize].
      */
     fun readPage(pageId: Long, pageData: ByteBuffer){
-        val offset = pageId * pageSize
-
-        val result = fileChannel.read(pageData, offset)
-        if(result == -1){
-            throw IllegalArgumentException("No such page")
+        require(pageData.capacity() == pageSize){
+            "Page data must be exactly $pageSize bytes, but got ${pageData.capacity()}"
         }
+        pageData.clear()
+        val offset = pageId * pageSize
+        while(pageData.hasRemaining()){
+            val result = fileChannel.read(pageData, offset + pageData.position())
+            if(result == -1) throw DiskManagerException.InvalidReadOffsetException(pageId)
+        }
+        pageData.rewind()
     }
 
     /**
@@ -33,15 +37,26 @@ class DiskManager(storageConfig: StorageConfig, indexConfig: IndexConfig) {
      * @param pageData Data to write. It should be the same size as [pageSize].
      */
     fun writePage(pageId: Long, pageData: ByteBuffer){
+        require(pageData.capacity() == pageSize){
+            "Page data must be exactly $pageSize bytes, but got ${pageData.capacity()}"
+        }
+        pageData.rewind()
         val offset = pageId * pageSize
-        fileChannel.write(pageData, offset)
+        while(pageData.hasRemaining()){
+            fileChannel.write(pageData, offset + pageData.position())
+        }
+
     }
 
     /**
      * Return current last page ID
      * @return current last page id
      */
-    fun getNumPages(): Long = fileChannel.size() / pageSize
+    fun getNumPages(): Long{
+        val size = fileChannel.size()
+        if(size % pageSize != 0L) throw DiskManagerException.FileCorruptedException(size, pageSize)
+        return fileChannel.size() / pageSize
+    }
 
     /**
      * Close the file channel.
