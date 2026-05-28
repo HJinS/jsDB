@@ -20,6 +20,12 @@ class GenerationalList(
     var oldCount = 0
         private set
 
+    var size = 0
+        private set
+
+    val oldest
+        get() = linkedList.getLast()
+
     fun promoteYoung(node: LRUNode){
         linkedList.remove(node)
         oldCount --
@@ -30,7 +36,13 @@ class GenerationalList(
         adjustRatio()
     }
 
+    /**
+     * 이미 young인 node를 young list 가장 앞단으로 갱신
+     * */
     fun touchYoung(node: LRUNode){
+        require(!node.isOld){
+            "Node should be young to touch"
+        }
         linkedList.remove(node)
         linkedList.addFirst(node)
     }
@@ -38,7 +50,9 @@ class GenerationalList(
     fun addYoung(node: LRUNode){
         linkedList.addFirst(node)
         youngCount ++
+        size ++
         node.isOld = false
+        adjustRatio()
     }
 
     fun addOld(node: LRUNode){
@@ -49,12 +63,14 @@ class GenerationalList(
             linkedList.add(node, currentMidPoint)
         }
         oldCount ++
+        size ++
         expandOldList(node)
     }
 
     fun removeOldest(): LRUNode? {
         val node = linkedList.removeLast() ?: return null
         oldCount --
+        size --
         if(midPoint == node) midPoint = null
         return node
     }
@@ -62,10 +78,11 @@ class GenerationalList(
     fun remove(node: LRUNode){
         linkedList.remove(node)
         if(node.isOld) oldCount -- else youngCount --
+        size --
         if(midPoint == node) shrinkOldList()
     }
 
-    fun adjustRatio(){
+    private fun adjustRatio(){
         var prevMidPoint = midPoint?.prev
         while(prevMidPoint != null && youngCount > maxYoungCount){
             prevMidPoint.isOld = true
@@ -75,8 +92,6 @@ class GenerationalList(
             prevMidPoint = midPoint?.prev
         }
     }
-
-    fun getOldest() = linkedList.getLast()
 
     private fun shrinkOldList() {
         val oldMidPoint = midPoint
