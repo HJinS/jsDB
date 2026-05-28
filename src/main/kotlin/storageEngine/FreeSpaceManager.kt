@@ -12,7 +12,7 @@ class FreeSpaceManager (
 
     fun getFreePageID(): Long{
         val pageLock = bufferPoolManager.fetchPage(META_PAGE_ID, LockMode.WRITE)
-        var freePageID: Long = -1L
+        var freePageID: Long = INVALID_PAGE_ID
         pageLock.asWriteView { buffer ->
             val freeListHeadPageID = buffer.getLong(MetaPageOffset.FREE_LIST_HEAD_PAGE_ID.offset)
             freePageID = if(freeListHeadPageID != INVALID_PAGE_ID){
@@ -25,8 +25,8 @@ class FreeSpaceManager (
                 freePageLock.close()
                 freeListHeadPageID
             } else{
-                val nextPageID = buffer.getLong(MetaPageOffset.TOTAL_PAGE_COUNT.offset)
-                buffer.putLong(MetaPageOffset.TOTAL_PAGE_COUNT.offset, nextPageID + 1)
+                val nextPageID = buffer.getLong(MetaPageOffset.NEXT_PAGE_ID.offset)
+                buffer.putLong(MetaPageOffset.NEXT_PAGE_ID.offset, nextPageID + 1)
                 nextPageID
             }
         }
@@ -48,8 +48,6 @@ class FreeSpaceManager (
                 }
                 newFreePageLock.close()
             }
-            val totalPageCount = buffer.getLong(MetaPageOffset.TOTAL_PAGE_COUNT.offset)
-            buffer.putLong(MetaPageOffset.TOTAL_PAGE_COUNT.offset, totalPageCount - 1)
         }
         pageLock.close()
     }

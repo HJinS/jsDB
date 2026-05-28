@@ -30,7 +30,7 @@ enum class PageHeaderOffset(val offset: Int, val bytes: Int){
 
 enum class MetaPageOffset(val offset: Int, val bytes: Int){
     FREE_LIST_HEAD_PAGE_ID(0, 8),
-    TOTAL_PAGE_COUNT(8, 16),
+    NEXT_PAGE_ID(8, 16),
     TABLE_CATALOG_ROOT_PAGE_ID(16, 24),
     COLUMN_CATALOG_ROOT_PAGE_ID(24, 32),
     INDEX_CATALOG_ROOT_PAGE_ID(32, 40)
