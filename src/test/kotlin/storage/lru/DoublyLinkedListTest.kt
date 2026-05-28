@@ -12,7 +12,7 @@ import storageEngine.lru.LRUNode
 class DoublyLinkedListTest: BehaviorSpec({
     given("an empty double linked list"){
         val doublyLinkedList = DoublyLinkedList()
-        val dummyFrameIds = Arb.int(min=0, max=300)
+        val dummyFrameIds = (0..300).shuffled().iterator()
         val frameIdList = mutableListOf<Int>()
         `when`("insert dummy frames"){
             repeat(100){
