@@ -201,7 +201,7 @@ class SlottedPageTest:BehaviorSpec({
         )
 
         val keySerializer = MultiColumnKeySerializer(keySchema)
-        val valueSerializer = RowDataSerializerHelper(SampleData::class)
+        val valueSerializer = RowDataSerializerHelper(SampleData.serializer())
         val page = SlottedPage(IndexConfig, 1, data)
     }
 }

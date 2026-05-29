@@ -1,6 +1,5 @@
-package index.btree
+package index.btree.inMemory
 
-import index.btree.inMemory.BTree
 import index.comparator.MultiColumnKeyComparator
 import helper.serializer.LocalDateSerializerHelper
 import index.serializer.MultiColumnKeySerializer
@@ -126,8 +125,8 @@ class BTreeSearchTest: BehaviorSpec({
             Column("date", ColumnType.LOCAL_DATE, descending = false)
         ))
 
-        val idValueSerializer = RowDataSerializerHelper(IDData::class)
-        val userDataSerializer = RowDataSerializerHelper(UserData::class)
+        val idValueSerializer = RowDataSerializerHelper(IDData.serializer())
+        val userDataSerializer = RowDataSerializerHelper(UserData.serializer())
 
         val keySerializer2 = MultiColumnKeySerializer(schema2)
         val keySerializer = MultiColumnKeySerializer(schema)

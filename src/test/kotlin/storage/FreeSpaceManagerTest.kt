@@ -17,16 +17,19 @@ class FreeSpaceManagerTest: BehaviorSpec({
         val bufferPoolManager = BufferPoolManager(diskManager, replacer, IndexConfig, 100)
         val databaseInitializer = DatabaseInitializer(bufferPoolManager)
         val freeSpaceManager = FreeSpaceManager(bufferPoolManager)
-        val dummyPageIdsCreated = (1L..10L).toList()
+        val dummyPageIdsCreated = mutableListOf<Long>()
         databaseInitializer.initMetaPage()
+         repeat(10){
+             dummyPageIdsCreated.addLast(freeSpaceManager.getFreePageID())
+        }
         for(pageId in dummyPageIdsCreated){
             val dummyPageLock = bufferPoolManager.newPage(pageId)
             dummyPageLock.close()
         }
         `when`("get free pageId with empty manager"){
             val freeSpaceId = freeSpaceManager.getFreePageID()
-            then("freeSpaceId should be 0L(There is no page)"){
-                freeSpaceId shouldBe 0L
+            then("freeSpaceId should be 11L(There is no page)"){
+                freeSpaceId shouldBe 11L
             }
         }
         `when`("add all pages to the free list"){
@@ -44,7 +47,7 @@ class FreeSpaceManagerTest: BehaviorSpec({
         `when`("get free pageId again"){
             val freeSpaceId = freeSpaceManager.getFreePageID()
             then("freeSpaceId should be 0L(There is no page)"){
-                freeSpaceId shouldBe 0L
+                freeSpaceId shouldBe 12L
             }
         }
     }

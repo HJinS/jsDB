@@ -40,5 +40,7 @@ const val META_PAGE_ID = 0L
 
 const val INVALID_PAGE_ID = -2L
 
+const val START_PAGE_ID = 1L
+
 enum class LockMode {WRITE, READ}
 
