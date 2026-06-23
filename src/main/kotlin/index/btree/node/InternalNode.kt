@@ -6,7 +6,6 @@ import index.serializer.PageIDSerializer
 import index.util.NodeSplitData
 import mu.KotlinLogging
 import storageEngine.page.SlottedPage
-import storageEngine.util.PageHeaderOffset
 
 
 class InternalNode<K>(
@@ -16,9 +15,20 @@ class InternalNode<K>(
     private val valueSerializer: PageIDSerializer = PageIDSerializer()
 ): Node<K>(indexConfig, page, keySerializer) {
 
+    override val valueView: List<ByteArray>
+        get() = object : AbstractList<ByteArray>() {
+            override val size: Int
+                get() = page.recordCount + 1
+
+            override fun get(index: Int): ByteArray {
+                return if(index == 0) valueSerializer.serialize(page.leftMostChildPageId)
+                else page.getData(index - 1).second
+            }
+        }
+
     val logger = KotlinLogging.logger {}
 
-    fun childPageId(index: Int): Long = if(index == 0) page.leftMostChildPageId else valueSerializer.deserialize(page.getData(index).second)
+    fun childPageId(index: Int): Long = if(index == 0) page.leftMostChildPageId else valueSerializer.deserialize(page.getData(index - 1).second)
 
     fun updateKey(slotId: Int, key: ByteArray){
         val (_, value) = page.getData(slotId)
@@ -64,8 +74,9 @@ class InternalNode<K>(
     }
 
     override fun appendAllData(keys: List<ByteArray>, values: List<ByteArray>) {
+        val startSlot = page.recordCount
         for(slotId in keys.indices){
-            page.insertData(page.recordCount + slotId, keys[slotId], values[slotId])
+            page.insertData(startSlot + slotId, keys[slotId], values[slotId])
         }
     }
 

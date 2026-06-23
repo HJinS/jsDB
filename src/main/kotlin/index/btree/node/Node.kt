@@ -1,7 +1,6 @@
 package index.btree.node
 
 import config.IndexConfig
-import index.exception.IndexException
 import index.exception.NodeException
 import index.serializer.KeySerializer
 import index.util.BTreeOptMode
@@ -40,7 +39,7 @@ abstract class Node<K>(
             }
         }
 
-    val valueView: List<ByteArray>
+    open val valueView: List<ByteArray>
         get() = object : AbstractList<ByteArray>() {
             override val size: Int
                 get() = page.recordCount
@@ -80,7 +79,6 @@ abstract class Node<K>(
      * If find the exact value using the key at leaf node, use idx (if exists).
      *
      * @param key Key to find.
-     * @param comparator Comparator to compare at the binary search.
      * @param exactIndex Use this parameter to get the exact node from the leaf node.
      * @return Search result. Pair of index, isExist.
      * */
@@ -170,10 +168,15 @@ abstract class Node<K>(
      * 추후 INSERT시에 용량을 기준으로한 조건 추가 필요.
      * 그 경우에 UPDATE 시에는 UPDATE에 따른 가변 길이의 데이터 수정 시 용량 확인 필요
      * */
-    fun isSafeNode(optMode: BTreeOptMode) = when(optMode){
-        BTreeOptMode.INSERT -> keyCount < indexConfig.maxKeys
+    fun isSafeNode(optMode: BTreeOptMode, key: ByteArray?=null, value: ByteArray?=null) = when(optMode){
+        BTreeOptMode.INSERT -> {
+            if(!(key != null && value != null)) throw NodeException.InvalidSafeCheckException()
+            keyCount < indexConfig.maxKeys && !wouldOverflow(key, value)
+        }
         BTreeOptMode.DELETE -> hasSurplusKey
         BTreeOptMode.UPDATE -> hasSurplusKey
         BTreeOptMode.SELECT -> true
     }
+
+    fun wouldOverflow(key: ByteArray, value: ByteArray) = page.freeSpace < page.getRequiredSpace(key, value)
 }

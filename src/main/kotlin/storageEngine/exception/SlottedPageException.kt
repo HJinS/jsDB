@@ -14,4 +14,8 @@ sealed class SlottedPageException(message: String?, cause: Throwable?): StorageE
     class SlotShiftException(
         pageId: Long, pageType: PageType, cause: Throwable?=null
     ): SlottedPageException("Invalid shift count. pageID: $pageId pageType: $pageType", cause)
+
+    class PageFullException(
+        dataLength: Int, pageId: Long, cause: Throwable?=null
+    ): SlottedPageException("Page full maybe too large record data: $dataLength - pageID: $pageId,", cause)
 }

@@ -41,6 +41,9 @@ open class Page(
     val freeSpaceStart: Int
         get() = data.getShort(PageHeaderOffset.FREE_SPACE_START.offset).toInt()
 
+    val freeSpace: Int
+        get() = freeSpaceEnd - freeSpaceStart + 1
+
     val recordCount: Int
         get() = data.getShort(PageHeaderOffset.RECORD_COUNT.offset).toInt()
 

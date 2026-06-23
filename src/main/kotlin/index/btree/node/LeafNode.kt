@@ -88,8 +88,9 @@ class LeafNode<K>(
     }
 
     override fun appendAllData(keys: List<ByteArray>, values: List<ByteArray>) {
+        val startSlot = page.recordCount
         for(slotId in keys.indices){
-            page.insertData(page.recordCount + slotId, keys[slotId], values[slotId])
+            page.insertData(startSlot + slotId, keys[slotId], values[slotId])
         }
     }
 

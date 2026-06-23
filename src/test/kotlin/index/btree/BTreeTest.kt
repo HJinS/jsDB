@@ -550,6 +550,42 @@ class BTreeTest: BehaviorSpec({
             }
         }
     }
+
+    given("A Tree with 500 shuffled composite keys inserted"){
+        @Serializable
+        data class IDData(val id: Int, val longId: Long)
+
+        val schema = KeySchema(listOf(
+            Column("id", ColumnType.INT, descending = false),
+            Column("longId", ColumnType.LONG, descending = false)
+        ))
+        val btree = initData<IDData>(schema)
+        val dummyData = mutableListOf<IDData>()
+        val dummyInt = (-20000..20000).shuffled().iterator()
+        val dummyLong = (-20000L..20000).shuffled().iterator()
+        repeat(500){
+            dummyData.add(IDData(dummyInt.next(), dummyLong.next()))
+        }
+        val expectedSorted = dummyData.sortedWith(compareBy({ it.id }, { it.longId }))
+
+        `when`("inserting all 500 records in shuffled order") {
+            for (data in dummyData) {
+                btree.insert(listOf<Number>(data.id, data.longId), data)
+            }
+
+            then("traverse returns all 500 records in sorted order") {
+                val result = btree.traverse().map { it.second }
+                result.size shouldBe 500
+                result shouldBe expectedSorted
+            }
+
+            then("search finds the correct value for each inserted key") {
+                for (data in dummyData) {
+                    btree.search(listOf<Number>(data.id, data.longId)) shouldBe data
+                }
+            }
+        }
+    }
 }){
     companion object{
         inline fun <reified T: Any> initData(schema: KeySchema): BTree<List<Any?>, T>{

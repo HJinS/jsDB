@@ -98,35 +98,35 @@ open class SlottedPage(
 
     @OptIn(ExperimentalStdlibApi::class)
     private fun insertRecord(offset: Int, key: ByteArray, value: ByteArray, keyLengthEncoded: ByteArray, valueLengthEncoded: ByteArray){
-        logger.info("========================[insertRecord 시작]========================")
+         logger.info("========================[insertRecord 시작]========================")
         var insertLocation = offset
-        logger.info("[insertRecord 삽입] key 길이 삽입 위치 = $insertLocation")
-        logger.info("[insertRecord 삽입] 인코딩된 key 길이 = ${keyLengthEncoded.toHexString()}")
+         logger.info("[insertRecord 삽입] key 길이 삽입 위치 = $insertLocation")
+         logger.info("[insertRecord 삽입] 인코딩된 key 길이 = ${keyLengthEncoded.toHexString()}")
         data.put(insertLocation, keyLengthEncoded)
         insertLocation += keyLengthEncoded.size
-        logger.info("[insertRecord 삽입] key 삽입 위치 = $insertLocation")
-        logger.info("[insertRecord 삽입] 인코딩된 key = ${key.toHexString()}")
+         logger.info("[insertRecord 삽입] key 삽입 위치 = $insertLocation")
+         logger.info("[insertRecord 삽입] 인코딩된 key = ${key.toHexString()}")
         data.put(insertLocation, key)
         insertLocation += key.size
-        logger.info("[insertRecord 삽입] value 길이 삽입 위치 = $insertLocation")
-        logger.info("[insertRecord 삽입] 인코딩된 value 길이 = ${valueLengthEncoded.toHexString()}")
+         logger.info("[insertRecord 삽입] value 길이 삽입 위치 = $insertLocation")
+         logger.info("[insertRecord 삽입] 인코딩된 value 길이 = ${valueLengthEncoded.toHexString()}")
         data.put(insertLocation, valueLengthEncoded)
         insertLocation += valueLengthEncoded.size
-        logger.info("[insertRecord 삽입] value 삽입 위치 = $insertLocation")
-        logger.info("[insertRecord 삽입] 인코딩된 value = ${value.toHexString()}")
+         logger.info("[insertRecord 삽입] value 삽입 위치 = $insertLocation")
+         logger.info("[insertRecord 삽입] 인코딩된 value = ${value.toHexString()}")
         data.put(insertLocation, value)
-        logger.info("========================[insertRecord 종료]========================")
+         logger.info("========================[insertRecord 종료]========================")
     }
 
     @OptIn(ExperimentalStdlibApi::class)
     fun getData(slotId: Int): Pair<ByteArray, ByteArray>{
-        logger.info("========================[getData 시작]========================")
+         logger.info("========================[getData 시작]========================")
         val slotLocation = HEADER_SIZE + slotId * SLOT_SIZE
         val offset = data.getShort(slotLocation)
         val length = data.getShort(slotLocation + 2)
-        logger.info("[getData] 조회할 데이터 offset = $offset")
-        logger.info("[getData] 조회할 데이터 length = $length")
-        logger.info("[getData] 조회할 데이터 slotId = $slotId")
+         logger.info("[getData] 조회할 데이터 offset = $offset")
+         logger.info("[getData] 조회할 데이터 length = $length")
+         logger.info("[getData] 조회할 데이터 slotId = $slotId")
         if(length.toInt() == 0) throw SlottedPageException.SlotOutOfBoundException(slotId, pageId, type)
         // slot 데이터를 가지고 실제 데이터 추출
         // 반만 열린 범위인 것을 주의
@@ -134,25 +134,25 @@ open class SlottedPage(
         tempBuffer.position(offset.toInt())
         val recordData = ByteArray(length.toInt())
         tempBuffer.get(recordData)
-        logger.info("[getData] 조회할 실제 데이터 = ${recordData.toHexString()}")
+         logger.info("[getData] 조회할 실제 데이터 = ${recordData.toHexString()}")
         // 가장 앞에 있는 부분은 key의 길이 정보를 varInt로 인코딩 한 것
         // keyLengthByteLen는 인코딩된 byte 길이를 말함
         // 이 길이 정보를 통해 실제 key 데이터를 추출
         val (keyLength, keyLengthByteLen) = decodeVarInt(recordData, 0)
-        logger.info("[getData] 조회할 실제 데이터 중 key 길이 decode 결과 = $keyLength")
-        logger.info("[getData] 조회할 실제 데이터 중 key 길이 decode 결과의 byte 기준 길이 = $keyLengthByteLen")
+         logger.info("[getData] 조회할 실제 데이터 중 key 길이 decode 결과 = $keyLength")
+         logger.info("[getData] 조회할 실제 데이터 중 key 길이 decode 결과의 byte 기준 길이 = $keyLengthByteLen")
         val key = recordData.slice(keyLengthByteLen until keyLengthByteLen + keyLength).toByteArray()
-        logger.info("[getData] 조회할 실제 데이터 중 key =  ${key.toHexString()}")
+         logger.info("[getData] 조회할 실제 데이터 중 key =  ${key.toHexString()}")
         // valueLengthByteLen는 인코딩된 byte 길이를 말함
         // 이 길이 정보를 통해 실제 value 데이터를 추출
         val (valueLength, valueLengthByteLen) = decodeVarInt(recordData, keyLengthByteLen + keyLength)
-        logger.info("[getData] 조회할 실제 데이터 중 value 길이 decode 결과 = $valueLength")
-        logger.info("[getData] 조회할 실제 데이터 중 value 길이 decode 결과의 byte 기준 길이 = $valueLengthByteLen")
+         logger.info("[getData] 조회할 실제 데이터 중 value 길이 decode 결과 = $valueLength")
+         logger.info("[getData] 조회할 실제 데이터 중 value 길이 decode 결과의 byte 기준 길이 = $valueLengthByteLen")
         val value = recordData.slice(
             keyLengthByteLen + keyLength + valueLengthByteLen until keyLengthByteLen + keyLength + valueLengthByteLen + valueLength
         ).toByteArray()
-        logger.info("[getData] 조회할 실제 데이터 중 value =  ${value.toHexString()}")
-        logger.info("========================[getData 종료]========================")
+         logger.info("[getData] 조회할 실제 데이터 중 value =  ${value.toHexString()}")
+         logger.info("========================[getData 종료]========================")
         return key to value
     }
 
@@ -191,14 +191,14 @@ open class SlottedPage(
             val srcLengthByte = srcLength * SLOT_SIZE
             val dstOffset = srcOffset + (shiftLength * SLOT_SIZE)
 
+            val temp = ByteArray(srcLengthByte)
             val readView = data.duplicate()
-            val writeView = data.duplicate()
-
             readView.position(srcOffset)
-            readView.limit(srcOffset + srcLengthByte)
-            writeView.position(dstOffset)
+            readView.get(temp)
 
-            writeView.put(readView)
+            val writeView = data.duplicate()
+            writeView.position(dstOffset)
+            writeView.put(temp)
         } catch (e: Exception) {
             throw SlottedPageException.SlotShiftException(pageId, type, e)
         }
@@ -215,11 +215,17 @@ open class SlottedPage(
         val keyLengthEncoded = encodeVarInt(key.size)
         val valueLengthEncoded = encodeVarInt(value.size)
         val totalDataLength = keyLengthEncoded.size + key.size + valueLengthEncoded.size + value.size
+        val needed = totalDataLength + SLOT_SIZE
+
+        if (freeSpace < needed) {
+            compaction()
+            if (freeSpace < needed) throw SlottedPageException.PageFullException(totalDataLength, pageId)
+        }
 
         // 4. [데이터 쓰기] FreeSpace 포인터 이동 및 데이터 기록
         // 데이터는 페이지 끝에서 앞으로 자라납니다.
         // freeSpaceEnd는 "현재 데이터가 시작되는 지점"을 가리키고 있다고 가정
-        logger.info { "freeSpaceEnd: $freeSpaceEnd - totalDataLength totalDataLength: $totalDataLength" }
+         logger.info { "freeSpaceEnd: $freeSpaceEnd - totalDataLength totalDataLength: $totalDataLength" }
         val dataOffset = freeSpaceEnd - totalDataLength
 
         // 실제 데이터 기록 (순서: KeyLen -> Key -> ValLen -> Val)
@@ -317,6 +323,12 @@ open class SlottedPage(
         }
 
         data.putShort(PageHeaderOffset.FREE_SPACE_END.offset, (writePointer-1).toShort())
+    }
+
+    fun getRequiredSpace(key: ByteArray, value: ByteArray): Int{
+        val keyLengthEncoded = encodeVarInt(key.size)
+        val valueLengthEncoded = encodeVarInt(value.size)
+        return keyLengthEncoded.size + key.size + valueLengthEncoded.size + value.size + SLOT_SIZE
     }
 
     companion object{

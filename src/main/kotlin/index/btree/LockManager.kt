@@ -8,9 +8,14 @@ import index.exception.IllegalLatchStateException
 
 class LockManager(val lockMode: LockMode): AutoCloseable{
     private val lockQueue = ArrayDeque<PageLock>()
-    
+
+    val size: Int
+        get() = lockQueue.size
+
     val last: PageLock
-    get() = lockQueue.last()
+        get() = lockQueue.last()
+
+    fun at(idx: Int) = lockQueue[idx]
 
     fun lockPush(lock: PageLock){
         when(lockMode){
