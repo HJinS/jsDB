@@ -81,11 +81,11 @@ class BTree<K, V> (
                 val page = SlottedPage(indexConfig, leafNodePageId, buffer)
                 val node = Node.from(indexConfig, page, keySerializer)
                 if(node.wouldOverflow(serializedKey, serializedValue)){
-                    val promotionKey = node.promotionKey()
+                    val separatorKey = page.getData(node.promotionKeyIdx() + 1).first
                     try{
                         val currentLockSize = lockManager.size
                         split(traceNode, lockManager)
-                        if(Arrays.compareUnsigned(serializedKey, promotionKey) >= 0){
+                        if(Arrays.compareUnsigned(serializedKey, separatorKey) >= 0){
                             val rightLeafPageLock = lockManager.at(currentLockSize)
                             rightLeafPageLock.asWriteView { rightLeafBuffer ->
                                 val rightPage = SlottedPage(indexConfig, rightLeafPageLock.pageId, rightLeafBuffer)

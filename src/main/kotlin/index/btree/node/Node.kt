@@ -178,5 +178,5 @@ abstract class Node<K>(
         BTreeOptMode.SELECT -> true
     }
 
-    fun wouldOverflow(key: ByteArray, value: ByteArray) = page.freeSpace < page.getRequiredSpace(key, value)
+    fun wouldOverflow(key: ByteArray, value: ByteArray) = page.freeSpace < page.getRequiredSpace(key, value) || keyCount >= indexConfig.maxKeys
 }
