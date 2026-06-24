@@ -118,9 +118,6 @@ class BTree<K, V> (
         }
         lockManager.close()
         traceNode.clear()
-        logger.info { "-------------------------------------------" }
-        printTree()
-        logger.info { "-------------------------------------------" }
     }
 
 
@@ -142,7 +139,6 @@ class BTree<K, V> (
         val lockManager = LockManager(LockMode.WRITE)
         val (leafNodePageId, keyIdx, isExist) = searchLeafNode(serializedKey, null, traceNode, lockManager, BTreeOptMode.DELETE)
         if(isExist){
-            printTree()
             var isUnderflow = false
             val leafLock = lockManager.last
             if(leafNodePageId != leafLock.pageId) throw IllegalLatchStateException.InvalidTraceObjectError(leafNodePageId)
