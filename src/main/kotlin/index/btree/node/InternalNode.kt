@@ -96,6 +96,7 @@ class InternalNode<K>(
             keyList.addFirst(key)
             childPageIdList.addFirst(value)
         }
+        page.compaction()
         return keyList to childPageIdList
     }
 

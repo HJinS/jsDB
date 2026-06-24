@@ -62,6 +62,7 @@ class LeafNode<K>(
             keyList.addFirst(key)
             values.addFirst(value)
         }
+        page.compaction()
         return keyList to values
     }
 
