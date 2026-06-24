@@ -55,7 +55,6 @@ fun encodeVarInt(value: Int): ByteArray{
  *  - fourth: 0000101 0101010 1010100 0000000
  *  - fifth: 10101010 10101010 00000000
  * ```
- * 00000101
  * */
 fun decodeVarInt(bytes: ByteArray, offset: Int = 0): Pair<Int, Int> {
     var result = 0
