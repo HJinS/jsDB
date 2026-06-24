@@ -3,7 +3,6 @@ package index.btree
 import storageEngine.util.LockMode
 import storageEngine.page.PageLock
 
-import index.exception.IllegalLatchStateException
 
 
 class LockManager(val lockMode: LockMode): AutoCloseable{
@@ -31,9 +30,8 @@ class LockManager(val lockMode: LockMode): AutoCloseable{
     
     // 조상 페이지들을 순서대로 unlock & unpin 진행 && 가장 최근 Lock 반환
     fun realeaseAncester(lock: PageLock): PageLock{
-        if(lockQueue.lastOrNull() !== lock) throw IllegalLatchStateException.InvalidLockObjectError(lock.frameId)
-        while(lockQueue.size > 1) lockQueue.removeFirst().close()
-        return lockQueue.last()
+        while(lockQueue.isNotEmpty() && lockQueue.first() !== lock) lockQueue.removeFirst().close()
+        return lockQueue.first()
     }
 
     fun closeAndRemoveLock(lock: PageLock){

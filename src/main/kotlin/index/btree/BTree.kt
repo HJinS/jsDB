@@ -255,24 +255,19 @@ class BTree<K, V> (
                         * merge 후에 right node 삭제 처리
                         * leaf node의 경우 sibling 재연결 처리 필요
                         * */
-                        var mergeResult: Pair<Long, Long> = -1L to -1L
                         for(siblingLock in siblingLocks){
                             if(!isMerged){
                                 siblingLock.asWriteView { siblingBuffer ->
                                     val siblingPage = SlottedPage(indexConfig, siblingLock.pageId, siblingBuffer)
                                     val siblingNode = Node.from(indexConfig, siblingPage, keySerializer)
                                     if(siblingNode.hasSurplusKey){
-                                        mergeResult = currentNode.merge(siblingNode, parentNode, keyIdx)
+                                        val (_, rightPageId) =  currentNode.merge(siblingNode, parentNode, keyIdx)
                                         isMerged = true
-
                                         // merge후 추후 free page list 관리를 추가하여 page 삭제 로직 필요
                                         // 추후 free frame 회수 및 flush 작업 필요
-                                        if(mergeResult != -1L to -1L){
-                                            val (_, rightPageId) = mergeResult
-                                            val victimPageLock: PageLock = if(rightPageId == currentLock.pageId) currentLock else siblingLock
-                                            storageManager.deletePage(rightPageId)
-                                            lockManager.closeAndRemoveLock(victimPageLock)
-                                        }
+                                        val victimPageLock: PageLock = if(rightPageId == currentLock.pageId) currentLock else siblingLock
+                                        storageManager.deletePage(rightPageId)
+                                        lockManager.closeAndRemoveLock(victimPageLock)
                                     }
                                 }
                             }
@@ -444,10 +439,7 @@ class BTree<K, V> (
                 val currentPage = SlottedPage(indexConfig, pageIdCursor, buffer)
                 val currentNode = Node.from(indexConfig, currentPage, keySerializer)
                 if(currentNode.isSafeNode(operationMode, key, value)) isSafeToUnlockAncestor = true
-                if(pageIdCursor == rootPageId && currentNode is InternalNode && currentNode.isLeaf){
-                    val (searchIdx, isExist) = currentNode.search(key, true)
-                    return Triple(pageIdCursor, searchIdx, isExist)
-                }
+
                 val result = currentNode.search(key)
                 if(currentNode.isLeaf){
                     val (searchIdx, isExist) = currentNode.search(key, true)
@@ -456,8 +448,8 @@ class BTree<K, V> (
                     val currentInternalNode = currentNode as InternalNode
                     val nextPageId = currentInternalNode.childPageId(result.first)
                     val nextLock = storageManager.fetchPage(nextPageId, lockManager.lockMode)
+                    if(isSafeToUnlockAncestor) lockManager.realeaseAncester(currentLock)
                     lockManager.push(nextLock)
-                    if(isSafeToUnlockAncestor) lockManager.realeaseAncester(nextLock)
                     traceNode.push(Triple(nextPageId, result.first, nextLock))
                     pageIdCursor = nextPageId
                 }
@@ -510,11 +502,11 @@ class BTree<K, V> (
                 }
                 page.rightSiblingPageId
             }
+            if(isSafeToUnlockAncestor) lockManager.realeaseAncester(currentLock)
             currentLock.close()
             if(nextLeafNodePageId == -1L) break
             val nextLock = storageManager.fetchPage(nextLeafNodePageId, LockMode.READ)
             lockManager.push(nextLock)
-            if(isSafeToUnlockAncestor) lockManager.realeaseAncester(nextLock)
             leafNodePageIdCursor = nextLeafNodePageId
         }
         lockManager.close()
@@ -546,18 +538,12 @@ class BTree<K, V> (
                 }
             }
             val nextLock = storageManager.fetchPage(nextPageId, lockManager.lockMode)
+            if(isSafeToUnlockAncestor) lockManager.realeaseAncester(currentPageLock)
             lockManager.push(nextLock)
-            if(isSafeToUnlockAncestor) lockManager.realeaseAncester(nextLock)
             pageIdCursor = nextPageId
             if(isLeaf) break
         }
         return pageIdCursor
-    }
-    
-    // 조상 Lock 해제 하기 전에 이 함수를 가지고 안전한지 확인
-    private fun isSafeLock(node: Node<K>, optMode: BTreeOptMode) = when(optMode){
-        BTreeOptMode.SELECT -> true
-        else -> node.isSafeNode(optMode)
     }
 
     /**

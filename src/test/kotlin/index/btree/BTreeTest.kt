@@ -563,19 +563,19 @@ class BTreeTest: BehaviorSpec({
         val dummyData = mutableListOf<IDData>()
         val dummyInt = (-20000..20000).shuffled().iterator()
         val dummyLong = (-20000L..20000).shuffled().iterator()
-        repeat(500){
+        repeat(3000){
             dummyData.add(IDData(dummyInt.next(), dummyLong.next()))
         }
         val expectedSorted = dummyData.sortedWith(compareBy({ it.id }, { it.longId }))
 
-        `when`("inserting all 500 records in shuffled order") {
+        `when`("inserting all 3000 records in shuffled order") {
             for (data in dummyData) {
                 btree.insert(listOf<Number>(data.id, data.longId), data)
             }
 
-            then("traverse returns all 500 records in sorted order") {
+            then("traverse returns all 3000 records in sorted order") {
                 val result = btree.traverse().map { it.second }
-                result.size shouldBe 500
+                result.size shouldBe 3000
                 result shouldBe expectedSorted
             }
 
@@ -583,6 +583,30 @@ class BTreeTest: BehaviorSpec({
                 for (data in dummyData) {
                     btree.search(listOf<Number>(data.id, data.longId)) shouldBe data
                 }
+            }
+        }
+        `when`("update one record"){
+            val newInt = dummyInt.next()
+            val newLong = dummyLong.next()
+            val newValue = IDData(newInt, newLong)
+            val targetData = dummyData[100]
+            val targetKey = listOf<Number>(targetData.id, targetData.longId)
+            then("then the value should be updated"){
+                btree.update(targetKey, newValue)
+                val searchResult = btree.search(targetKey)
+                searchResult shouldBe newValue
+            }
+        }
+
+        `when`("update one record which doesn't exist in the btree") {
+            val newInt = dummyInt.next()
+            val newLong = dummyLong.next()
+            val newValue = IDData(newInt, newLong)
+            val targetKey = listOf<Number>(newValue.id, newValue.longId)
+            then("then given key should not be searched"){
+                btree.update(targetKey, newValue)
+                val searchResult = btree.search(targetKey)
+                searchResult shouldBe null
             }
         }
     }
