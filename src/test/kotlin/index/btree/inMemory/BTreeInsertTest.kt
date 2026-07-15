@@ -103,8 +103,7 @@ class BTreeInsertTest: FunSpec({
                 keySerializer,
                 idValueSerializer,
                 MultiColumnKeyComparator(parameter.third),
-                2,
-                true
+                2
             )
 
             val keys = parameter.first
@@ -213,8 +212,7 @@ class BTreeInsertTest: FunSpec({
                 keySerializer,
                 userDataSerializer,
                 MultiColumnKeyComparator(parameter.third),
-                2,
-                true
+                2
             )
 
             val keys = parameter.first

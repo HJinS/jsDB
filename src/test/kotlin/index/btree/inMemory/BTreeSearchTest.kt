@@ -137,8 +137,7 @@ class BTreeSearchTest: BehaviorSpec({
             keySerializer,
             idValueSerializer,
             MultiColumnKeyComparator(schema),
-            2,
-            true
+            2
         )
 
         val btree2 = BTree(
@@ -147,8 +146,7 @@ class BTreeSearchTest: BehaviorSpec({
             keySerializer2,
             userDataSerializer,
             MultiColumnKeyComparator(schema2),
-            2,
-            true
+            2
         )
     }
 }
