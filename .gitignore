@@ -50,6 +50,7 @@ Temporary Items
 *.iws
 .idea
 build
+.kotlin
 
 ### Kotlin template
 # Compiled class file
