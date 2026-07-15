@@ -44,6 +44,7 @@ tasks.withType<Test>().configureEach {
     useJUnitPlatform()
     systemProperty("kotest.framework.classpath.scanning.autoscan.disable", "true")
     jvmArgs("-XX:+EnableDynamicAgentLoading")
+    testLogging { events("passed", "failed"); showStandardStreams = true }
 }
 
 kotlin {

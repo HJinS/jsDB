@@ -1,49 +1,65 @@
 package index.btree
 
-import index.btree.inMemory.BTree
-import index.comparator.MultiColumnKeyComparator
+import config.IndexConfig
+import config.MidpointLruConfig
+import config.StorageConfig
 import helper.serializer.LocalDateSerializerHelper
-import index.serializer.MultiColumnKeySerializer
 import helper.serializer.RowDataSerializerHelper
+import index.serializer.MultiColumnKeySerializer
 import index.util.Column
 import index.util.ColumnType
 import index.util.KeySchema
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.serializer
+import storageEngine.BufferPoolManager
+import storageEngine.DatabaseInitializer
+import storageEngine.DiskManager
+import storageEngine.FreeSpaceManager
+import storageEngine.StorageManager
+import storageEngine.lru.MidpointLRUPolicy
 import java.time.LocalDate
 
+class BTreeTest: BehaviorSpec({
+    timeout = 5 * 60 * 1000L  // 5 minutes — deadlock / infinite loop guard
 
-class BTreeDeleteTest: BehaviorSpec({
+    given("A Tree with two ids"){
+        @Serializable
+        data class IDData(val id: Int, val longId: Long)
 
-    val keys = listOf(
-        listOf<Number>(1, 10L),
-        listOf<Number>(5, 50L),
-        listOf<Number>(3, 4L),
-        listOf<Number>(4, 1032L),
-        listOf<Number>(2, 12342L),
-        listOf<Number>(210, 1234203L),
-        listOf<Number>(523, 123932L),
-        listOf<Number>(12, 12342322L),
-        listOf<Number>(235, 123123932L),
-        listOf<Number>(21, 1231342L),
-        listOf<Number>(325, 1232932L),
-        listOf<Number>(32, 1223342L),
-        listOf<Number>(4, 23276L),
-        listOf<Number>(1, 10L),
-        listOf<Number>(2, 12342L),
-        listOf<Number>(21, 1231342L)
-    )
-    for (key in keys) {
-        val value = IDData(
-            id = key[0] as Int,
-            longId = key[1] as Long
+        val schema = KeySchema(listOf(
+            Column("count", ColumnType.INT, descending = false),
+            Column("largeCount", ColumnType.LONG, descending = false)
+        ))
+        val btree = initData<IDData>(schema)
+
+        val keys = listOf(
+            listOf<Number>(1, 10L),
+            listOf<Number>(5, 50L),
+            listOf<Number>(3, 4L),
+            listOf<Number>(4, 1032L),
+            listOf<Number>(2, 12342L),
+            listOf<Number>(210, 1234203L),
+            listOf<Number>(523, 123932L),
+            listOf<Number>(12, 12342322L),
+            listOf<Number>(235, 123123932L),
+            listOf<Number>(21, 1231342L),
+            listOf<Number>(325, 1232932L),
+            listOf<Number>(32, 1223342L),
+            listOf<Number>(4, 23276L),
+            listOf<Number>(1, 10L),
+            listOf<Number>(2, 12342L),
+            listOf<Number>(21, 1231342L)
         )
-        btree.insert(key, value)
-    }
+        for (key in keys) {
+            val value = IDData(
+                id = key[0] as Int,
+                longId = key[1] as Long
+            )
+            btree.insert(key, value)
+        }
 
-
-    given("A Tree with schema $schema"){
         var deleteKey = listOf<Number>(523, 123932L)
         `when`("Delete key $deleteKey"){
             btree.delete(deleteKey)
@@ -303,37 +319,48 @@ class BTreeDeleteTest: BehaviorSpec({
         }
     }
 
-    val keys2 = listOf(
-        listOf("Ava", LocalDate.of(2025, 4, 30)),
-        listOf("Grace", LocalDate.of(2024, 3, 20)),
-        listOf("Ava", LocalDate.of(2019, 12, 25)),
-        listOf("Elijah", LocalDate.of(1997, 12, 25)),
-        listOf("ElijahKim", LocalDate.of(1997, 12, 25)),
-        listOf("Lucas", LocalDate.of(1697, 12, 25)),
-        listOf("Faith", LocalDate.of(2022, 1, 18)),
-        listOf("Grace", LocalDate.of(2020, 1, 30)),
-        listOf("soif", LocalDate.of(2020, 1, 30)),
-        listOf("Daniel", LocalDate.of(2018, 4, 9)),
-        listOf("Daniel", LocalDate.of(2018, 4, 9)),
-        listOf("Chloe", LocalDate.of(2019, 12, 25)),
-        listOf("Chloed", LocalDate.of(2020, 12, 25))
-    )
-
-    for (key in keys2) {
-        val value = UserData(
-            name = key[0] as String,
-            birthDate = key[1] as LocalDate,
+    given("A Tree with string localDate schema"){
+        @Serializable
+        data class UserData(
+            val name: String,
+            @Serializable(with = LocalDateSerializerHelper::class)
+            val birthDate: LocalDate
         )
-        btree2.insert(key, value)
-    }
 
-    btree2.printTree()
+        val schema = KeySchema(listOf(
+            Column("name", ColumnType.STRING, descending = false),
+            Column("date", ColumnType.LOCAL_DATE, descending = false)
+        ))
+        val btree = initData<UserData>(schema)
 
-    Given("A Tree with schema $schema2"){
+        val keys2 = listOf(
+            listOf("Ava", LocalDate.of(2025, 4, 30)),
+            listOf("Grace", LocalDate.of(2024, 3, 20)),
+            listOf("Ava", LocalDate.of(2019, 12, 25)),
+            listOf("Elijah", LocalDate.of(1997, 12, 25)),
+            listOf("ElijahKim", LocalDate.of(1997, 12, 25)),
+            listOf("Lucas", LocalDate.of(1697, 12, 25)),
+            listOf("Faith", LocalDate.of(2022, 1, 18)),
+            listOf("Grace", LocalDate.of(2020, 1, 30)),
+            listOf("soif", LocalDate.of(2020, 1, 30)),
+            listOf("Daniel", LocalDate.of(2018, 4, 9)),
+            listOf("Daniel", LocalDate.of(2018, 4, 9)),
+            listOf("Chloe", LocalDate.of(2019, 12, 25)),
+            listOf("Chloed", LocalDate.of(2020, 12, 25))
+        )
+
+        for (key in keys2) {
+            val value = UserData(
+                name = key[0] as String,
+                birthDate = key[1] as LocalDate,
+            )
+            btree.insert(key, value)
+        }
+
         var deleteKey = listOf("ElijahKim", LocalDate.of(1997, 12, 25))
         `when`("Delete key $deleteKey"){
-            btree2.delete(deleteKey)
-            btree2.printTree()
+            btree.delete(deleteKey)
+            btree.printTree()
             val expectedResults = listOf(
                 UserData("Ava", LocalDate.of(2019, 12, 25)),
                 UserData("Ava", LocalDate.of(2025, 4, 30)),
@@ -349,15 +376,15 @@ class BTreeDeleteTest: BehaviorSpec({
                 UserData("soif", LocalDate.of(2020, 1, 30))
             )
             then("Trace result should be $expectedResults"){
-                val allKeys = btree2.traverse()
+                val allKeys = btree.traverse()
                 allKeys.toList().map{ it.second } shouldBe expectedResults
             }
         }
 
         deleteKey = listOf("Elijah", LocalDate.of(1997, 12, 25))
         `when`("Delete key $deleteKey"){
-            btree2.delete(deleteKey)
-            btree2.printTree()
+            btree.delete(deleteKey)
+            btree.printTree()
             val expectedResults = listOf(
                 UserData("Ava", LocalDate.of(2019, 12, 25)),
                 UserData("Ava", LocalDate.of(2025, 4, 30)),
@@ -372,15 +399,15 @@ class BTreeDeleteTest: BehaviorSpec({
                 UserData("soif", LocalDate.of(2020, 1, 30))
             )
             then("Trace result should be $expectedResults"){
-                val allKeys = btree2.traverse()
+                val allKeys = btree.traverse()
                 allKeys.toList().map{ it.second } shouldBe expectedResults
             }
         }
 
         deleteKey = listOf("Chloed", LocalDate.of(2020, 12, 25))
         `when`("Delete key $deleteKey"){
-            btree2.delete(deleteKey)
-            btree2.printTree()
+            btree.delete(deleteKey)
+            btree.printTree()
             val expectedResults = listOf(
                 UserData("Ava", LocalDate.of(2019, 12, 25)),
                 UserData("Ava", LocalDate.of(2025, 4, 30)),
@@ -394,15 +421,15 @@ class BTreeDeleteTest: BehaviorSpec({
                 UserData("soif", LocalDate.of(2020, 1, 30))
             )
             then("Trace result should be $expectedResults"){
-                val allKeys = btree2.traverse()
+                val allKeys = btree.traverse()
                 allKeys.toList().map{ it.second } shouldBe expectedResults
             }
         }
 
         deleteKey = listOf("Grace", LocalDate.of(2020, 1, 30))
         `when`("Delete key $deleteKey"){
-            btree2.delete(deleteKey)
-            btree2.printTree()
+            btree.delete(deleteKey)
+            btree.printTree()
             val expectedResults = listOf(
                 UserData("Ava", LocalDate.of(2019, 12, 25)),
                 UserData("Ava", LocalDate.of(2025, 4, 30)),
@@ -415,15 +442,15 @@ class BTreeDeleteTest: BehaviorSpec({
                 UserData("soif", LocalDate.of(2020, 1, 30))
             )
             then("Trace result should be $expectedResults"){
-                val allKeys = btree2.traverse()
+                val allKeys = btree.traverse()
                 allKeys.toList().map{ it.second } shouldBe expectedResults
             }
         }
 
         deleteKey = listOf("Ava", LocalDate.of(2025, 4, 30))
         `when`("Delete key $deleteKey"){
-            btree2.delete(deleteKey)
-            btree2.printTree()
+            btree.delete(deleteKey)
+            btree.printTree()
             val expectedResults = listOf(
                 UserData("Ava", LocalDate.of(2019, 12, 25)),
                 UserData("Chloe", LocalDate.of(2019, 12, 25)),
@@ -435,15 +462,15 @@ class BTreeDeleteTest: BehaviorSpec({
                 UserData("soif", LocalDate.of(2020, 1, 30))
             )
             then("Trace result should be $expectedResults"){
-                val allKeys = btree2.traverse()
+                val allKeys = btree.traverse()
                 allKeys.toList().map{ it.second } shouldBe expectedResults
             }
         }
 
         deleteKey = listOf("soif", LocalDate.of(2020, 1, 30))
         `when`("Delete key $deleteKey"){
-            btree2.delete(deleteKey)
-            btree2.printTree()
+            btree.delete(deleteKey)
+            btree.printTree()
             val expectedResults = listOf(
                 UserData("Ava", LocalDate.of(2019, 12, 25)),
                 UserData("Chloe", LocalDate.of(2019, 12, 25)),
@@ -454,15 +481,15 @@ class BTreeDeleteTest: BehaviorSpec({
                 UserData("Lucas", LocalDate.of(1697, 12, 25))
             )
             then("Trace result should be $expectedResults"){
-                val allKeys = btree2.traverse()
+                val allKeys = btree.traverse()
                 allKeys.toList().map{ it.second } shouldBe expectedResults
             }
         }
 
         deleteKey = listOf("Faith", LocalDate.of(2022, 1, 18))
         `when`("Delete key $deleteKey"){
-            btree2.delete(deleteKey)
-            btree2.printTree()
+            btree.delete(deleteKey)
+            btree.printTree()
             val expectedResults = listOf(
                 UserData("Ava", LocalDate.of(2019, 12, 25)),
                 UserData("Chloe", LocalDate.of(2019, 12, 25)),
@@ -472,15 +499,15 @@ class BTreeDeleteTest: BehaviorSpec({
                 UserData("Lucas", LocalDate.of(1697, 12, 25))
             )
             then("Trace result should be $expectedResults"){
-                val allKeys = btree2.traverse()
+                val allKeys = btree.traverse()
                 allKeys.toList().map{ it.second } shouldBe expectedResults
             }
         }
 
         deleteKey = listOf("Daniel", LocalDate.of(2018, 4, 9))
         `when`("Delete key $deleteKey"){
-            btree2.delete(deleteKey)
-            btree2.printTree()
+            btree.delete(deleteKey)
+            btree.printTree()
             val expectedResults = listOf(
                 UserData("Ava", LocalDate.of(2019, 12, 25)),
                 UserData("Chloe", LocalDate.of(2019, 12, 25)),
@@ -489,15 +516,15 @@ class BTreeDeleteTest: BehaviorSpec({
                 UserData("Lucas", LocalDate.of(1697, 12, 25))
             )
             then("Trace result should be $expectedResults"){
-                val allKeys = btree2.traverse()
+                val allKeys = btree.traverse()
                 allKeys.toList().map{ it.second } shouldBe expectedResults
             }
         }
 
         deleteKey = listOf("Daniel", LocalDate.of(2018, 4, 9))
         `when`("Delete key $deleteKey"){
-            btree2.delete(deleteKey)
-            btree2.printTree()
+            btree.delete(deleteKey)
+            btree.printTree()
             val expectedResults = listOf(
                 UserData("Ava", LocalDate.of(2019, 12, 25)),
                 UserData("Chloe", LocalDate.of(2019, 12, 25)),
@@ -505,72 +532,153 @@ class BTreeDeleteTest: BehaviorSpec({
                 UserData("Lucas", LocalDate.of(1697, 12, 25))
             )
             then("Trace result should be $expectedResults"){
-                val allKeys = btree2.traverse()
+                val allKeys = btree.traverse()
                 allKeys.toList().map{ it.second } shouldBe expectedResults
             }
         }
 
         deleteKey = listOf("Lucas", LocalDate.of(1697, 12, 25))
         `when`("Delete key $deleteKey"){
-            btree2.delete(deleteKey)
-            btree2.printTree()
+            btree.delete(deleteKey)
+            btree.printTree()
             val expectedResults = listOf(
                 UserData("Ava", LocalDate.of(2019, 12, 25)),
                 UserData("Chloe", LocalDate.of(2019, 12, 25)),
                 UserData("Grace", LocalDate.of(2024, 3, 20))
             )
             then("Trace result should be $expectedResults"){
-                val allKeys = btree2.traverse()
+                val allKeys = btree.traverse()
                 allKeys.toList().map{ it.second } shouldBe expectedResults
+            }
+        }
+    }
+
+    given("A Tree with 500 shuffled composite keys inserted"){
+        @Serializable
+        data class IDData(val id: Int, val longId: Long)
+
+        val schema = KeySchema(listOf(
+            Column("id", ColumnType.INT, descending = false),
+            Column("longId", ColumnType.LONG, descending = false)
+        ))
+        val btree = initData<IDData>(schema)
+        val dummyData = mutableListOf<IDData>()
+        val dummyInt = (-20000..20000).shuffled().iterator()
+        val dummyLong = (-20000L..20000).shuffled().iterator()
+        repeat(3000){
+            dummyData.add(IDData(dummyInt.next(), dummyLong.next()))
+        }
+        val expectedSorted = dummyData.sortedWith(compareBy({ it.id }, { it.longId }))
+        var updateTargetData: IDData? = null
+        var updateNewValue: IDData? = null
+
+        `when`("inserting all 3000 records in shuffled order") {
+            for (data in dummyData) {
+                btree.insert(listOf<Number>(data.id, data.longId), data)
+            }
+            then("traverse returns all 3000 records in sorted order") {
+                val result = btree.traverse().map { it.second }
+                result.size shouldBe 3000
+                result shouldBe expectedSorted
+            }
+
+            then("search finds the correct value for each inserted key") {
+                for (data in dummyData) {
+                    btree.search(listOf<Number>(data.id, data.longId)) shouldBe data
+                }
+            }
+        }
+        `when`("update one record"){
+            val newInt = dummyInt.next()
+            val newLong = dummyLong.next()
+            val newValue = IDData(newInt, newLong)
+            val targetData = dummyData[100]
+            updateTargetData = targetData
+            updateNewValue = newValue
+            val targetKey = listOf<Number>(targetData.id, targetData.longId)
+            then("then the value should be updated"){
+                btree.update(targetKey, newValue)
+                val searchResult = btree.search(targetKey)
+                searchResult shouldBe newValue
+            }
+            then("traverse key order still correct after update") {
+                val result = btree.traverse()
+                result.size shouldBe 3000
+                val keys = result.map { it.first }
+                val sortedKeys = keys.sortedWith(compareBy({ it[0] as Int }, { it[1] as Long }))
+                keys shouldBe sortedKeys
+            }
+        }
+
+        `when`("update one record which doesn't exist in the btree") {
+            val newInt = dummyInt.next()
+            val newLong = dummyLong.next()
+            val newValue = IDData(newInt, newLong)
+            val targetKey = listOf<Number>(newValue.id, newValue.longId)
+            then("then given key should not be searched"){
+                btree.update(targetKey, newValue)
+                val searchResult = btree.search(targetKey)
+                searchResult shouldBe null
+            }
+        }
+        `when`("delete all data"){
+            val expected = dummyData.sortedWith(compareBy({ it.id }, { it.longId }))
+            val expectedMutable = expected.toMutableList()
+            // update one record가 dummyData[100]의 값을 newValue로 바꿨으므로 expectedMutable도 반영
+            if (updateTargetData != null && updateNewValue != null) {
+                val ui = expectedMutable.indexOf(updateTargetData)
+                if (ui >= 0) expectedMutable[ui] = updateNewValue
+            }
+            var initialSize = 3000
+            for ((idx, data) in dummyData.withIndex()) {
+                val deleteKey = listOf<Number>(data.id, data.longId)
+                initialSize -= 1
+                if (data == updateTargetData && updateNewValue != null) {
+                    expectedMutable.remove(updateNewValue)
+                } else {
+                    expectedMutable.remove(data)
+                }
+                btree.delete(deleteKey)
+                then("loop $idx sorted order preserved after deletion"){
+                    val traversed = btree.traverse().map { it.second }
+                    traversed.size shouldBe initialSize
+                    traversed shouldBe expectedMutable
+                }
+
+                then("loop $idx: deleted key returns null on search"){
+                    btree.search(deleteKey) shouldBe null
+                }
+
+                if(expectedMutable.size >= 10){
+                    then("loop $idx: remaining keys are still searchable"){
+                        expectedMutable.shuffled().take(10).forEach { remainRow ->
+                            btree.search(listOf(remainRow.id, remainRow.longId)) shouldBe remainRow
+                        }
+                    }
+                }
             }
         }
     }
 }){
     companion object{
-        @Serializable
-        data class IDData(val id: Int, val longId: Long)
-
-        @Serializable
-        data class UserData(
-            val name: String,
-            @Serializable(with = LocalDateSerializerHelper::class)
-            val birthDate: LocalDate
-        )
-
-        val schema = KeySchema(listOf(
-            Column("count", ColumnType.INT, descending = false),
-            Column("largeCount", ColumnType.LONG, descending = false)
-        ))
-
-        val schema2 = KeySchema(listOf(
-            Column("name", ColumnType.STRING, descending = false),
-            Column("date", ColumnType.LOCAL_DATE, descending = false)
-        ))
-
-        val idValueSerializer = RowDataSerializerHelper(IDData::class)
-        val userDataSerializer = RowDataSerializerHelper(UserData::class)
-
-        val keySerializer = MultiColumnKeySerializer(schema)
-        val keySerializer2 = MultiColumnKeySerializer(schema2)
-
-        val btree = BTree(
-            "test",
-            "test table",
-            keySerializer,
-            idValueSerializer,
-            MultiColumnKeyComparator(schema),
-            2,
-            true
-        )
-
-        val btree2 = BTree(
-            "test",
-            "test table",
-            keySerializer2,
-            userDataSerializer,
-            MultiColumnKeyComparator(schema2),
-            2,
-            true
-        )
+        inline fun <reified T: Any> initData(schema: KeySchema): BTree<List<Any?>, T>{
+            val valueSerializer = RowDataSerializerHelper(serializer<T>())
+            val keySerializer = MultiColumnKeySerializer(schema)
+            val diskManager = DiskManager(StorageConfig, IndexConfig)
+            val lruPolicy = MidpointLRUPolicy(MidpointLruConfig)
+            val bufferPoolManager = BufferPoolManager(diskManager, lruPolicy, IndexConfig, 100)
+            val databaseInitializer = DatabaseInitializer(bufferPoolManager)
+            val freeSpaceManager = FreeSpaceManager(bufferPoolManager)
+            val storageManager = StorageManager(freeSpaceManager, bufferPoolManager, IndexConfig)
+            databaseInitializer.initMetaPage()
+            return BTree(
+                "test",
+                "test table",
+                storageManager,
+                keySerializer,
+                valueSerializer,
+                IndexConfig,
+            )
+        }
     }
 }

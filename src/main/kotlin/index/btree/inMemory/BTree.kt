@@ -9,12 +9,9 @@ import index.exception.IndexException
 import index.serializer.KeySerializer
 import index.serializer.ValueSerializer
 import index.util.MAX_KEYS
-import mu.KotlinLogging
 import java.util.EmptyStackException
 import java.util.Stack
 import kotlin.collections.plusAssign
-
-val logger = KotlinLogging.logger {}
 
 
 /**
@@ -28,7 +25,6 @@ val logger = KotlinLogging.logger {}
  * @property valueSerializer Serializer to serialize values to ByteArray. IT's different form serializing keys.
  * @property keyComparator Comparator for comparing keys.
  * @property maxKeys MaxKeys in one node except root.
- * @property allowDuplicate Flag to allow duplicate or not.
  * @constructor Create empty B tree.
  */
 class BTree<K, V> (
@@ -38,7 +34,6 @@ class BTree<K, V> (
     private val valueSerializer: ValueSerializer<V>,
     private val keyComparator: KeyComparator,
     private val maxKeys: Int = MAX_KEYS,
-    private val allowDuplicate: Boolean = true
 ){
     private var root: Node? = null
     private val comparator = Comparator<ByteArray> {
@@ -60,10 +55,7 @@ class BTree<K, V> (
         val serializedValue = valueSerializer.serialize(value)
         val serializedKey = keySerializer.serialize(key)
         if (root != null) {
-            logger.info { "-------------------------------------------" }
-            logger.info { "search key for insert - key: $key" }
-            val (leafNode, idx, result) = searchLeafNode(serializedKey)
-            logger.info { "search result - idx: $idx, isExist: $result" }
+            val (leafNode, idx, _) = searchLeafNode(serializedKey)
             leafNode.insert(idx, serializedKey, serializedValue)
             if(leafNode.isOverflow){
                 try{
@@ -77,9 +69,7 @@ class BTree<K, V> (
         } else {
             root = LeafNode(mutableListOf(serializedKey), maxKeys, mutableListOf(serializedValue))
         }
-        logger.info { "-------------------------------------------" }
         printTree()
-        logger.info { "-------------------------------------------" }
     }
 
 
@@ -255,13 +245,10 @@ class BTree<K, V> (
             node = node as InternalNode
             node = node.moveToChild(searchIdx)
             traceNode.push(node to searchIdx)
-            logger.info { "move to [${(node.hashCode())}][$searchIdx] result: ${result.second}" }
         }
-        logger.info { "End of loop" }
         val result = node.search(key, comparator, true)
         searchIdx = result.first
         isExist = result.second
-        logger.info { "final result [${(node.hashCode())}][$searchIdx] result: ${result.second}" }
         return Triple(node as LeafNode, searchIdx, isExist)
     }
 
@@ -343,7 +330,6 @@ class BTree<K, V> (
             }
             prevLevel = level
         }
-        logger.info { "\n\n$viewBuilder\n\n"}
     }
 
     /**

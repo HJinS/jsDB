@@ -1,7 +1,5 @@
 package index.btree.inMemory.node
 
-import index.btree.inMemory.logger
-
 
 class InternalNode(
     keys: MutableList<ByteArray>,
@@ -144,7 +142,6 @@ class InternalNode(
             leftNode = lNode as InternalNode
             rightNode = rNode as InternalNode
             val extractedKey = rightNode.keys
-            logger.info { "Merge Internal: leftNode: ${leftNode.hashCode()} rightNode: ${rightNode.hashCode()}" }
             leftNode.keys.addLast(parentNode.keys[separationKey])
             leftNode.keys.addAll(extractedKey)
             leftNode.children.addAll(rightNode.children)

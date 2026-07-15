@@ -1,6 +1,5 @@
-package index.btree
+package index.btree.inMemory
 
-import index.btree.inMemory.BTree
 import index.comparator.MultiColumnKeyComparator
 import helper.serializer.LocalDateSerializerHelper
 import index.serializer.MultiColumnKeySerializer
@@ -104,8 +103,7 @@ class BTreeInsertTest: FunSpec({
                 keySerializer,
                 idValueSerializer,
                 MultiColumnKeyComparator(parameter.third),
-                2,
-                true
+                2
             )
 
             val keys = parameter.first
@@ -214,8 +212,7 @@ class BTreeInsertTest: FunSpec({
                 keySerializer,
                 userDataSerializer,
                 MultiColumnKeyComparator(parameter.third),
-                2,
-                true
+                2
             )
 
             val keys = parameter.first
@@ -247,7 +244,7 @@ class BTreeInsertTest: FunSpec({
             val birthDate: LocalDate
         )
 
-        val idValueSerializer = RowDataSerializerHelper(IDData::class)
-        val userDataSerializer = RowDataSerializerHelper(UserData::class)
+        val idValueSerializer = RowDataSerializerHelper(IDData.serializer())
+        val userDataSerializer = RowDataSerializerHelper(UserData.serializer())
     }
 }

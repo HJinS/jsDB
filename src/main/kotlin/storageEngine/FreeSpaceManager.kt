@@ -39,15 +39,11 @@ class FreeSpaceManager (
         pageLock.asWriteView { buffer ->
             val freeListHeadPageID = buffer.getLong(MetaPageOffset.FREE_LIST_HEAD_PAGE_ID.offset)
             buffer.putLong(MetaPageOffset.FREE_LIST_HEAD_PAGE_ID.offset, newFreePageID)
-            // page 있음
-            // 앞에서 page 삭제할때 해당 page를 기본적으로 초기화 시켜 주어야 함.
-            if(freeListHeadPageID != INVALID_PAGE_ID){
-                val newFreePageLock = bufferPoolManager.fetchPage(newFreePageID, LockMode.WRITE)
-                newFreePageLock.asWriteView { newFreeBuffer ->
-                    newFreeBuffer.putLong(PageHeaderOffset.LEFT_SIBLING_PAGE_ID.offset, freeListHeadPageID)
-                }
-                newFreePageLock.close()
+            val newFreePageLock = bufferPoolManager.fetchPage(newFreePageID, LockMode.WRITE)
+            newFreePageLock.asWriteView { newFreeBuffer ->
+                newFreeBuffer.putLong(PageHeaderOffset.LEFT_SIBLING_PAGE_ID.offset, freeListHeadPageID)
             }
+            newFreePageLock.close()
         }
         pageLock.close()
     }

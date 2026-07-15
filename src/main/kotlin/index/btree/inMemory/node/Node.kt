@@ -1,6 +1,5 @@
 package index.btree.inMemory.node
 
-import index.btree.inMemory.logger
 import java.util.Collections
 import kotlin.math.floor
 
@@ -45,7 +44,6 @@ sealed class Node(
      * */
     fun search(key: ByteArray, comparator: Comparator<ByteArray>, exactIndex: Boolean=false): Pair<Int, Boolean>{
         val idx = keys.binarySearch(key, comparator)
-        logger.info { "Binary search result: $idx keyLength: ${keys.size}" }
         return if(idx >= 0) {if(exactIndex) idx to true else idx+1 to true} else -(idx + 1) to false
     }
 

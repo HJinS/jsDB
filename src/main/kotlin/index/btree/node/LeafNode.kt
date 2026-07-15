@@ -18,12 +18,6 @@ class LeafNode<K>(
     val next: Long
         get() = page.rightSiblingPageId
 
-    val prev: Long
-        get() = page.leftSiblingPageId
-
-    val valueCount: Int
-        get() = page.recordCount
-
     /**
      * Split the leaf node into 2 pieces.
      *
@@ -62,6 +56,7 @@ class LeafNode<K>(
             keyList.addFirst(key)
             values.addFirst(value)
         }
+        page.compaction()
         return keyList to values
     }
 
@@ -88,8 +83,9 @@ class LeafNode<K>(
     }
 
     override fun appendAllData(keys: List<ByteArray>, values: List<ByteArray>) {
+        val startSlot = page.recordCount
         for(slotId in keys.indices){
-            page.insertData(page.recordCount + slotId, keys[slotId], values[slotId])
+            page.insertData(startSlot + slotId, keys[slotId], values[slotId])
         }
     }
 
@@ -122,7 +118,8 @@ class LeafNode<K>(
         if(isLeft(targetNode.page.pageId, parentNode, keyIdx)){
             val (key, value) = targetNode.deleteData(0)
             insert(key, value)
-            parentNode.updateKey(keyIdx, targetNode.page.getData(0).first)
+            val newSep = targetNode.page.getData(0).first
+            parentNode.updateKey(keyIdx, newSep)
         } else{
             val recordCount = targetNode.keyCount
             val (key, value) = targetNode.deleteData(recordCount - 1)
