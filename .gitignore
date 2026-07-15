@@ -85,6 +85,9 @@ hs_err_pid*
 
 bin
 
+# Database files
+*.db
+
 # Gemini & Skills
 *.skill
 .gemini/
