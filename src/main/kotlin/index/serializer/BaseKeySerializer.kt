@@ -1,6 +1,5 @@
 package index.serializer
 
-import index.btree.logger
 import index.exception.SerializerException
 import index.util.*
 import java.lang.IndexOutOfBoundsException
@@ -74,12 +73,6 @@ abstract class BaseKeySerializer<K>(protected val schema: KeySchema): KeySeriali
                 (byteArrayOf(0x01)) + packedKey
             }
         }
-        if(column.descending) {
-            logger.info { "===========================================" }
-            logger.info { key }
-            logger.info { serialized.contentToString() }
-            logger.info { serialized.invert().contentToString() }
-        }
         return if(column.descending) serialized.invert() else serialized
     }
 
@@ -94,12 +87,6 @@ abstract class BaseKeySerializer<K>(protected val schema: KeySchema): KeySeriali
         if (nullFlag.toInt() == 0x00) return null to 1
 
         val columnType = column.type
-
-        fun readBytes(bytes: ByteArray, length: Int): ByteArray {
-            val slice = bytes.copyOfRange(position, position + length)
-            position += length
-            return slice
-        }
 
         fun readVarType(bytes: ByteArray): ByteArray{
             val terminator = 0x00

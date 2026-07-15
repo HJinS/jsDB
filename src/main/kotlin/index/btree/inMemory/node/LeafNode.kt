@@ -1,6 +1,5 @@
 package index.btree.inMemory.node
 
-import index.btree.inMemory.logger
 import java.util.Collections
 
 class LeafNode(
@@ -17,9 +16,6 @@ class LeafNode(
 
     val next: LeafNode?
         get() = _next
-
-    val prev: LeafNode?
-        get() = _prev
 
     val values: List<ByteArray>
         get() = Collections.unmodifiableList(_values)
@@ -126,17 +122,14 @@ class LeafNode(
      * */
     override fun redistribute(targetNode: Node, parentNode: InternalNode, keyIdx: Int){
         val node: LeafNode = targetNode as LeafNode
-        logger.info { "Redistribute: ${node.keys} ${node._values}" }
         // borrow from right sibling
         if(isLeft(node, parentNode, keyIdx)){
-            logger.info { "Redistribute: leftNode ${this._values} rightNode ${node._values}" }
             val key = node.removeFirstKey()
             val value = node.removeFirstValue()
             keys.add(key)
             _values.add(value)
             parentNode.keys[keyIdx] = node.keys[0]
         } else{
-            logger.info { "Redistribute: leftNode ${node._values} rightNode ${this._values}" }
             val key = node.removeLastKey()
             val value = node.removeLastValue()
             keys.add(0, key)
@@ -154,12 +147,10 @@ class LeafNode(
         val node: LeafNode = targetNode as LeafNode
         val leftNode: LeafNode
         val rightNode: LeafNode
-        logger.info { "Merge: ${node.keys} ${node._values}" }
         orderNode(node, parentNode, keyIdx).let {
             (separationKey, lNode, rNode) ->
             leftNode = lNode as LeafNode
             rightNode = rNode as LeafNode
-            logger.info { "Merge: leftNode ${leftNode._values} rightNode ${rightNode._values}" }
             val extractedKey = rightNode.keys
             val newNextNode = rightNode.next
             leftNode.keys.addAll(extractedKey)

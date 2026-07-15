@@ -233,7 +233,9 @@ class BufferPoolManager(
         try{
             frameId = pageTable[pageId] ?: return
             frame = frames[frameId]
-            if(frame.pinCount.get() > 0) throw BufferPoolManagerException.PageInUseException(pageId)
+            if(frame.pinCount.get() > 0) {
+                throw BufferPoolManagerException.PageInUseException(pageId)
+            }
             frame.latch.writeLock().lock()
             try{
                 pageTable.remove(pageId)

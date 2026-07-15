@@ -4,7 +4,6 @@ import config.IndexConfig
 import index.serializer.KeySerializer
 import index.serializer.PageIDSerializer
 import index.util.NodeSplitData
-import mu.KotlinLogging
 import storageEngine.page.SlottedPage
 
 
@@ -25,8 +24,6 @@ class InternalNode<K>(
                 else page.getData(index - 1).second
             }
         }
-
-    val logger = KotlinLogging.logger {}
 
     fun childPageId(index: Int): Long = if(index == 0) page.leftMostChildPageId else valueSerializer.deserialize(page.getData(index - 1).second)
 
@@ -151,7 +148,6 @@ class InternalNode<K>(
             val leftNode = lNode as InternalNode<K>
             val rightNode = rNode as InternalNode<K>
             val (rKey, rValue) = rightNode.deleteAllData()
-            logger.info { "Merge Internal: leftNode: ${leftNode.hashCode()} rightNode: ${rightNode.hashCode()}" }
             rKey.addFirst(separationKey)
             leftNode.appendAllData(rKey, rValue)
             return leftNode.pageId to rightNode.pageId

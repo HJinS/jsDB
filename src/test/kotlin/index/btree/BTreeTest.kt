@@ -22,6 +22,8 @@ import storageEngine.lru.MidpointLRUPolicy
 import java.time.LocalDate
 
 class BTreeTest: BehaviorSpec({
+    timeout = 5 * 60 * 1000L  // 5 minutes — deadlock / infinite loop guard
+
     given("A Tree with two ids"){
         @Serializable
         data class IDData(val id: Int, val longId: Long)
@@ -567,12 +569,13 @@ class BTreeTest: BehaviorSpec({
             dummyData.add(IDData(dummyInt.next(), dummyLong.next()))
         }
         val expectedSorted = dummyData.sortedWith(compareBy({ it.id }, { it.longId }))
+        var updateTargetData: IDData? = null
+        var updateNewValue: IDData? = null
 
         `when`("inserting all 3000 records in shuffled order") {
             for (data in dummyData) {
                 btree.insert(listOf<Number>(data.id, data.longId), data)
             }
-
             then("traverse returns all 3000 records in sorted order") {
                 val result = btree.traverse().map { it.second }
                 result.size shouldBe 3000
@@ -590,11 +593,20 @@ class BTreeTest: BehaviorSpec({
             val newLong = dummyLong.next()
             val newValue = IDData(newInt, newLong)
             val targetData = dummyData[100]
+            updateTargetData = targetData
+            updateNewValue = newValue
             val targetKey = listOf<Number>(targetData.id, targetData.longId)
             then("then the value should be updated"){
                 btree.update(targetKey, newValue)
                 val searchResult = btree.search(targetKey)
                 searchResult shouldBe newValue
+            }
+            then("traverse key order still correct after update") {
+                val result = btree.traverse()
+                result.size shouldBe 3000
+                val keys = result.map { it.first }
+                val sortedKeys = keys.sortedWith(compareBy({ it[0] as Int }, { it[1] as Long }))
+                keys shouldBe sortedKeys
             }
         }
 
@@ -607,6 +619,43 @@ class BTreeTest: BehaviorSpec({
                 btree.update(targetKey, newValue)
                 val searchResult = btree.search(targetKey)
                 searchResult shouldBe null
+            }
+        }
+        `when`("delete all data"){
+            val expected = dummyData.sortedWith(compareBy({ it.id }, { it.longId }))
+            val expectedMutable = expected.toMutableList()
+            // update one record가 dummyData[100]의 값을 newValue로 바꿨으므로 expectedMutable도 반영
+            if (updateTargetData != null && updateNewValue != null) {
+                val ui = expectedMutable.indexOf(updateTargetData)
+                if (ui >= 0) expectedMutable[ui] = updateNewValue
+            }
+            var initialSize = 3000
+            for ((idx, data) in dummyData.withIndex()) {
+                val deleteKey = listOf<Number>(data.id, data.longId)
+                initialSize -= 1
+                if (data == updateTargetData && updateNewValue != null) {
+                    expectedMutable.remove(updateNewValue)
+                } else {
+                    expectedMutable.remove(data)
+                }
+                btree.delete(deleteKey)
+                then("loop $idx sorted order preserved after deletion"){
+                    val traversed = btree.traverse().map { it.second }
+                    traversed.size shouldBe initialSize
+                    traversed shouldBe expectedMutable
+                }
+
+                then("loop $idx: deleted key returns null on search"){
+                    btree.search(deleteKey) shouldBe null
+                }
+
+                if(expectedMutable.size >= 10){
+                    then("loop $idx: remaining keys are still searchable"){
+                        expectedMutable.shuffled().take(10).forEach { remainRow ->
+                            btree.search(listOf(remainRow.id, remainRow.longId)) shouldBe remainRow
+                        }
+                    }
+                }
             }
         }
     }

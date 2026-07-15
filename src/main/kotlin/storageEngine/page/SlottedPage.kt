@@ -112,6 +112,7 @@ open class SlottedPage(
 
     @OptIn(ExperimentalStdlibApi::class)
     fun getData(slotId: Int): Pair<ByteArray, ByteArray>{
+        if(slotId !in 0..<recordCount) throw SlottedPageException.SlotOutOfBoundException(slotId, pageId, type)
         val slotLocation = HEADER_SIZE + slotId * SLOT_SIZE
         val offset = data.getShort(slotLocation)
         val length = data.getShort(slotLocation + 2)

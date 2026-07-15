@@ -1,7 +1,6 @@
 package storageEngine.page
 
 import config.IndexConfig
-import mu.KotlinLogging
 import storageEngine.util.PageHeaderOffset
 import storageEngine.util.PageType
 import java.nio.ByteBuffer
@@ -12,7 +11,6 @@ open class Page(
     internal val data: ByteBuffer,
     internal val pageId: Long = -1
 ){
-    internal val logger = KotlinLogging.logger {}
 
     fun initData(){
         data.putLong(PageHeaderOffset.PAGE_ID.offset, pageId)
@@ -80,11 +78,6 @@ open class Page(
         val freeSpaceStartIdx = freeSpaceStart
         data.putShort(PageHeaderOffset.RECORD_COUNT.offset, (recordCount - 1).toShort())
         data.putShort(PageHeaderOffset.FREE_SPACE_START.offset, (freeSpaceStartIdx - SLOT_SIZE).toShort())
-    }
-
-    internal fun getSlotId(slotArrayOffset: Int): Int{
-        val slotArrayStartBytes = HEADER_SIZE
-        return (slotArrayOffset - slotArrayStartBytes) / SLOT_SIZE
     }
 
     companion object{

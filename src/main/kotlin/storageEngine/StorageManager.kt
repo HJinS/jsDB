@@ -50,12 +50,15 @@ class StorageManager(
 
     /**
      * [FreeSpaceManager.addFreePageID] 를 통해 새로운 freePage로 등록
-     * pin 카운터 해제, 디스크 flush 없이 즉시 삭제
+     * 순서 중요:
+     * 1. addFreePageID  — page가 buffer pool에 있는 동안 free list 포인터 기록
+     * 2. flushPage      — 포인터를 디스크에 flush (getFreePageID가 나중에 disk read로 읽어야 하므로)
+     * 3. deletePage     — frame 회수
      * */
     fun deletePage(pageId: Long){
         if(pageId <= 0L) throw StorageManagerException.InvalidPageIdException(pageId)
-        
-        bufferPoolManager.deletePage(pageId) 
         freeSpaceManager.addFreePageID(pageId)
+        bufferPoolManager.flushPage(pageId)
+        bufferPoolManager.deletePage(pageId)
     }
 }

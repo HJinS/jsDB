@@ -5,7 +5,6 @@ import mu.KotlinLogging
 import index.btree.node.InternalNode
 import index.btree.node.LeafNode
 import index.btree.node.Node
-import index.exception.BTreeException
 import index.exception.IndexException
 import index.exception.NodeException
 import index.exception.IllegalLatchStateException
@@ -71,10 +70,7 @@ class BTree<K, V> (
         val lockManager = LockManager(LockMode.WRITE)
 
         if (rootPageId != -1L) {
-            logger.info { "-------------------------------------------" }
-            logger.info { "search key for insert - key: $key" }
-            val (leafNodePageId, searchIdx, isExist) = searchLeafNode(serializedKey, serializedValue, traceNode, lockManager, BTreeOptMode.INSERT)
-            logger.info { "search result - idx: $searchIdx, isExist: $isExist" }
+            val (leafNodePageId, _, _) = searchLeafNode(serializedKey, serializedValue, traceNode, lockManager, BTreeOptMode.INSERT)
             val writeLock = storageManager.fetchPage(leafNodePageId, lockManager.lockMode)
             lockManager.push(writeLock)
             writeLock.asWriteView { buffer ->
@@ -223,47 +219,45 @@ class BTree<K, V> (
                 val currentNode = Node.from(indexConfig, currentPage, keySerializer)
                 isUnderflow = currentNode.isUnderflow
 
-                parentLock.asWriteView { parentBuffer ->
-                    val parentPage = SlottedPage(indexConfig, currentPageId, parentBuffer)
-                    val parentNode = Node.from(indexConfig, parentPage, keySerializer) as InternalNode
-                    val leftSiblingPageId = try{ parentNode.childPageId(keyIdx-1) } catch (_: SlottedPageException.SlotOutOfBoundException){ null }
-                    val rightSiblingPageId = try{ parentNode.childPageId(keyIdx+1) } catch (_: SlottedPageException.SlotOutOfBoundException){ null }
-                    val siblingPageIds = listOf(leftSiblingPageId, rightSiblingPageId)
-                    val siblingLocks = mutableListOf<PageLock>()
-                    for(siblingId in siblingPageIds){
-                        if(siblingId != null && !isDone){
-                            val siblingLock = storageManager.fetchPage(siblingId, lockManager.lockMode)
-                            lockManager.push(siblingLock)
-                            siblingLocks.add(siblingLock)
-                            siblingLock.asWriteView { siblingBuffer ->
-                                val siblingPage = SlottedPage(indexConfig, siblingId, siblingBuffer)
-                                val siblingNode = Node.from(indexConfig, siblingPage, keySerializer)
-                                if(siblingNode.hasSurplusKey){
-                                    currentNode.redistribute(siblingNode, parentNode, keyIdx)
-                                    isDone = true
+                if(isUnderflow) {
+                    parentLock.asWriteView { parentBuffer ->
+                        val parentPage = SlottedPage(indexConfig, nextTrace.first, parentBuffer)
+                        val parentNode = Node.from(indexConfig, parentPage, keySerializer) as InternalNode
+                        val leftSiblingPageId = try{ parentNode.childPageId(keyIdx-1) } catch (_: SlottedPageException.SlotOutOfBoundException){ null }
+                        val rightSiblingPageId = try{ parentNode.childPageId(keyIdx+1) } catch (_: SlottedPageException.SlotOutOfBoundException){ null }
+                        val siblingPageIds = listOf(leftSiblingPageId, rightSiblingPageId)
+                        val siblingLocks = mutableListOf<PageLock>()
+                        for(siblingId in siblingPageIds){
+                            if(siblingId != null && !isDone){
+                                val siblingLock = storageManager.fetchPage(siblingId, lockManager.lockMode)
+                                lockManager.push(siblingLock)
+                                siblingLocks.add(siblingLock)
+                                siblingLock.asWriteView { siblingBuffer ->
+                                    val siblingPage = SlottedPage(indexConfig, siblingId, siblingBuffer)
+                                    val siblingNode = Node.from(indexConfig, siblingPage, keySerializer)
+                                    if(siblingNode.hasSurplusKey){
+                                        currentNode.redistribute(siblingNode, parentNode, keyIdx)
+                                        isDone = true
+                                    }
                                 }
                             }
                         }
-                    }
-                    var isMerged = false
-                    if(!isDone){
-                        /*
-                        * merge 후에 right node 삭제 처리
-                        * leaf node의 경우 sibling 재연결 처리 필요
-                        * */
-                        for(siblingLock in siblingLocks){
-                            if(!isMerged){
-                                siblingLock.asWriteView { siblingBuffer ->
-                                    val siblingPage = SlottedPage(indexConfig, siblingLock.pageId, siblingBuffer)
-                                    val siblingNode = Node.from(indexConfig, siblingPage, keySerializer)
-                                    if(siblingNode.hasSurplusKey){
-                                        val (_, rightPageId) =  currentNode.merge(siblingNode, parentNode, keyIdx)
+                        var isMerged = false
+                        if(!isDone){
+                            /*
+                            * merge 후에 right node 삭제 처리
+                            * leaf node의 경우 sibling 재연결 처리 필요
+                            * */
+                            for(siblingLock in siblingLocks){
+                                if(!isMerged){
+                                    siblingLock.asWriteView { siblingBuffer ->
+                                        val siblingPage = SlottedPage(indexConfig, siblingLock.pageId, siblingBuffer)
+                                        val siblingNode = Node.from(indexConfig, siblingPage, keySerializer)
+                                        val (_, rightPageId) = currentNode.merge(siblingNode, parentNode, keyIdx)
                                         isMerged = true
-                                        // merge후 추후 free page list 관리를 추가하여 page 삭제 로직 필요
-                                        // 추후 free frame 회수 및 flush 작업 필요
                                         val victimPageLock: PageLock = if(rightPageId == currentLock.pageId) currentLock else siblingLock
-                                        storageManager.deletePage(rightPageId)
                                         lockManager.closeAndRemoveLock(victimPageLock)
+                                        storageManager.deletePage(rightPageId)
                                     }
                                 }
                             }
@@ -299,8 +293,8 @@ class BTree<K, V> (
             }
             if(needChangeRoot && newRootId != null){
                 rootPageId = newRootId
-                storageManager.deletePage(currentPageId)
                 lockManager.closeAndRemoveLock(currentLock)
+                storageManager.deletePage(currentPageId)
                 // 트리의 메타데이터(rootPageId) 를 디스크에 써주는 내용 추가해야함
             }
         }
@@ -454,21 +448,22 @@ class BTree<K, V> (
     }
 
     fun search(key: K): V?{
+        if (rootPageId == -1L) return null
         val serializedKey = keySerializer.serialize(key)
         val traceNode: Stack<Triple<Long, Int, PageLock>> = Stack<Triple<Long, Int, PageLock>>()
         val lockManager = LockManager(LockMode.READ)
         val (leafNodePageId, keyIdx, isExist) = searchLeafNode(serializedKey, null, traceNode, lockManager, BTreeOptMode.SELECT)
         val lock = storageManager.fetchPage(leafNodePageId, lockManager.lockMode)
         lockManager.push(lock)
-        val value: ByteArray = lock.asReadView { buffer ->
+        val value: ByteArray? = lock.asReadView { buffer ->
             val currentPage = SlottedPage(indexConfig, leafNodePageId, buffer)
             val node = Node.from(indexConfig, currentPage, keySerializer)
             if(node.isSafeNode(BTreeOptMode.SELECT)) lockManager.realeaseAncester(lock)
-            currentPage.getData(keyIdx).second
+            if (isExist) currentPage.getData(keyIdx).second else null
         }
         lockManager.close()
         traceNode.clear()
-        return if(isExist) valueSerializer.deserialize(value) else null
+        return value?.let { valueSerializer.deserialize(it) }
     }
 
     /**
@@ -480,7 +475,7 @@ class BTree<K, V> (
     fun traverse(): List<Pair<K, V>>{
         val result = mutableListOf<Pair<K, V>>()
         val lockManager = LockManager(LockMode.READ)
-        var leafNodePageIdCursor: Long? = findLeftMostLeafPageId(lockManager) ?: throw BTreeException.LeafNodeNotFoundException(null)
+        var leafNodePageIdCursor: Long? = findLeftMostLeafPageId(lockManager) ?: return emptyList()
         lockManager.push(storageManager.fetchPage(leafNodePageIdCursor!!, LockMode.READ))
         while(true){
             val currentLock = lockManager.last
