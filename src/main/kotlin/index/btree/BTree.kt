@@ -438,7 +438,7 @@ class BTree<K, V> (
                     val currentInternalNode = currentNode as InternalNode
                     val nextPageId = currentInternalNode.childPageId(result.first)
                     val nextLock = storageManager.fetchPage(nextPageId, lockManager.lockMode)
-                    if(isSafeToUnlockAncestor) lockManager.realeaseAncester(currentLock)
+                    if(isSafeToUnlockAncestor) lockManager.releaseAncestor(currentLock)
                     lockManager.push(nextLock)
                     traceNode.push(Triple(nextPageId, result.first, nextLock))
                     pageIdCursor = nextPageId
@@ -458,7 +458,7 @@ class BTree<K, V> (
         val value: ByteArray? = lock.asReadView { buffer ->
             val currentPage = SlottedPage(indexConfig, leafNodePageId, buffer)
             val node = Node.from(indexConfig, currentPage, keySerializer)
-            if(node.isSafeNode(BTreeOptMode.SELECT)) lockManager.realeaseAncester(lock)
+            if(node.isSafeNode(BTreeOptMode.SELECT)) lockManager.releaseAncestor(lock)
             if (isExist) currentPage.getData(keyIdx).second else null
         }
         lockManager.close()
@@ -493,7 +493,7 @@ class BTree<K, V> (
                 }
                 page.rightSiblingPageId
             }
-            if(isSafeToUnlockAncestor) lockManager.realeaseAncester(currentLock)
+            if(isSafeToUnlockAncestor) lockManager.releaseAncestor(currentLock)
             currentLock.close()
             if(nextLeafNodePageId == -1L) break
             val nextLock = storageManager.fetchPage(nextLeafNodePageId, LockMode.READ)
@@ -529,7 +529,7 @@ class BTree<K, V> (
                 }
             }
             val nextLock = storageManager.fetchPage(nextPageId, lockManager.lockMode)
-            if(isSafeToUnlockAncestor) lockManager.realeaseAncester(currentPageLock)
+            if(isSafeToUnlockAncestor) lockManager.releaseAncestor(currentPageLock)
             lockManager.push(nextLock)
             pageIdCursor = nextPageId
             if(isLeaf) break

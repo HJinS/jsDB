@@ -16,20 +16,12 @@ class LockManager(val lockMode: LockMode): AutoCloseable{
 
     fun at(idx: Int) = lockQueue[idx]
 
-    fun lockPush(lock: PageLock){
-        when(lockMode){
-            LockMode.READ -> lock.lockRead()
-            LockMode.WRITE -> lock.lockWrite()
-        }
-        push(lock)
-    }
-
     fun push(lock: PageLock){
         lockQueue.add(lock)
     }
     
     // 조상 페이지들을 순서대로 unlock & unpin 진행 && 가장 최근 Lock 반환
-    fun realeaseAncester(lock: PageLock): PageLock{
+    fun releaseAncestor(lock: PageLock): PageLock{
         while(lockQueue.isNotEmpty() && lockQueue.first() !== lock) lockQueue.removeFirst().close()
         return lockQueue.first()
     }
