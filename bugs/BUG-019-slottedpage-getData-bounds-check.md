@@ -1,6 +1,6 @@
 # BUG-019 SlottedPage.getData() bounds check 누락 — 잔존 슬롯 바이트로 인한 isLeft() 오판
 
-- **커밋:** 미커밋 (현재 세션 수정)
+- **커밋:** 119e3b7d
 - **날짜:** 2026-07-15
 - **컴포넌트:** `SlottedPage.kt` — `getData`, `Node.kt` — `isLeft`
 - **상태:** 수정 완료

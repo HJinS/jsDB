@@ -1,6 +1,6 @@
 # BUG-021 BTree.search — isExist=false 시 getData(keyIdx) 무조건 호출
 
-- **커밋:** 미커밋 (현재 세션 수정)
+- **커밋:** 119e3b7d
 - **날짜:** 2026-07-15
 - **컴포넌트:** `BTree.kt` — `search`
 - **상태:** 수정 완료

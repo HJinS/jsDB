@@ -1,6 +1,6 @@
 # BUG-022 빈 트리에서 search/traverse — null/emptyList 대신 예외 발생
 
-- **커밋:** 미커밋 (현재 세션 수정)
+- **커밋:** 119e3b7d
 - **날짜:** 2026-07-15
 - **컴포넌트:** `BTree.kt` — `search`, `traverse`, `traverseWithPages`
 - **상태:** 수정 완료

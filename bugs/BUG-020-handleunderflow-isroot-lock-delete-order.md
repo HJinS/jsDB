@@ -1,6 +1,6 @@
 # BUG-020 handleUnderflow isRoot 블록 — lock release 전 deletePage 호출 → PageInUseException
 
-- **커밋:** 미커밋 (현재 세션 수정)
+- **커밋:** 119e3b7d
 - **날짜:** 2026-07-15
 - **컴포넌트:** `BTree.kt` — `handleUnderflow`
 - **상태:** 수정 완료

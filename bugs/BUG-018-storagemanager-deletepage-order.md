@@ -1,6 +1,6 @@
 # BUG-018 StorageManager.deletePage — 작업 순서 오류로 인한 InvalidReadOffsetException
 
-- **커밋:** 미커밋 (현재 세션 수정)
+- **커밋:** 119e3b7d
 - **날짜:** 2026-07-12 (수정)
 - **컴포넌트:** `StorageManager.kt` — `deletePage`
 - **상태:** 수정 완료
