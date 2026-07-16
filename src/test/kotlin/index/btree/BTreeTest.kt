@@ -662,14 +662,15 @@ class BTreeTest: BehaviorSpec({
 }){
     companion object{
         inline fun <reified T: Any> initData(schema: KeySchema): BTree<List<Any?>, T>{
+            val indexConfig = IndexConfig()
             val valueSerializer = RowDataSerializerHelper(serializer<T>())
             val keySerializer = MultiColumnKeySerializer(schema)
-            val diskManager = DiskManager(StorageConfig, IndexConfig)
-            val lruPolicy = MidpointLRUPolicy(MidpointLruConfig)
-            val bufferPoolManager = BufferPoolManager(diskManager, lruPolicy, IndexConfig, 100)
+            val diskManager = DiskManager(StorageConfig(), indexConfig)
+            val lruPolicy = MidpointLRUPolicy(MidpointLruConfig())
+            val bufferPoolManager = BufferPoolManager(diskManager, lruPolicy, indexConfig, 100)
             val databaseInitializer = DatabaseInitializer(bufferPoolManager)
             val freeSpaceManager = FreeSpaceManager(bufferPoolManager)
-            val storageManager = StorageManager(freeSpaceManager, bufferPoolManager, IndexConfig)
+            val storageManager = StorageManager(freeSpaceManager, bufferPoolManager, indexConfig)
             databaseInitializer.initMetaPage()
             return BTree(
                 "test",
@@ -677,7 +678,7 @@ class BTreeTest: BehaviorSpec({
                 storageManager,
                 keySerializer,
                 valueSerializer,
-                IndexConfig,
+                indexConfig,
             )
         }
     }

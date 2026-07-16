@@ -1,5 +1,7 @@
 package storageEngine.lru
 
+import storageEngine.exception.LRUException
+
 
 /**
  *
@@ -7,8 +9,8 @@ package storageEngine.lru
  * 새로운 노드가 어디에 있어야 할 지 및 비율 조정 등 수행
  * */
 class GenerationalList(
-    val youngRatio: Double,
-    val capacity: Int
+    private val youngRatio: Double,
+    private val capacity: Int
 ) {
     private val linkedList = DoublyLinkedList()
     private var midPoint: LRUNode? = null
@@ -67,8 +69,8 @@ class GenerationalList(
         expandOldList(node)
     }
 
-    fun removeOldest(): LRUNode? {
-        val node = linkedList.removeLast() ?: return null
+    fun removeOldest(): LRUNode {
+        val node = linkedList.removeLast() ?: throw LRUException.LRUEvictException(capacity, youngCount, oldCount)
         oldCount --
         size --
         if(midPoint == node) midPoint = null

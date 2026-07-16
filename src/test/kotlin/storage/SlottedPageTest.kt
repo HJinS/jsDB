@@ -183,8 +183,8 @@ class SlottedPageTest:BehaviorSpec({
     }
 
     given("a page with records inserted in descending order causing repeated right slot shifts") {
-        val freshBuffer = ByteBuffer.allocate(IndexConfig.pageSize)
-        val freshPage = SlottedPage(IndexConfig, 99L, freshBuffer)
+        val freshBuffer = ByteBuffer.allocate(indexConfig.pageSize)
+        val freshPage = SlottedPage(indexConfig, 99L, freshBuffer)
         freshPage.initData()
         val insertedKeys = mutableListOf<ByteArray>()
 
@@ -223,8 +223,8 @@ class SlottedPageTest:BehaviorSpec({
     }
 
     given("a page with a record inserted in the middle of existing records") {
-        val middleBuffer = ByteBuffer.allocate(IndexConfig.pageSize)
-        val middlePage = SlottedPage(IndexConfig, 100L, middleBuffer)
+        val middleBuffer = ByteBuffer.allocate(indexConfig.pageSize)
+        val middlePage = SlottedPage(indexConfig, 100L, middleBuffer)
         middlePage.initData()
         val expectedKeys = mutableListOf<ByteArray>()
 
@@ -268,7 +268,8 @@ class SlottedPageTest:BehaviorSpec({
 
 }){
     companion object{
-        val pageSize = IndexConfig.pageSize
+        val indexConfig = IndexConfig()
+        val pageSize = indexConfig.pageSize
         val data: ByteBuffer = ByteBuffer.allocate(pageSize)
         val keySchema = KeySchema(listOf(
             Column("id", ColumnType.INT, descending = false),
@@ -286,6 +287,6 @@ class SlottedPageTest:BehaviorSpec({
 
         val keySerializer = MultiColumnKeySerializer(keySchema)
         val valueSerializer = RowDataSerializerHelper(SampleData.serializer())
-        val page = SlottedPage(IndexConfig, 1, data)
+        val page = SlottedPage(indexConfig, 1, data)
     }
 }

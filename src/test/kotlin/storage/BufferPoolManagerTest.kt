@@ -19,8 +19,8 @@ import java.util.concurrent.CountDownLatch
 
 class BufferPoolManagerTest: BehaviorSpec({
     given("an empty BufferPoolManager"){
-        val replacer = MidpointLRUPolicy(MidpointLruConfig)
-        val bufferPoolManager = BufferPoolManager(diskManager, replacer, IndexConfig, 1024)
+        val replacer = MidpointLRUPolicy(midpointLruConfig)
+        val bufferPoolManager = BufferPoolManager(diskManager, replacer, indexConfig, 1024)
         var pageId = 1L
         clearMocks(diskManager)
         val pageLock1 = bufferPoolManager.fetchPage(pageId, LockMode.READ)
@@ -128,8 +128,8 @@ class BufferPoolManagerTest: BehaviorSpec({
     }
 
     given("a full BufferPoolManager"){
-        val replacer = MidpointLRUPolicy(MidpointLruConfig)
-        val bufferPoolManager = BufferPoolManager(diskManager, replacer, IndexConfig, 2)
+        val replacer = MidpointLRUPolicy(midpointLruConfig)
+        val bufferPoolManager = BufferPoolManager(diskManager, replacer, indexConfig, 2)
         clearMocks(diskManager)
         val pageLock1 = bufferPoolManager.fetchPage(1L, LockMode.WRITE)
         bufferPoolManager.fetchPage(2L, LockMode.READ)
@@ -240,8 +240,8 @@ class BufferPoolManagerTest: BehaviorSpec({
     }
 
     given("as empty BufferPoolManager with 2 thread(read/write)"){
-        val replacer = MidpointLRUPolicy(MidpointLruConfig)
-        val bufferPoolManager = BufferPoolManager(diskManager, replacer, IndexConfig, 2)
+        val replacer = MidpointLRUPolicy(midpointLruConfig)
+        val bufferPoolManager = BufferPoolManager(diskManager, replacer, indexConfig, 2)
         clearMocks(diskManager)
         val threadLatch1 = CountDownLatch(1)
         val threadLatch2 = CountDownLatch(1)
@@ -269,8 +269,8 @@ class BufferPoolManagerTest: BehaviorSpec({
     }
 
     given("as empty BufferPoolManager with 2 thread(read/read)"){
-        val replacer = MidpointLRUPolicy(MidpointLruConfig)
-        val bufferPoolManager = BufferPoolManager(diskManager, replacer, IndexConfig, 2)
+        val replacer = MidpointLRUPolicy(midpointLruConfig)
+        val bufferPoolManager = BufferPoolManager(diskManager, replacer, indexConfig, 2)
         clearMocks(diskManager)
         val threadLatch1 = CountDownLatch(1)
         val threadLatch2 = CountDownLatch(1)
@@ -299,6 +299,8 @@ class BufferPoolManagerTest: BehaviorSpec({
 
 }){
     companion object{
+        val midpointLruConfig = MidpointLruConfig()
+        val indexConfig = IndexConfig()
         val diskManager = mockk<DiskManager>(relaxed = true)
     }
 }

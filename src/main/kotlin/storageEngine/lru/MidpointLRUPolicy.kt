@@ -1,7 +1,6 @@
 package storageEngine.lru
 
 import config.MidpointLruConfig
-import storageEngine.exception.LRUException
 import java.lang.System.currentTimeMillis
 
 
@@ -14,16 +13,11 @@ class MidpointLRUPolicy(
         midpointLruConfig.capacity
     )
     private val promotionRule: PromotionRule = PromotionRule(
-        midpointLruConfig.capacity,
         midpointLruConfig.lruOldBlocksTimeMs
     )
 
     override fun evict(): Int {
-        val oldNode = generationalList.removeOldest() ?: throw LRUException.LRUEvictException(
-            generationalList.capacity,
-            generationalList.youngCount,
-            generationalList.oldCount
-        )
+        val oldNode = generationalList.removeOldest()
         val frameId = oldNode.frameId
         map.remove(frameId)
         return frameId
