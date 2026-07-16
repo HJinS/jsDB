@@ -45,7 +45,7 @@ class BTree<K, V> (
     private val storageManager: StorageManager,
     private val keySerializer: KeySerializer<K>,
     private val valueSerializer: ValueSerializer<V>,
-    private val indexConfig: IndexConfig = IndexConfig
+    private val indexConfig: IndexConfig = IndexConfig()
 ){
     private var rootPageId: Long = -1
 

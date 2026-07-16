@@ -13,8 +13,8 @@ import storageEngine.lru.MidpointLRUPolicy
 
 class FreeSpaceManagerTest: BehaviorSpec({
     given("an empty free space manager"){
-        val replacer = MidpointLRUPolicy(MidpointLruConfig)
-        val bufferPoolManager = BufferPoolManager(diskManager, replacer, IndexConfig, 100)
+        val replacer = MidpointLRUPolicy(midpointLruConfig)
+        val bufferPoolManager = BufferPoolManager(diskManager, replacer, indexConfig, 100)
         val databaseInitializer = DatabaseInitializer(bufferPoolManager)
         val freeSpaceManager = FreeSpaceManager(bufferPoolManager)
         val dummyPageIdsCreated = mutableListOf<Long>()
@@ -53,6 +53,8 @@ class FreeSpaceManagerTest: BehaviorSpec({
     }
 }){
     companion object{
+        val midpointLruConfig = MidpointLruConfig()
+        val indexConfig = IndexConfig()
         val diskManager = mockk<DiskManager>(relaxed = true)
     }
 }
