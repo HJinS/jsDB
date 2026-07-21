@@ -1,0 +1,18 @@
+Configuration:
+  status: WARN
+  Appenders:
+    Console:
+      name: Console
+      PatternLayout:
+        pattern: "%d{HH:mm:ss} %-5level %logger{36} - %msg%n"
+  Loggers:
+    Root:
+      level: INFO
+      AppenderRef:
+        ref: Console
+    Logger:
+      - name: storageEngine
+        level: DEBUG
+        additivity: false
+        AppenderRef:
+          ref: Console
