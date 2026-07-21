@@ -69,7 +69,6 @@ class BTree<K, V> (
         } else {
             root = LeafNode(mutableListOf(serializedKey), maxKeys, mutableListOf(serializedValue))
         }
-        printTree()
     }
 
 
@@ -89,7 +88,6 @@ class BTree<K, V> (
         val serializedKey = keySerializer.serialize(key)
         val (leafNode, keyIdx, isExist) = searchLeafNode(serializedKey)
         if(isExist){
-            printTree()
             leafNode.delete(keyIdx)
             if(leafNode.isUnderflow){
                 handleUnderflow()
@@ -127,7 +125,6 @@ class BTree<K, V> (
             val prevSibling = try { parentNode.moveToChild(keyIdx - 1) } catch (_: IndexOutOfBoundsException) { null }
             val nextSibling = try { parentNode.moveToChild(keyIdx + 1) } catch (_: IndexOutOfBoundsException) { null }
 
-            printTree()
             when {
                 prevSibling != null && prevSibling.hasSurplusKey -> {
                     currentNode.redistribute(prevSibling, parentNode, keyIdx)
