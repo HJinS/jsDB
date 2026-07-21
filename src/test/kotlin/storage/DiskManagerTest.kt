@@ -67,7 +67,7 @@ class DiskManagerTest: BehaviorSpec({
     }
 }){
     companion object {
-        val storageConfig = StorageConfig()
+        val storageConfig = StorageConfig("./js-test-disk-manager.db")
         val indexConfig = IndexConfig()
         private val DBPATH = storageConfig.dbPath
         private val PAGE_SIZE = indexConfig.pageSize
