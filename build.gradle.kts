@@ -26,7 +26,10 @@ val kotestVersion = "5.9.1"
 dependencies {
     implementation("org.jetbrains.kotlin:kotlin-stdlib:2.1.20")
     implementation("org.slf4j:slf4j-api:2.0.13")
-    implementation("org.slf4j:slf4j-simple:2.0.13")
+    implementation("org.apache.logging.log4j:log4j-core:2.24.3")
+    implementation("org.apache.logging.log4j:log4j-slf4j2-impl:2.24.3")
+    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.17.0")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.17.0")
     implementation("io.github.microutils:kotlin-logging:3.0.5")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
