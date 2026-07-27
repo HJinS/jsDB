@@ -1,7 +1,6 @@
 package storage
 
-import config.IndexConfig
-import config.MidpointLruConfig
+import config.SimpleConfig
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
@@ -13,8 +12,8 @@ import storageEngine.lru.MidpointLRUPolicy
 
 class FreeSpaceManagerTest: BehaviorSpec({
     given("an empty free space manager"){
-        val replacer = MidpointLRUPolicy(midpointLruConfig)
-        val bufferPoolManager = BufferPoolManager(diskManager, replacer, indexConfig, 100)
+        val replacer = MidpointLRUPolicy(config.storageConfig.midPointLruConfig)
+        val bufferPoolManager = BufferPoolManager(diskManager, replacer, config.indexConfig, 100)
         val databaseInitializer = DatabaseInitializer(bufferPoolManager)
         val freeSpaceManager = FreeSpaceManager(bufferPoolManager)
         val dummyPageIdsCreated = mutableListOf<Long>()
@@ -53,8 +52,7 @@ class FreeSpaceManagerTest: BehaviorSpec({
     }
 }){
     companion object{
-        val midpointLruConfig = MidpointLruConfig()
-        val indexConfig = IndexConfig()
+        val config = SimpleConfig()
         val diskManager = mockk<DiskManager>(relaxed = true)
     }
 }

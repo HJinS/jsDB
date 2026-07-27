@@ -1,7 +1,7 @@
 package storage
 
-import config.IndexConfig
 import config.MidpointLruConfig
+import config.SimpleConfig
 import config.StorageConfig
 import index.btree.node.Node
 import index.serializer.MultiColumnKeySerializer
@@ -26,7 +26,7 @@ import java.io.File
 class StorageManagerTest: BehaviorSpec({
     afterSpec {
         diskManager.close()
-        val file = File(storageConfig.dbPath)
+        val file = File(config.storageConfig.dbPath)
         file.delete()
     }
 
@@ -95,9 +95,14 @@ class StorageManagerTest: BehaviorSpec({
     }
 }){
     companion object {
-        private val storageConfig = StorageConfig("./js-test-storage-manager.db")
-        private val indexConfig = IndexConfig()
-        private const val POOL_SIZE = 20
+        private val config = SimpleConfig(
+            storageConfig = StorageConfig(
+                dbPath = "./js-test-storage-manager.db",
+                poolSize = 20,
+                midPointLruConfig = MidpointLruConfig(capacity = 20)
+            )
+        )
+        val indexConfig = config.indexConfig
         val testSchema = KeySchema(
             listOf(
                 Column("id", ColumnType.INT, descending = false),
@@ -106,12 +111,11 @@ class StorageManagerTest: BehaviorSpec({
             )
         )
         private val keySerializer = MultiColumnKeySerializer(testSchema)
-        private val diskManager = DiskManager(storageConfig, indexConfig)
-        private val lruConfig = MidpointLruConfig(20)
-        private val replacer = MidpointLRUPolicy(lruConfig)
-        private val bufferPoolManager = BufferPoolManager(diskManager, replacer, indexConfig, POOL_SIZE)
+        private val diskManager = DiskManager(config.storageConfig, config.indexConfig)
+        private val replacer = MidpointLRUPolicy(config.storageConfig.midPointLruConfig)
+        private val bufferPoolManager = BufferPoolManager(diskManager, replacer, config.indexConfig, config.storageConfig.poolSize)
         private val freeSpaceManager = FreeSpaceManager(bufferPoolManager)
-        private val storageManager = StorageManager(freeSpaceManager, bufferPoolManager, indexConfig)
+        private val storageManager = StorageManager(freeSpaceManager, bufferPoolManager, config.indexConfig)
         private val databaseInitializer = DatabaseInitializer(bufferPoolManager)
     }
 }

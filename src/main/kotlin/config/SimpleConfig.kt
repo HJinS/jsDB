@@ -3,13 +3,14 @@ package config
 
 
 data class SimpleConfig(
-    val midpointLruConfig: StorageConfig = StorageConfig(),
+    val storageConfig: StorageConfig = StorageConfig(),
     val indexConfig: IndexConfig = IndexConfig()
 )
 
 
 data class StorageConfig (
     val dbPath: String = "js.db",
+    val poolSize: Int = 2000,
     val midPointLruConfig: MidpointLruConfig = MidpointLruConfig()
 )
 

@@ -1,7 +1,7 @@
 package index.btree
 
-import config.IndexConfig
-import config.MidpointLruConfig
+import DataBase
+import config.SimpleConfig
 import config.StorageConfig
 import helper.serializer.LocalDateSerializerHelper
 import helper.serializer.RowDataSerializerHelper
@@ -13,12 +13,6 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.serializer
-import storageEngine.BufferPoolManager
-import storageEngine.DatabaseInitializer
-import storageEngine.DiskManager
-import storageEngine.FreeSpaceManager
-import storageEngine.StorageManager
-import storageEngine.lru.MidpointLRUPolicy
 import java.time.LocalDate
 
 class BTreeTest: BehaviorSpec({
@@ -662,23 +656,16 @@ class BTreeTest: BehaviorSpec({
 }){
     companion object{
         inline fun <reified T: Any> initData(schema: KeySchema): BTree<List<Any?>, T>{
-            val indexConfig = IndexConfig()
-            val valueSerializer = RowDataSerializerHelper(serializer<T>())
-            val keySerializer = MultiColumnKeySerializer(schema)
-            val diskManager = DiskManager(StorageConfig(), indexConfig)
-            val lruPolicy = MidpointLRUPolicy(MidpointLruConfig())
-            val bufferPoolManager = BufferPoolManager(diskManager, lruPolicy, indexConfig, 100)
-            val databaseInitializer = DatabaseInitializer(bufferPoolManager)
-            val freeSpaceManager = FreeSpaceManager(bufferPoolManager)
-            val storageManager = StorageManager(freeSpaceManager, bufferPoolManager, indexConfig)
-            databaseInitializer.initMetaPage()
-            return BTree(
+            val config = SimpleConfig(
+                StorageConfig(dbPath = "test-btree.db", poolSize = 100)
+            )
+            val db = DataBase(config)
+            db.initialize()
+            return db.createIndex(
                 "test",
                 "test table",
-                storageManager,
-                keySerializer,
-                valueSerializer,
-                indexConfig,
+                MultiColumnKeySerializer(schema),
+                RowDataSerializerHelper(serializer<T>()),
             )
         }
     }
