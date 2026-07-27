@@ -1,6 +1,6 @@
 package storage
 
-import config.IndexConfig
+import config.SimpleConfig
 import helper.serializer.InstantSerializerHelper
 import index.serializer.MultiColumnKeySerializer
 import helper.serializer.RowDataSerializerHelper
@@ -183,8 +183,8 @@ class SlottedPageTest:BehaviorSpec({
     }
 
     given("a page with records inserted in descending order causing repeated right slot shifts") {
-        val freshBuffer = ByteBuffer.allocate(indexConfig.pageSize)
-        val freshPage = SlottedPage(indexConfig, 99L, freshBuffer)
+        val freshBuffer = ByteBuffer.allocate(config.indexConfig.pageSize)
+        val freshPage = SlottedPage(config.indexConfig, 99L, freshBuffer)
         freshPage.initData()
         val insertedKeys = mutableListOf<ByteArray>()
 
@@ -223,8 +223,8 @@ class SlottedPageTest:BehaviorSpec({
     }
 
     given("a page with a record inserted in the middle of existing records") {
-        val middleBuffer = ByteBuffer.allocate(indexConfig.pageSize)
-        val middlePage = SlottedPage(indexConfig, 100L, middleBuffer)
+        val middleBuffer = ByteBuffer.allocate(config.indexConfig.pageSize)
+        val middlePage = SlottedPage(config.indexConfig, 100L, middleBuffer)
         middlePage.initData()
         val expectedKeys = mutableListOf<ByteArray>()
 
@@ -268,9 +268,8 @@ class SlottedPageTest:BehaviorSpec({
 
 }){
     companion object{
-        val indexConfig = IndexConfig()
-        val pageSize = indexConfig.pageSize
-        val data: ByteBuffer = ByteBuffer.allocate(pageSize)
+        val config = SimpleConfig()
+        val data: ByteBuffer = ByteBuffer.allocate(config.indexConfig.pageSize)
         val keySchema = KeySchema(listOf(
             Column("id", ColumnType.INT, descending = false),
             Column("epoch", ColumnType.INSTANT, descending = false),
@@ -287,6 +286,6 @@ class SlottedPageTest:BehaviorSpec({
 
         val keySerializer = MultiColumnKeySerializer(keySchema)
         val valueSerializer = RowDataSerializerHelper(SampleData.serializer())
-        val page = SlottedPage(indexConfig, 1, data)
+        val page = SlottedPage(config.indexConfig, 1, data)
     }
 }

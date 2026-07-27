@@ -1,7 +1,7 @@
 package storage
 
+import config.SimpleConfig
 import config.StorageConfig
-import config.IndexConfig
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -67,10 +67,9 @@ class DiskManagerTest: BehaviorSpec({
     }
 }){
     companion object {
-        val storageConfig = StorageConfig("./js-test-disk-manager.db")
-        val indexConfig = IndexConfig()
-        private val DBPATH = storageConfig.dbPath
-        private val PAGE_SIZE = indexConfig.pageSize
-        private val diskManager = DiskManager(storageConfig, indexConfig)
+        private val config = SimpleConfig(storageConfig = StorageConfig(dbPath = "./js-test-disk-manager.db"))
+        private val DBPATH = config.storageConfig.dbPath
+        private val PAGE_SIZE = config.indexConfig.pageSize
+        private val diskManager = DiskManager(config.storageConfig, config.indexConfig)
     }
 }

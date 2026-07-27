@@ -1,7 +1,6 @@
 package storage
 
-import config.IndexConfig
-import config.MidpointLruConfig
+import config.SimpleConfig
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -299,8 +298,9 @@ class BufferPoolManagerTest: BehaviorSpec({
 
 }){
     companion object{
-        val midpointLruConfig = MidpointLruConfig()
-        val indexConfig = IndexConfig()
+        private val config = SimpleConfig()
+        val midpointLruConfig = config.storageConfig.midPointLruConfig
+        val indexConfig = config.indexConfig
         val diskManager = mockk<DiskManager>(relaxed = true)
     }
 }
