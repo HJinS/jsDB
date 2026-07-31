@@ -201,7 +201,7 @@ BufferLockAttempt(BufferDesc *buf_hdr, BufferLockMode mode)
      1. 1차 시도와 큐 등록 사이에 락이 풀렸을 수도 있으니, "큐에 등록된 걸 다른 락 해제자가 보장적으로 볼 수 있는 상태"에서 한 번 더 확인.
      2. 여기서 성공하면 큐 등록을 취소(BufferLockDequeueSelf)하고 끝. 
   4. 그래도 실패하면 진짜로 잠든다.
-     1. `PGSemaphoreLock`을 사용하여 lock 획득을 기다린다.
+     1. `PGSemaphoreLock`을 사용하여 프로세스를 lock이 풀릴때까지 잠들게 한다.
      2. 최종적으로 lock자체는 위의 state를 가지고 CAS(Compare And Swap)를 통해 이루어진다.
      3. [아래 코드](https://github.com/postgres/postgres/blob/60826a352d497b15a30de29b7796d0c2d097a0e3/src/backend/port/atomics.c#L34)를 보면 네이티브 64비트 CAS 명령어를 지원하지 않을 경우에 대비한 구현이 있다.
 
