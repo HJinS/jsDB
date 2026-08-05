@@ -1,8 +1,9 @@
 ## PostgreSQL — Clock-Sweep
 
-> Lock/Pin 규칙 자체는 [buffer-pool-manager.md](../../buffer-pool/buffer-pool-manager.md)에 정리되어 있다. 여기서는 victim 선택 알고리즘만 다룬다.
+> Lock/Pin 규칙 자체는 [content-lock.md](./content-lock.md)에 정리되어 있다. 여기서는 victim 선택 알고리즘만 다룬다.
 
-각 버퍼는 `usage counter`를 가지고, pin 될 때마다(상한까지) 증가한다. `nextVictimBuffer`(시계 바늘)가 전체 버퍼를 원형으로 순환하며 victim을 찾는다.
+각 버퍼는 `usage counter`를 가지고, pin 될 때마다(상한까지) 증가한다.
+`nextVictimBuffer`(시계 바늘)가 전체 버퍼를 원형으로 순환하며 victim을 찾는다.
 
 1. `buffer_strategy_lock` 획득
 2. `nextVictimBuffer`가 가리키는 버퍼 선택, 바늘 전진 → `buffer_strategy_lock` 릴리즈
