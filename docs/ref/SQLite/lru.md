@@ -28,4 +28,3 @@ pPage->pLruNext = 0;
 ### 핵심 포인트
 
 - InnoDB/PostgreSQL과 달리 스캔 저항(scan resistance) 메커니즘이 아예 없다. read-ahead나 풀스캔이 캐시 전체를 오염시킬 수 있다는 뜻이다.
-- pin 시 리스트에서 물리적으로 제거하는 방식은 jsDB의 `MidpointLRUPolicy.pin()`과 정확히 같은 패턴이다 — jsDB는 이 부분을 SQLite에서, old/young 세그먼트 구조는 InnoDB에서 각각 가져와 조합했다. 자세한 내용은 [../../buffer-pool/lru.md](../../buffer-pool/lru.md) 참고.
