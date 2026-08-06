@@ -114,7 +114,7 @@ child locks when ascending the tree, since it's far simpler.
 
 ### 왜 PostgreSQL만 이렇게 설계했나 — 버퍼가 프로세스 간에 공유되기 때문
 
-> 흥미로운 지점: L&Y 원 논문은 "읽기 락 자체가 필요 없다(각 백엔드가 페이지 복사본을 갖는다고 가정)"고 전제하는데, PostgreSQL은 [버퍼 풀이 여러 backend 프로세스에 공유](../../buffer-pool/buffer-pool-manager.md#버퍼-풀의-스코프--서버프로세스-전역-vs-커넥션별)되기 때문에 원문보다 더 보수적으로 읽기 락을 추가했다.
+> 흥미로운 지점: L&Y 원 논문은 "읽기 락 자체가 필요 없다(각 백엔드가 페이지 복사본을 갖는다고 가정)"고 전제하는데, PostgreSQL은 [버퍼 풀이 여러 backend 프로세스에 공유](../../buffer-pool/buffer-pool-manager.md#부록-버퍼-풀의-스코프--서버프로세스-전역-vs-커넥션별)되기 때문에 원문보다 더 보수적으로 읽기 락을 추가했다.
 > 그럼에도 불구하고 "parent를 오래 쥐고 있는" coupling 자체는 여전히 최대한 피했다
 >
 > - high key/right-link라는 알고리즘적 장치로 락 보유 시간을 줄이는 게 핵심 목표였기 때문이다.
