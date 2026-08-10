@@ -2,7 +2,7 @@
 
 디스크 기반 스토리지 엔진과 SQL 실행 엔진을 처음부터 직접 구현해보는 학습용 데이터베이스 프로젝트입니다.
 
-## Tech Stack
+## Stack
 
 Kotlin 2.1 · JVM 21 · Gradle 9 · Kotest / MockK / JUnit5 · Kover
 
