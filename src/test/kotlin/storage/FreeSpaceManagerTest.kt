@@ -8,11 +8,11 @@ import storageEngine.BufferPoolManager
 import storageEngine.DatabaseInitializer
 import storageEngine.DiskManager
 import storageEngine.FreeSpaceManager
-import storageEngine.lru.MidpointLRUPolicy
+import storageEngine.lru.FrameNodePolicy
 
 class FreeSpaceManagerTest: BehaviorSpec({
     given("an empty free space manager"){
-        val replacer = MidpointLRUPolicy(config.storageConfig.midPointLruConfig)
+        val replacer = FrameNodePolicy(config.storageConfig.midPointLruConfig)
         val bufferPoolManager = BufferPoolManager(diskManager, replacer, config.indexConfig, 100)
         val databaseInitializer = DatabaseInitializer(bufferPoolManager)
         val freeSpaceManager = FreeSpaceManager(bufferPoolManager)

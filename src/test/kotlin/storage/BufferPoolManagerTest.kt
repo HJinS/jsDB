@@ -12,13 +12,13 @@ import storageEngine.BufferPoolManager
 import storageEngine.DiskManager
 import storageEngine.exception.BufferPoolManagerException
 import storageEngine.exception.LRUException
-import storageEngine.lru.MidpointLRUPolicy
+import storageEngine.lru.FrameNodePolicy
 import storageEngine.util.LockMode
 import java.util.concurrent.CountDownLatch
 
 class BufferPoolManagerTest: BehaviorSpec({
     given("an empty BufferPoolManager"){
-        val replacer = MidpointLRUPolicy(midpointLruConfig)
+        val replacer = FrameNodePolicy(midpointLruConfig)
         val bufferPoolManager = BufferPoolManager(diskManager, replacer, indexConfig, 1024)
         var pageId = 1L
         clearMocks(diskManager)
@@ -127,7 +127,7 @@ class BufferPoolManagerTest: BehaviorSpec({
     }
 
     given("a full BufferPoolManager"){
-        val replacer = MidpointLRUPolicy(midpointLruConfig)
+        val replacer = FrameNodePolicy(midpointLruConfig)
         val bufferPoolManager = BufferPoolManager(diskManager, replacer, indexConfig, 2)
         clearMocks(diskManager)
         val pageLock1 = bufferPoolManager.fetchPage(1L, LockMode.WRITE)
@@ -239,7 +239,7 @@ class BufferPoolManagerTest: BehaviorSpec({
     }
 
     given("as empty BufferPoolManager with 2 thread(read/write)"){
-        val replacer = MidpointLRUPolicy(midpointLruConfig)
+        val replacer = FrameNodePolicy(midpointLruConfig)
         val bufferPoolManager = BufferPoolManager(diskManager, replacer, indexConfig, 2)
         clearMocks(diskManager)
         val threadLatch1 = CountDownLatch(1)
@@ -268,7 +268,7 @@ class BufferPoolManagerTest: BehaviorSpec({
     }
 
     given("as empty BufferPoolManager with 2 thread(read/read)"){
-        val replacer = MidpointLRUPolicy(midpointLruConfig)
+        val replacer = FrameNodePolicy(midpointLruConfig)
         val bufferPoolManager = BufferPoolManager(diskManager, replacer, indexConfig, 2)
         clearMocks(diskManager)
         val threadLatch1 = CountDownLatch(1)
