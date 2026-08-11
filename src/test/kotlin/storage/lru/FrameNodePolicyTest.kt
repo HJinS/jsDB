@@ -6,12 +6,12 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.throwable.shouldHaveMessage
 import storageEngine.exception.LRUException
-import storageEngine.lru.MidpointLRUPolicy
+import storageEngine.lru.FrameNodePolicy
 
-class MidpointLRUPolicyTest: BehaviorSpec({
+class FrameNodePolicyTest: BehaviorSpec({
     given("a midpoint lruPolicy with 10 frames"){
         val midPointLruConfig = MidpointLruConfig(30)
-        val midPointLruPolicy = MidpointLRUPolicy(midPointLruConfig)
+        val midPointLruPolicy = FrameNodePolicy(midPointLruConfig)
         val dummyFrameIds = (0..300).shuffled().iterator()
         val framesPinned = mutableListOf<Int>()
         val framesUnpinned = mutableListOf<Int>()
@@ -58,7 +58,9 @@ class MidpointLRUPolicyTest: BehaviorSpec({
 
                 `when`("evict one frame"){
                     val evicted = midPointLruPolicy.evict()
-                    val expectedFrame = frameAdded.removeLast()
+                    // add()가 매번 head(가장 최근 접근)로 옮기므로, evict()가 지우는 tail은
+                    // "가장 먼저 add()된, 그 뒤로 다시 안 만져진" 노드다 — removeLast가 아니라 removeFirst.
+                    val expectedFrame = frameAdded.removeFirst()
                     then("evicted frameId should be $expectedFrame"){
                         evicted shouldBe expectedFrame
                     }

@@ -7,12 +7,12 @@ import storageEngine.DatabaseInitializer
 import storageEngine.DiskManager
 import storageEngine.FreeSpaceManager
 import storageEngine.StorageManager
-import storageEngine.lru.MidpointLRUPolicy
+import storageEngine.lru.FrameNodePolicy
 
 
 class DataBase(private val config: SimpleConfig) {
     private val diskManager = DiskManager(config.storageConfig, config.indexConfig)
-    private val lruPolicy = MidpointLRUPolicy(config.storageConfig.midPointLruConfig)
+    private val lruPolicy = FrameNodePolicy(config.storageConfig.midPointLruConfig)
     private val bufferPoolManager = BufferPoolManager(diskManager, lruPolicy, config.indexConfig, config.storageConfig.poolSize)
     private val databaseInitializer = DatabaseInitializer(bufferPoolManager)
     private val freeSpaceManager = FreeSpaceManager(bufferPoolManager)

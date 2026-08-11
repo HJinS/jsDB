@@ -1,7 +1,7 @@
 package storageEngine
 
 import config.IndexConfig
-import storageEngine.lru.MidpointLRUPolicy
+import storageEngine.lru.FrameNodePolicy
 import storageEngine.page.Frame
 import storageEngine.page.PageLock
 import storageEngine.util.LockMode
@@ -43,7 +43,7 @@ import java.util.concurrent.locks.ReentrantLock
 
 class BufferPoolManager(
     private val diskManager: DiskManager,
-    private val replacer: MidpointLRUPolicy,
+    private val replacer: FrameNodePolicy,
     private val indexConfig: IndexConfig,
     poolSize: Int
 ){

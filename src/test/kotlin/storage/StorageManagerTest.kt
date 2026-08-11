@@ -17,7 +17,7 @@ import storageEngine.DiskManager
 import storageEngine.FreeSpaceManager
 import storageEngine.StorageManager
 import storageEngine.exception.StorageManagerException
-import storageEngine.lru.MidpointLRUPolicy
+import storageEngine.lru.FrameNodePolicy
 import storageEngine.page.SlottedPage
 import storageEngine.util.LockMode
 import storageEngine.util.PageType
@@ -112,7 +112,7 @@ class StorageManagerTest: BehaviorSpec({
         )
         private val keySerializer = MultiColumnKeySerializer(testSchema)
         private val diskManager = DiskManager(config.storageConfig, config.indexConfig)
-        private val replacer = MidpointLRUPolicy(config.storageConfig.midPointLruConfig)
+        private val replacer = FrameNodePolicy(config.storageConfig.midPointLruConfig)
         private val bufferPoolManager = BufferPoolManager(diskManager, replacer, config.indexConfig, config.storageConfig.poolSize)
         private val freeSpaceManager = FreeSpaceManager(bufferPoolManager)
         private val storageManager = StorageManager(freeSpaceManager, bufferPoolManager, config.indexConfig)

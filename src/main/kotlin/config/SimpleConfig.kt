@@ -18,7 +18,8 @@ data class StorageConfig (
 data class MidpointLruConfig (
     val capacity: Int = 2000,
     val lruOldBlocksTimeMs: Long = 1000,
-    val youngRatio: Double = 0.63
+    val youngRatio: Double = 0.63,
+    val lruOldMinLength: Int = 50
 )
 
 
