@@ -26,8 +26,8 @@ val kotestVersion = "5.9.1"
 dependencies {
     implementation("org.jetbrains.kotlin:kotlin-stdlib:2.1.20")
     implementation("org.slf4j:slf4j-api:2.0.13")
-    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.19.0")
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.19.0")
+    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.22.1")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.22.1")
     implementation("org.apache.logging.log4j:log4j-core:2.26.0")
     implementation("org.apache.logging.log4j:log4j-slf4j2-impl:2.26.0")
 
@@ -49,6 +49,7 @@ dependencies {
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
     systemProperty("kotest.framework.classpath.scanning.autoscan.disable", "true")
+    systemProperty("kotest.framework.parallelism", (Runtime.getRuntime().availableProcessors() - 1).coerceAtLeast(1))
     jvmArgs("-XX:+EnableDynamicAgentLoading")
     testLogging { events("passed", "failed"); showStandardStreams = true }
 }
