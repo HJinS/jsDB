@@ -547,7 +547,7 @@ class BTreeTest: BehaviorSpec({
         }
     }
 
-    given("A Tree with 500 shuffled composite keys inserted"){
+    given("An empty Tree"){
         @Serializable
         data class IDData(val id: Int, val longId: Long)
 
@@ -563,12 +563,15 @@ class BTreeTest: BehaviorSpec({
             dummyData.add(IDData(dummyInt.next(), dummyLong.next()))
         }
         val expectedSorted = dummyData.sortedWith(compareBy({ it.id }, { it.longId }))
+        val expectedMap: MutableMap<List<Number>, IDData> = mutableMapOf()
         var updateTargetData: IDData? = null
         var updateNewValue: IDData? = null
 
         `when`("inserting all 3000 records in shuffled order") {
             for (data in dummyData) {
-                btree.insert(listOf<Number>(data.id, data.longId), data)
+                val key = listOf<Number>(data.id, data.longId)
+                btree.insert(key, data)
+                expectedMap[key] = data
             }
             then("traverse returns all 3000 records in sorted order") {
                 val result = btree.traverse().map { it.second }
@@ -590,6 +593,7 @@ class BTreeTest: BehaviorSpec({
             updateTargetData = targetData
             updateNewValue = newValue
             val targetKey = listOf<Number>(targetData.id, targetData.longId)
+            expectedMap[targetKey] = newValue
             then("then the value should be updated"){
                 btree.update(targetKey, newValue)
                 val searchResult = btree.search(targetKey)
@@ -618,7 +622,6 @@ class BTreeTest: BehaviorSpec({
         `when`("delete all data"){
             val expected = dummyData.sortedWith(compareBy({ it.id }, { it.longId }))
             val expectedMutable = expected.toMutableList()
-            // update one record가 dummyData[100]의 값을 newValue로 바꿨으므로 expectedMutable도 반영
             if (updateTargetData != null && updateNewValue != null) {
                 val ui = expectedMutable.indexOf(updateTargetData)
                 if (ui >= 0) expectedMutable[ui] = updateNewValue
@@ -627,6 +630,7 @@ class BTreeTest: BehaviorSpec({
             for ((idx, data) in dummyData.withIndex()) {
                 val deleteKey = listOf<Number>(data.id, data.longId)
                 initialSize -= 1
+                expectedMap.remove(deleteKey)
                 if (data == updateTargetData && updateNewValue != null) {
                     expectedMutable.remove(updateNewValue)
                 } else {
@@ -638,15 +642,13 @@ class BTreeTest: BehaviorSpec({
                     traversed.size shouldBe initialSize
                     traversed shouldBe expectedMutable
                 }
-
                 then("loop $idx: deleted key returns null on search"){
                     btree.search(deleteKey) shouldBe null
                 }
-
-                if(expectedMutable.size >= 10){
+                if(expectedMap.size >= 10){
                     then("loop $idx: remaining keys are still searchable"){
-                        expectedMutable.shuffled().take(10).forEach { remainRow ->
-                            btree.search(listOf(remainRow.id, remainRow.longId)) shouldBe remainRow
+                        expectedMap.entries.shuffled().take(10).forEach { (key, expectedValue) ->
+                            btree.search(key) shouldBe expectedValue
                         }
                     }
                 }

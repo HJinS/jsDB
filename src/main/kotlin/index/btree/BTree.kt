@@ -145,6 +145,13 @@ class BTree<K, V> (
                 if(node.isUnderflow && (leafNodePageId != rootPageId || node.keyCount == 0)){
                     isUnderflow = true
                 }
+                // When the first key of a leaf is deleted, the ancestor separator that points
+                // to this subtree becomes stale. Propagate the new first key upward.
+                // (Underflow case: handleUnderflow may overwrite this with the correct value.)
+                if (keyIdx == 0 && node.keyCount > 0) {
+                    val newFirstKey = page.getData(0).first
+                    propagateSeparatorUpdate(traceNode, newFirstKey, lockManager)
+                }
             }
             if(isUnderflow){
                 handleUnderflow(traceNode, lockManager)
@@ -184,6 +191,35 @@ class BTree<K, V> (
     }
 
     /**
+     * After deleting the first key of a leaf (no underflow), walk up the traceNode stack
+     * and update the first ancestor separator that points to the leaf's subtree as a
+     * non-leftmost child. This keeps the strict B+tree separator invariant:
+     * `sep.at(i) == leftmostLeafFirstKey(child[i+1])`
+     */
+    private fun propagateSeparatorUpdate(traceNode: Stack<Triple<Long, Int, PageLock>>, newFirstKey: ByteArray, lockManager: LockManager) {
+        val stackList = traceNode.toList()
+        for (i in stackList.size - 1 downTo 1) {
+            val childIdx = stackList[i].second
+            if (childIdx > 0) {
+                val parentTrace = stackList[i - 1]
+                val lock = if (parentTrace.third.isWriteLocked) {
+                    parentTrace.third
+                } else {
+                    val refetchedLock = storageManager.fetchPage(parentTrace.first, LockMode.WRITE)
+                    lockManager.push(refetchedLock)
+                    refetchedLock
+                }
+                lock.asWriteView { parentBuffer ->
+                    val parentPage = SlottedPage(indexConfig, parentTrace.first, parentBuffer)
+                    val parentNode = Node.from(indexConfig, parentPage, keySerializer) as InternalNode<K>
+                    parentNode.updateKey(childIdx - 1, newFirstKey)
+                }
+                return
+            }
+        }
+    }
+
+    /**
      * Handle underflow by following steps.
      *
      * Redistribution
@@ -211,7 +247,13 @@ class BTree<K, V> (
 
         while(!isRoot && isUnderflow) {
             val nextTrace = traceNode.peek()
-            val parentLock = nextTrace.third
+            val parentLock = if (nextTrace.third.isWriteLocked) {
+                nextTrace.third
+            } else {
+                val refetchedLock = storageManager.fetchPage(nextTrace.first, LockMode.WRITE)
+                lockManager.push(refetchedLock)
+                refetchedLock
+            }
             var isDone = false
             
             currentLock.asWriteView { currentBuffer ->
@@ -268,9 +310,9 @@ class BTree<K, V> (
             if(isDone) break
             currentTrace = traceNode.pop()
             currentPageId = currentTrace.first
-            currentLock = currentTrace.third
             keyIdx = currentTrace.second
             isRoot = traceNode.isEmpty()
+            currentLock = parentLock
         }
 
         if(isRoot){

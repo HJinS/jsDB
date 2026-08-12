@@ -6,23 +6,20 @@ import java.nio.ByteBuffer
 class PageLock(
     @PublishedApi internal val frame: Frame,
     private val bufferPoolManager: BufferPoolManager,
-    private var isReadLocked: Boolean = false,
-    private var isWriteLocked: Boolean = false
+    isReadLocked: Boolean = false,
+    isWriteLocked: Boolean = false
 ): AutoCloseable {
+    var isReadLocked: Boolean = isReadLocked
+        private set
+
+    var isWriteLocked: Boolean = isWriteLocked
+        private set
 
     val frameId: Int
         get() = frame.frameId
 
     val pageId: Long
         get() = frame.pageId.get()
-
-    fun lockRead(){
-        frame.latch.readLock().lock()
-    }
-
-    fun lockWrite(){
-        frame.latch.writeLock().lock()
-    }
 
     fun unlock(){
         if(isReadLocked) frame.latch.readLock().unlock()

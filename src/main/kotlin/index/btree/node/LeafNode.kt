@@ -3,7 +3,6 @@ package index.btree.node
 import config.IndexConfig
 import index.serializer.KeySerializer
 import index.util.NodeSplitData
-import mu.KotlinLogging
 import storageEngine.page.SlottedPage
 
 
@@ -12,8 +11,6 @@ class LeafNode<K>(
     page: SlottedPage,
     keySerializer: KeySerializer<K>,
 ): Node<K>(indexConfig, page, keySerializer) {
-
-    val logger = KotlinLogging.logger {}
 
     val next: Long
         get() = page.rightSiblingPageId
@@ -140,7 +137,6 @@ class LeafNode<K>(
             val leftNode = lNode as LeafNode<K>
             val rightNode = rNode as LeafNode<K>
             val (rKey, rValue) = rightNode.deleteAllData()
-            logger.info { "Merge Internal: leftNode: ${leftNode.hashCode()} rightNode: ${rightNode.hashCode()}" }
             leftNode.appendAllData(rKey, rValue)
 
             val newRightSiblingPageId = rightNode.page.rightSiblingPageId
