@@ -595,7 +595,7 @@ class BTreeTest: BehaviorSpec({
             val targetKey = listOf<Number>(targetData.id, targetData.longId)
             expectedMap[targetKey] = newValue
             then("then the value should be updated"){
-                btree.update(targetKey, newValue)
+                btree.update(targetKey, targetKey, newValue)
                 val searchResult = btree.search(targetKey)
                 searchResult shouldBe newValue
             }
@@ -614,7 +614,7 @@ class BTreeTest: BehaviorSpec({
             val newValue = IDData(newInt, newLong)
             val targetKey = listOf<Number>(newValue.id, newValue.longId)
             then("then given key should not be searched"){
-                btree.update(targetKey, newValue)
+                btree.update(targetKey, targetKey, newValue)
                 val searchResult = btree.search(targetKey)
                 searchResult shouldBe null
             }
@@ -652,6 +652,93 @@ class BTreeTest: BehaviorSpec({
                         }
                     }
                 }
+            }
+        }
+    }
+
+    given("A Tree for testing update(key, newKey, newValue) with a changed key"){
+        @Serializable
+        data class IDData(val id: Int, val longId: Long)
+
+        val schema = KeySchema(listOf(
+            Column("id", ColumnType.INT, descending = false),
+            Column("longId", ColumnType.LONG, descending = false)
+        ))
+        val btree = initData<IDData>(schema)
+
+        val recordCount = 300
+        for (i in 0 until recordCount) {
+            val key = listOf<Number>(i, 0L)
+            btree.insert(key, IDData(i, 0L))
+        }
+
+        `when`("updating a key to a value that still sorts near it (likely same leaf)"){
+            val oldKey = listOf<Number>(150, 0L)
+            val newKey = listOf<Number>(150, 1L)
+            val newValue = IDData(150, 1L)
+            btree.update(oldKey, newKey, newValue)
+            then("old key is gone and new key returns the new value"){
+                btree.search(oldKey) shouldBe null
+                btree.search(newKey) shouldBe newValue
+            }
+            then("traverse still returns every record in sorted key order"){
+                val keys = btree.traverse().map { it.first }
+                val sortedKeys = keys.sortedWith(compareBy({ it[0] as Int }, { it[1] as Long }))
+                keys shouldBe sortedKeys
+                keys.size shouldBe recordCount
+            }
+        }
+
+        `when`("updating a key to a value that must move to a different leaf"){
+            val oldKey = listOf<Number>(0, 0L)
+            val newKey = listOf<Number>(recordCount + 500, 0L)
+            val newValue = IDData(recordCount + 500, 0L)
+            btree.update(oldKey, newKey, newValue)
+            then("old key is gone and new key returns the new value"){
+                btree.search(oldKey) shouldBe null
+                btree.search(newKey) shouldBe newValue
+            }
+            then("traverse still returns every record exactly once, in sorted key order"){
+                val keys = btree.traverse().map { it.first }
+                val sortedKeys = keys.sortedWith(compareBy({ it[0] as Int }, { it[1] as Long }))
+                keys shouldBe sortedKeys
+                keys.size shouldBe recordCount
+            }
+        }
+
+        `when`("updating that is currently the smallest key(position 0 of the leftmost leaf)"){
+            // 앞 시나리오에서 (0,0)이 이미 빠졌으니, 지금 가장 작은 키는 (1,0).
+            val currentSmallest = listOf<Number>(1, 0L)
+            val newKey = listOf<Number>(-5, 0L) // 여전히 새 최솟값이 되도록 — separator 전파를 검증
+            val newValue = IDData(-5, 0L)
+            btree.update(currentSmallest, newKey, newValue)
+            then("old key is gone and new key is searchable"){
+                btree.search(currentSmallest) shouldBe null
+                btree.search(newKey) shouldBe newValue
+            }
+            then("every other previously-inserted key is still searchable(ancestor separator wasn't corrupted)"){
+                for (i in 2 until 20) {
+                    btree.search(listOf<Number>(i, 0L)) shouldBe IDData(i, 0L)
+                }
+            }
+            then("traverse order is still fully sorted"){
+                val keys = btree.traverse().map { it.first }
+                val sortedKeys = keys.sortedWith(compareBy({ it[0] as Int }, { it[1] as Long }))
+                keys shouldBe sortedKeys
+            }
+        }
+
+        `when`("updating a non-existent key"){
+            val missingKey = listOf<Number>(999_999, 0L)
+            val newKey = listOf<Number>(999_998, 0L)
+            btree.update(missingKey, newKey, IDData(999_998, 0L))
+            then("nothing changes, and the tree is still fully usable right after"){
+                btree.search(newKey) shouldBe null
+                // update()의 no-op(!isExist) 경로에서 leaf의 write lock이 안 풀렸다면,
+                // 바로 이어지는 아래 호출이 그 leaf를 다시 잡으려다 걸릴 수 있다.
+                val probeKey = listOf<Number>(250, 0L)
+                btree.update(probeKey, probeKey, IDData(250, 999L))
+                btree.search(probeKey) shouldBe IDData(250, 999L)
             }
         }
     }
