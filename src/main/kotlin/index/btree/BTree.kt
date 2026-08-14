@@ -76,30 +76,8 @@ class BTree<K, V> (
             writeLock.asWriteView { buffer ->
                 val page = SlottedPage(indexConfig, leafNodePageId, buffer)
                 val node = Node.from(indexConfig, page, keySerializer)
-                if(node.wouldOverflow(serializedKey, serializedValue)){
-                    val separatorKey = page.getData(node.promotionKeyIdx() + 1).first
-                    try{
-                        val currentLockSize = lockManager.size
-                        split(traceNode, lockManager)
-                        if(Arrays.compareUnsigned(serializedKey, separatorKey) >= 0){
-                            val rightLeafPageLock = lockManager.at(currentLockSize)
-                            rightLeafPageLock.asWriteView { rightLeafBuffer ->
-                                val rightPage = SlottedPage(indexConfig, rightLeafPageLock.pageId, rightLeafBuffer)
-                                val rightNode = Node.from(indexConfig, rightPage, keySerializer) as LeafNode
-                                rightNode.insert(serializedKey, serializedValue)
-                            }
-                        } else{
-                            node.insert(serializedKey, serializedValue)
-                        }
-                    } catch (e: Exception) {
-                        lockManager.close()
-                        throw e
-                    }
-                } else{
-                    node.insert(serializedKey, serializedValue)
-                }
+                checkOverflowAndSplitFirst(node, page, serializedKey, serializedValue, lockManager, traceNode)
             }
-
             traceNode.clear()
         } else {
             val writeLock = storageManager.newPage(PageType.LEAF_NODE, lockManager.lockMode)
@@ -142,9 +120,7 @@ class BTree<K, V> (
                 val page = SlottedPage(indexConfig, leafNodePageId, buffer)
                 val node = Node.from(indexConfig, page, keySerializer)
                 node.deleteAt(keyIdx)
-                if(node.isUnderflow && (leafNodePageId != rootPageId || node.keyCount == 0)){
-                    isUnderflow = true
-                }
+                isUnderflow = checkUnderflow(node, leafNodePageId)
                 // When the first key of a leaf is deleted, the ancestor separator that points
                 // to this subtree becomes stale. Propagate the new first key upward.
                 // (Underflow case: handleUnderflow may overwrite this with the correct value.)
@@ -162,32 +138,92 @@ class BTree<K, V> (
     }
 
     /**
-     * Update value of certain key.
+     * Update key and value of certain key.
      *
      * If the key does not exist, do nothing.
      *
      * @param key key to find from B+tree of type [K].
      * @param newValue new value to update of type [V].
      */
-    fun update(key: K, newValue: V) {
+    fun update(key: K, newKey: K, newValue: V) {
         val serializedKey = keySerializer.serialize(key)
+        val serializedNewKey = keySerializer.serialize(newKey)
         val serializedNewValue = valueSerializer.serialize(newValue)
         val traceNode: Stack<Triple<Long, Int, PageLock>> = Stack()
         val lockManager = LockManager(LockMode.WRITE)
-
         val (leafNodePageId, keyIdx, isExist) = searchLeafNode(serializedKey, null, traceNode, lockManager, BTreeOptMode.UPDATE)
-
-        if (isExist) {
+        val isSameKey = serializedKey.contentEquals(serializedNewKey)
+        var searchAnotherPage = false
+        var isUnderflow = false
+        if(isExist){
             val leafLock = lockManager.last
             if (leafNodePageId != leafLock.pageId) throw IllegalLatchStateException.InvalidTraceObjectError(leafNodePageId)
             leafLock.asWriteView { buffer ->
                 val page = SlottedPage(indexConfig, leafNodePageId, buffer)
-                page.updateData(keyIdx, serializedKey, serializedNewValue)
+                val node = Node.from(indexConfig, page, keySerializer)
+                page.deleteData(keyIdx)
+                if(isSameKey){
+                    checkOverflowAndSplitFirst(node, page, serializedNewKey, serializedNewValue, lockManager, traceNode)
+                } else {
+                    if (keyIdx == 0 && node.keyCount > 0) {
+                        val newFirstKey = page.getData(0).first
+                        propagateSeparatorUpdate(traceNode, newFirstKey, lockManager)
+                    }
+                    val insertSlot = node.search(serializedNewKey).first
+                    if(0 < insertSlot && insertSlot < node.keyCount-1){
+                        checkOverflowAndSplitFirst(node, page, serializedNewKey, serializedNewValue, lockManager, traceNode)
+                    } else {
+                        isUnderflow = checkUnderflow(node, leafNodePageId)
+                        searchAnotherPage = true
+                    }
+                }
+            }
+            if(searchAnotherPage){
+                if(isUnderflow) handleUnderflow(traceNode, lockManager)
+                traceNode.clear()
+                lockManager.close()
+                insert(newKey, newValue)
+                return
             }
         }
-
         traceNode.clear()
         lockManager.close()
+    }
+
+    private fun checkOverflowAndSplitFirst(
+        node: Node<K>,
+        page: SlottedPage,
+        key: ByteArray,
+        value: ByteArray,
+        lockManager: LockManager,
+        traceNode: Stack<Triple<Long, Int, PageLock>>
+    ){
+        if(node.wouldOverflow(key, value)){
+            val separatorKey = page.getData(node.promotionKeyIdx() + 1).first
+            try{
+                val currentLockSize = lockManager.size
+                split(traceNode, lockManager)
+                if(Arrays.compareUnsigned(key, separatorKey) >= 0){
+                    val rightLeafPageLock = lockManager.at(currentLockSize)
+                    rightLeafPageLock.asWriteView { rightLeafBuffer ->
+                        val rightPage = SlottedPage(indexConfig, rightLeafPageLock.pageId, rightLeafBuffer)
+                        val rightNode = Node.from(indexConfig, rightPage, keySerializer) as LeafNode
+                        rightNode.insert(key, value)
+                    }
+                } else{
+                    node.insert(key, value)
+                }
+            } catch (e: Exception) {
+                lockManager.close()
+                throw e
+            }
+        } else{
+            node.insert(key, value)
+        }
+    }
+
+    private fun checkUnderflow(node: Node<K>, leafNodePageId: Long): Boolean{
+        return node.isUnderflow && (leafNodePageId != rootPageId || node.keyCount == 0)
     }
 
     /**
