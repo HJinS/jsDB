@@ -8,7 +8,6 @@ import index.exception.BTreeException
 import index.exception.IndexException
 import index.serializer.KeySerializer
 import index.serializer.ValueSerializer
-import index.util.MAX_KEYS
 import java.util.EmptyStackException
 import java.util.Stack
 import kotlin.collections.plusAssign
@@ -33,13 +32,17 @@ class BTree<K, V> (
     private val keySerializer: KeySerializer<K>,
     private val valueSerializer: ValueSerializer<V>,
     private val keyComparator: KeyComparator,
-    private val maxKeys: Int = MAX_KEYS,
+    private val maxKeys: Int = MAX_KEYS
 ){
     private var root: Node? = null
     private val comparator = Comparator<ByteArray> {
         a, b -> keyComparator.compare(a, b)
     }
     private val traceNode: Stack<Pair<Node, Int>> = Stack()
+
+    companion object {
+        const val MAX_KEYS = 64
+    }
 
     /**
      * Insert the provided key and value to B+tree.
