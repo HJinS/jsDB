@@ -2,11 +2,11 @@ package index.util
 
 import java.text.Collator
 
-data class KeySchema(
-    val columns: List<Column>
+data class IndexKeySchema(
+    val indexColumns: List<IndexColumn>
 )
 
-data class Column(
+data class IndexColumn(
     val name: String,
     val type: ColumnType,
     val descending: Boolean,

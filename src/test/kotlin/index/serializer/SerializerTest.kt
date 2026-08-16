@@ -1,8 +1,8 @@
 package index.serializer
 
-import index.util.Column
+import index.util.IndexColumn
 import index.util.ColumnType
-import index.util.KeySchema
+import index.util.IndexKeySchema
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import java.nio.ByteBuffer
@@ -15,91 +15,91 @@ import java.util.UUID
 
 class SerializerTest: FunSpec({
     listOf(
-        listOf<Number>(10, 5230L) to KeySchema(
+        listOf<Number>(10, 5230L) to IndexKeySchema(
             listOf(
-                Column("count", ColumnType.INT, descending = false),
-                Column("largeCount", ColumnType.LONG, descending = false)
+                IndexColumn("count", ColumnType.INT, descending = false),
+                IndexColumn("largeCount", ColumnType.LONG, descending = false)
             )
         ),
-        listOf(10L) to KeySchema(
+        listOf(10L) to IndexKeySchema(
             listOf(
-                Column("id", ColumnType.LONG, descending = false)
+                IndexColumn("id", ColumnType.LONG, descending = false)
             )
         ),
-        listOf("Test Code") to KeySchema(
+        listOf("Test Code") to IndexKeySchema(
             listOf(
-                Column("name", ColumnType.STRING, descending = false)
+                IndexColumn("name", ColumnType.STRING, descending = false)
             )
         ),
-        listOf(true) to KeySchema(
+        listOf(true) to IndexKeySchema(
             listOf(
-                Column("isActive", ColumnType.BOOLEAN, descending = false)
+                IndexColumn("isActive", ColumnType.BOOLEAN, descending = false)
             )
         ),
-        listOf(1.toByte()) to KeySchema(
+        listOf(1.toByte()) to IndexKeySchema(
             listOf(
-                Column("byte", ColumnType.BYTE, descending = false)
+                IndexColumn("byte", ColumnType.BYTE, descending = false)
             )
         ),
-        listOf(10.toShort()) to KeySchema(
+        listOf(10.toShort()) to IndexKeySchema(
             listOf(
-                Column("idShort", ColumnType.SHORT, descending = false)
+                IndexColumn("idShort", ColumnType.SHORT, descending = false)
             )
         ),
-        listOf(10.0f) to KeySchema(
+        listOf(10.0f) to IndexKeySchema(
             listOf(
-                Column("price", ColumnType.FLOAT, descending = false)
+                IndexColumn("price", ColumnType.FLOAT, descending = false)
             )
         ),
-        listOf(10.0) to KeySchema(
+        listOf(10.0) to IndexKeySchema(
             listOf(
-                Column("id", ColumnType.DOUBLE, descending = false)
+                IndexColumn("id", ColumnType.DOUBLE, descending = false)
             )
         ),
-        listOf(LocalDate.of(2025, 1, 1)) to KeySchema(
+        listOf(LocalDate.of(2025, 1, 1)) to IndexKeySchema(
             listOf(
-                Column("date", ColumnType.LOCAL_DATE, descending = false)
+                IndexColumn("date", ColumnType.LOCAL_DATE, descending = false)
             )
         ),
-        listOf(LocalDateTime.of(2025, 1, 1, 12, 0, 0)) to KeySchema(
+        listOf(LocalDateTime.of(2025, 1, 1, 12, 0, 0)) to IndexKeySchema(
             listOf(
-                Column("dateTime", ColumnType.LOCAL_DATE_TIME, descending = false)
+                IndexColumn("dateTime", ColumnType.LOCAL_DATE_TIME, descending = false)
             )
         ),
-        listOf(Instant.ofEpochSecond(100)) to KeySchema(
+        listOf(Instant.ofEpochSecond(100)) to IndexKeySchema(
             listOf(
-                Column("epoch", ColumnType.INSTANT, descending = false)
+                IndexColumn("epoch", ColumnType.INSTANT, descending = false)
             )
         ),
-        listOf(UUID.randomUUID()) to KeySchema(
+        listOf(UUID.randomUUID()) to IndexKeySchema(
             listOf(
-                Column("uuid", ColumnType.UUID, descending = false)
+                IndexColumn("uuid", ColumnType.UUID, descending = false)
             )
         ),
-        listOf(ByteBuffer.allocate(2).putShort(10).array()) to KeySchema(
+        listOf(ByteBuffer.allocate(2).putShort(10).array()) to IndexKeySchema(
             listOf(
-                Column("bytes", ColumnType.BYTES, descending = false)
+                IndexColumn("bytes", ColumnType.BYTES, descending = false)
             )
         ),
-        listOf(10, "Alice", LocalDate.of(2025, 5, 10)) to KeySchema(
+        listOf(10, "Alice", LocalDate.of(2025, 5, 10)) to IndexKeySchema(
             listOf(
-                Column("id", ColumnType.INT, descending = false),
-                Column("name", ColumnType.STRING, descending = false),
-                Column("birth", ColumnType.LOCAL_DATE, descending = false)
+                IndexColumn("id", ColumnType.INT, descending = false),
+                IndexColumn("name", ColumnType.STRING, descending = false),
+                IndexColumn("birth", ColumnType.LOCAL_DATE, descending = false)
             )
         ),
-        listOf(true, 10.0f, UUID.randomUUID()) to KeySchema(
+        listOf(true, 10.0f, UUID.randomUUID()) to IndexKeySchema(
             listOf(
-                Column("isActive", ColumnType.BOOLEAN, descending = false),
-                Column("price", ColumnType.FLOAT, descending = false),
-                Column("uuid", ColumnType.UUID, descending = false)
+                IndexColumn("isActive", ColumnType.BOOLEAN, descending = false),
+                IndexColumn("price", ColumnType.FLOAT, descending = false),
+                IndexColumn("uuid", ColumnType.UUID, descending = false)
             )
         ),
-        listOf(Instant.ofEpochSecond(100), "Alice", ByteBuffer.allocate(2).putShort(10).array()) to KeySchema(
+        listOf(Instant.ofEpochSecond(100), "Alice", ByteBuffer.allocate(2).putShort(10).array()) to IndexKeySchema(
             listOf(
-                Column("epoch", ColumnType.INSTANT, descending = false),
-                Column("name", ColumnType.STRING, descending = false),
-                Column("bytes", ColumnType.BYTES, descending = false)
+                IndexColumn("epoch", ColumnType.INSTANT, descending = false),
+                IndexColumn("name", ColumnType.STRING, descending = false),
+                IndexColumn("bytes", ColumnType.BYTES, descending = false)
             )
         )
     ).forEachIndexed{ index, parameter ->
@@ -116,11 +116,11 @@ class SerializerTest: FunSpec({
     test("Original value should be same after packing, unpacking string collator comparison case"){
         val key = listOf(10, "Alice", LocalDate.of(2025, 5, 10))
         val collatorInstance = Collator.getInstance(Locale.US)
-        val schema = KeySchema(
+        val schema = IndexKeySchema(
             listOf(
-                Column("id", ColumnType.INT, descending = false),
-                Column("name", ColumnType.STRING, descending = false, collation = collatorInstance),
-                Column("birth", ColumnType.LOCAL_DATE, descending = false)
+                IndexColumn("id", ColumnType.INT, descending = false),
+                IndexColumn("name", ColumnType.STRING, descending = false, collation = collatorInstance),
+                IndexColumn("birth", ColumnType.LOCAL_DATE, descending = false)
             )
         )
         val serializer = MultiColumnKeySerializer(schema)

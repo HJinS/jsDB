@@ -8,23 +8,23 @@ import java.lang.IndexOutOfBoundsException
  *
  * @property schema Schema of the keys.
  * @see BaseKeySerializer
- * @see KeySchema
+ * @see IndexKeySchema
  * */
-class MultiColumnKeySerializer(schema: KeySchema): BaseKeySerializer<List<Any?>>(schema) {
+class MultiColumnKeySerializer(schema: IndexKeySchema): BaseKeySerializer<List<Any?>>(schema) {
 
 
     override fun serialize(key: List<Any?>): ByteArray {
-        require(key.size <= schema.columns.size) { "Too many key values for schema" }
+        require(key.size <= schema.indexColumns.size) { "Too many key values for schema" }
         var totalByteSize = 0
-        val tempArray = ArrayList<ByteArray>(schema.columns.size)
-        for(idx in schema.columns.indices){
+        val tempArray = ArrayList<ByteArray>(schema.indexColumns.size)
+        for(idx in schema.indexColumns.indices){
             if(idx >= key.size) {
-                val padding = if(schema.columns[idx].descending) byteArrayOf(0xFF.toByte()) else byteArrayOf(0x00.toByte())
+                val padding = if(schema.indexColumns[idx].descending) byteArrayOf(0xFF.toByte()) else byteArrayOf(0x00.toByte())
                 tempArray.add(padding)
                 totalByteSize += 1
                 break
             } else{
-                val packed = packKeyItem(key[idx], schema.columns[idx])
+                val packed = packKeyItem(key[idx], schema.indexColumns[idx])
                 tempArray.add(packed)
                 totalByteSize += packed.size
             }
@@ -42,7 +42,7 @@ class MultiColumnKeySerializer(schema: KeySchema): BaseKeySerializer<List<Any?>>
         val unpackedKeys = mutableListOf<Any?>()
         var offset = 0
 
-        for (column in schema.columns){
+        for (column in schema.indexColumns){
             val (value, consumed) = try {
                 unpackKeyItem(bytes, offset, column)
             } catch (_: IndexOutOfBoundsException){

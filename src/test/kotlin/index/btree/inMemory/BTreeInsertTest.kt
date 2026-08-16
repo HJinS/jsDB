@@ -4,9 +4,9 @@ import index.comparator.MultiColumnKeyComparator
 import helper.serializer.LocalDateSerializerHelper
 import index.serializer.MultiColumnKeySerializer
 import helper.serializer.RowDataSerializerHelper
-import index.util.Column
+import index.util.IndexColumn
 import index.util.ColumnType
-import index.util.KeySchema
+import index.util.IndexKeySchema
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import kotlinx.serialization.Serializable
@@ -36,9 +36,9 @@ class BTreeInsertTest: FunSpec({
                 IDData(5, 50L),
                 IDData(5, 123932L)
             ),
-            KeySchema(listOf(
-                Column("count", ColumnType.INT, descending = false),
-                Column("largeCount", ColumnType.LONG, descending = false)
+            IndexKeySchema(listOf(
+                IndexColumn("count", ColumnType.INT, descending = false),
+                IndexColumn("largeCount", ColumnType.LONG, descending = false)
             ))
         ),
         Triple(
@@ -62,9 +62,9 @@ class BTreeInsertTest: FunSpec({
                 IDData(2, 12342L),
                 IDData(1, 10L)
             ),
-            KeySchema(listOf(
-                Column("count", ColumnType.INT, descending = true),
-                Column("largeCount", ColumnType.LONG, descending = false)
+            IndexKeySchema(listOf(
+                IndexColumn("count", ColumnType.INT, descending = true),
+                IndexColumn("largeCount", ColumnType.LONG, descending = false)
             ))
         ),
         Triple(
@@ -88,9 +88,9 @@ class BTreeInsertTest: FunSpec({
                 IDData(2, 12342L),
                 IDData(1, 10L)
             ),
-            KeySchema(listOf(
-                Column("count", ColumnType.INT, descending = true),
-                Column("largeCount", ColumnType.LONG, descending = true)
+            IndexKeySchema(listOf(
+                IndexColumn("count", ColumnType.INT, descending = true),
+                IndexColumn("largeCount", ColumnType.LONG, descending = true)
             ))
         ),
     ).forEachIndexed{ index, parameter ->
@@ -145,9 +145,9 @@ class BTreeInsertTest: FunSpec({
                 UserData("Grace", LocalDate.of(2020, 1, 30)),
                 UserData("Grace", LocalDate.of(2024, 3, 20))
             ),
-            KeySchema(listOf(
-                Column("name", ColumnType.STRING, descending = false),
-                Column("date", ColumnType.LOCAL_DATE, descending = false)
+            IndexKeySchema(listOf(
+                IndexColumn("name", ColumnType.STRING, descending = false),
+                IndexColumn("date", ColumnType.LOCAL_DATE, descending = false)
             ))
         ),
         Triple(
@@ -171,9 +171,9 @@ class BTreeInsertTest: FunSpec({
                 UserData("Ava", LocalDate.of(2019, 12, 25)),
                 UserData("Ava", LocalDate.of(2025, 4, 30))
             ),
-            KeySchema(listOf(
-                Column("name", ColumnType.STRING, descending = true),
-                Column("date", ColumnType.LOCAL_DATE, descending = false)
+            IndexKeySchema(listOf(
+                IndexColumn("name", ColumnType.STRING, descending = true),
+                IndexColumn("date", ColumnType.LOCAL_DATE, descending = false)
             ))
         ),
         Triple(
@@ -198,9 +198,9 @@ class BTreeInsertTest: FunSpec({
                 UserData("Ava", LocalDate.of(2019, 12, 25))
 
             ),
-            KeySchema(listOf(
-                Column("name", ColumnType.STRING, descending = true),
-                Column("date", ColumnType.LOCAL_DATE, descending = true)
+            IndexKeySchema(listOf(
+                IndexColumn("name", ColumnType.STRING, descending = true),
+                IndexColumn("date", ColumnType.LOCAL_DATE, descending = true)
             ))
         )
     ).forEachIndexed{ index, parameter ->
