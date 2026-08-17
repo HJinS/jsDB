@@ -308,3 +308,32 @@ fun ByteArray.decodeSortableString(collator: Collator?): String{
 }
 
 fun ByteArray.decodeSortableByteArray() = unescapeZeroBytes(this)
+
+fun ByteArray.encodeBinary(): ByteArray {
+    val lengthBytes = encodeVarInt(this.size)
+    val result = ByteArray(lengthBytes.size + this.size)
+    System.arraycopy(lengthBytes, 0, result, 0, lengthBytes.size)
+    System.arraycopy(this, 0, result, lengthBytes.size, this.size)
+    return result
+}
+
+fun String.encodeBinary(): ByteArray {
+    val utf8Bytes = this.toByteArray(StandardCharsets.UTF_8)
+    val lengthBytes = encodeVarInt(utf8Bytes.size)
+    val result = ByteArray(lengthBytes.size + utf8Bytes.size)
+    System.arraycopy(lengthBytes, 0, result, 0, lengthBytes.size)
+    System.arraycopy(utf8Bytes, 0, result, lengthBytes.size, utf8Bytes.size)
+    return result
+}
+
+fun ByteArray.decodeBinaryString(offset: Int = 0): Pair<String, Int> {
+    val (length, consumed) = decodeVarInt(this, offset)
+    val string = String(this, offset + consumed, length, StandardCharsets.UTF_8)
+    return string to (consumed + length)
+}
+
+fun ByteArray.decodeBinaryByteArray(offset: Int = 0): Pair<ByteArray, Int> {
+    val (length, consumed) = decodeVarInt(this, offset)
+    val result = this.copyOfRange(offset + consumed, offset + consumed + length)
+    return result to (consumed + length)
+}
