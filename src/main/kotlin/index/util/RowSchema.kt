@@ -1,5 +1,5 @@
 package index.util
 
-data class RowColumnSchema(
+data class RowSchema(
     val rowColumns: List<RowColumn>
 )
