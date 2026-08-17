@@ -4,9 +4,9 @@ import config.SimpleConfig
 import helper.serializer.InstantSerializerHelper
 import index.serializer.MultiColumnKeySerializer
 import helper.serializer.RowDataSerializerHelper
-import index.util.Column
+import index.util.IndexColumn
 import index.util.ColumnType
-import index.util.KeySchema
+import index.util.IndexKeySchema
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.shouldBe
@@ -270,10 +270,10 @@ class SlottedPageTest:BehaviorSpec({
     companion object{
         val config = SimpleConfig()
         val data: ByteBuffer = ByteBuffer.allocate(config.indexConfig.pageSize)
-        val keySchema = KeySchema(listOf(
-            Column("id", ColumnType.INT, descending = false),
-            Column("epoch", ColumnType.INSTANT, descending = false),
-            Column("name", ColumnType.STRING, descending = false),
+        val keySchema = IndexKeySchema(listOf(
+            IndexColumn("id", ColumnType.INT, descending = false),
+            IndexColumn("epoch", ColumnType.INSTANT, descending = false),
+            IndexColumn("name", ColumnType.STRING, descending = false),
         ))
 
         @Serializable

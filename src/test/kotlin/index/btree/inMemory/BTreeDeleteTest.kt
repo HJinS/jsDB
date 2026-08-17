@@ -4,9 +4,9 @@ import index.comparator.MultiColumnKeyComparator
 import helper.serializer.LocalDateSerializerHelper
 import index.serializer.MultiColumnKeySerializer
 import helper.serializer.RowDataSerializerHelper
-import index.util.Column
+import index.util.IndexColumn
 import index.util.ColumnType
-import index.util.KeySchema
+import index.util.IndexKeySchema
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import kotlinx.serialization.Serializable
@@ -536,14 +536,14 @@ class BTreeDeleteTest: BehaviorSpec({
             val birthDate: LocalDate
         )
 
-        val schema = KeySchema(listOf(
-            Column("count", ColumnType.INT, descending = false),
-            Column("largeCount", ColumnType.LONG, descending = false)
+        val schema = IndexKeySchema(listOf(
+            IndexColumn("count", ColumnType.INT, descending = false),
+            IndexColumn("largeCount", ColumnType.LONG, descending = false)
         ))
 
-        val schema2 = KeySchema(listOf(
-            Column("name", ColumnType.STRING, descending = false),
-            Column("date", ColumnType.LOCAL_DATE, descending = false)
+        val schema2 = IndexKeySchema(listOf(
+            IndexColumn("name", ColumnType.STRING, descending = false),
+            IndexColumn("date", ColumnType.LOCAL_DATE, descending = false)
         ))
 
         val idValueSerializer = RowDataSerializerHelper(IDData.serializer())

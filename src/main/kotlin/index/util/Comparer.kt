@@ -12,9 +12,9 @@ import java.util.UUID
  * this > other -> result > 0
  * if descending=True -> result = result * (-1)
  * */
-fun List<Any?>.compareUnpackedKey(otherKey: List<Any?>, schema: KeySchema): Int{
-    for(idx in schema.columns.indices){
-        val column = schema.columns[idx]
+fun List<Any?>.compareUnpackedKey(otherKey: List<Any?>, schema: IndexKeySchema): Int{
+    for(idx in schema.indexColumns.indices){
+        val column = schema.indexColumns[idx]
         val value1 = this[idx]
         val value2 = otherKey.getOrNull(idx)
 

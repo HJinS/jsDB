@@ -5,9 +5,9 @@ import config.SimpleConfig
 import config.StorageConfig
 import index.btree.node.Node
 import index.serializer.MultiColumnKeySerializer
-import index.util.Column
+import index.util.IndexColumn
 import index.util.ColumnType
-import index.util.KeySchema
+import index.util.IndexKeySchema
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -103,11 +103,11 @@ class StorageManagerTest: BehaviorSpec({
             )
         )
         val indexConfig = config.indexConfig
-        val testSchema = KeySchema(
+        val testSchema = IndexKeySchema(
             listOf(
-                Column("id", ColumnType.INT, descending = false),
-                Column("name", ColumnType.STRING, descending = false),
-                Column("birth", ColumnType.LOCAL_DATE, descending = false)
+                IndexColumn("id", ColumnType.INT, descending = false),
+                IndexColumn("name", ColumnType.STRING, descending = false),
+                IndexColumn("birth", ColumnType.LOCAL_DATE, descending = false)
             )
         )
         private val keySerializer = MultiColumnKeySerializer(testSchema)

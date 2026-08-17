@@ -10,10 +10,10 @@ import java.time.ZoneOffset
 import java.util.*
 
 
-abstract class BaseKeySerializer<K>(protected val schema: KeySchema): KeySerializer<K> {
-    protected fun packKeyItem(key: Any?, column: Column): ByteArray{
+abstract class BaseKeySerializer<K>(protected val schema: IndexKeySchema): KeySerializer<K> {
+    protected fun packKeyItem(key: Any?, indexColumn: IndexColumn): ByteArray{
         if(key == null) return byteArrayOf(0x00)
-        val serialized = when (column.type){
+        val serialized = when (indexColumn.type){
             ColumnType.BOOLEAN -> {
                 val packedKey = (key as Boolean).encodeSortable()
                 (byteArrayOf(0x01)) + packedKey
@@ -45,7 +45,7 @@ abstract class BaseKeySerializer<K>(protected val schema: KeySchema): KeySeriali
                 (byteArrayOf(0x01)) + packedKey
             }
             ColumnType.STRING -> {
-                val packedKey = (key as String).encodeSortable(column.collation)
+                val packedKey = (key as String).encodeSortable(indexColumn.collation)
                 (byteArrayOf(0x01)) + packedKey
             }
 
@@ -73,12 +73,12 @@ abstract class BaseKeySerializer<K>(protected val schema: KeySchema): KeySeriali
                 (byteArrayOf(0x01)) + packedKey
             }
         }
-        return if(column.descending) serialized.invert() else serialized
+        return if(indexColumn.descending) serialized.invert() else serialized
     }
 
-    protected fun unpackKeyItem(bytes: ByteArray, offset: Int, column: Column): Pair<Any?, Int> {
+    protected fun unpackKeyItem(bytes: ByteArray, offset: Int, indexColumn: IndexColumn): Pair<Any?, Int> {
         var position = offset
-        val bytesInverted = if(column.descending) bytes.invert() else bytes
+        val bytesInverted = if(indexColumn.descending) bytes.invert() else bytes
         val nullFlag = try {
             bytesInverted[position++]
         } catch( exception: IndexOutOfBoundsException) {
@@ -86,7 +86,7 @@ abstract class BaseKeySerializer<K>(protected val schema: KeySchema): KeySeriali
         }
         if (nullFlag.toInt() == 0x00) return null to 1
 
-        val columnType = column.type
+        val columnType = indexColumn.type
 
         fun readVarType(bytes: ByteArray): ByteArray{
             val terminator = 0x00
@@ -140,7 +140,7 @@ abstract class BaseKeySerializer<K>(protected val schema: KeySchema): KeySeriali
 
             ColumnType.STRING -> {
                 val bytes = readVarType(bytesInverted)
-                bytes.decodeSortableString(column.collation)
+                bytes.decodeSortableString(indexColumn.collation)
             }
 
             ColumnType.LOCAL_DATE -> {

@@ -6,9 +6,9 @@ import config.StorageConfig
 import helper.serializer.LocalDateSerializerHelper
 import helper.serializer.RowDataSerializerHelper
 import index.serializer.MultiColumnKeySerializer
-import index.util.Column
+import index.util.IndexColumn
 import index.util.ColumnType
-import index.util.KeySchema
+import index.util.IndexKeySchema
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import kotlinx.serialization.Serializable
@@ -22,9 +22,9 @@ class BTreeTest: BehaviorSpec({
         @Serializable
         data class IDData(val id: Int, val longId: Long)
 
-        val schema = KeySchema(listOf(
-            Column("count", ColumnType.INT, descending = false),
-            Column("largeCount", ColumnType.LONG, descending = false)
+        val schema = IndexKeySchema(listOf(
+            IndexColumn("count", ColumnType.INT, descending = false),
+            IndexColumn("largeCount", ColumnType.LONG, descending = false)
         ))
         val btree = initData<IDData>(schema)
 
@@ -321,9 +321,9 @@ class BTreeTest: BehaviorSpec({
             val birthDate: LocalDate
         )
 
-        val schema = KeySchema(listOf(
-            Column("name", ColumnType.STRING, descending = false),
-            Column("date", ColumnType.LOCAL_DATE, descending = false)
+        val schema = IndexKeySchema(listOf(
+            IndexColumn("name", ColumnType.STRING, descending = false),
+            IndexColumn("date", ColumnType.LOCAL_DATE, descending = false)
         ))
         val btree = initData<UserData>(schema)
 
@@ -551,9 +551,9 @@ class BTreeTest: BehaviorSpec({
         @Serializable
         data class IDData(val id: Int, val longId: Long)
 
-        val schema = KeySchema(listOf(
-            Column("id", ColumnType.INT, descending = false),
-            Column("longId", ColumnType.LONG, descending = false)
+        val schema = IndexKeySchema(listOf(
+            IndexColumn("id", ColumnType.INT, descending = false),
+            IndexColumn("longId", ColumnType.LONG, descending = false)
         ))
         val btree = initData<IDData>(schema)
         val dummyData = mutableListOf<IDData>()
@@ -660,9 +660,9 @@ class BTreeTest: BehaviorSpec({
         @Serializable
         data class IDData(val id: Int, val longId: Long)
 
-        val schema = KeySchema(listOf(
-            Column("id", ColumnType.INT, descending = false),
-            Column("longId", ColumnType.LONG, descending = false)
+        val schema = IndexKeySchema(listOf(
+            IndexColumn("id", ColumnType.INT, descending = false),
+            IndexColumn("longId", ColumnType.LONG, descending = false)
         ))
         val btree = initData<IDData>(schema)
 
@@ -744,7 +744,7 @@ class BTreeTest: BehaviorSpec({
     }
 }){
     companion object{
-        inline fun <reified T: Any> initData(schema: KeySchema): BTree<List<Any?>, T>{
+        inline fun <reified T: Any> initData(schema: IndexKeySchema): BTree<List<Any?>, T>{
             val config = SimpleConfig(
                 StorageConfig(dbPath = "test-btree.db", poolSize = 100)
             )
