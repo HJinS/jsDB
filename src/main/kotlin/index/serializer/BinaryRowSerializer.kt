@@ -21,6 +21,7 @@ class BinaryRowSerializer(private val rowSchema: RowSchema): ValueSerializer<Lis
             val valueItem = value[idx]
             val schema = rowSchema.rowColumns[idx]
             if (valueItem == null) {
+                require(schema.nullable) { "Column '${schema.name}' is not nullable" }
                 val bytePosition = nullFlag[idx / 8]
                 val bitPosition = (1 shl (7 - (idx % 8)))
                 nullFlag[idx / 8] = (bytePosition.toInt() or bitPosition).toByte()
