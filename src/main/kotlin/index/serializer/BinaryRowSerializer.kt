@@ -68,7 +68,7 @@ class BinaryRowSerializer(private val rowSchema: RowSchema): ValueSerializer<Lis
         return resultArray
     }
 
-    override fun deserialize(bytes: ByteArray): List<Any?> {
+    override fun deserialize(bytes: ByteArray): Pair<List<Any?>, Int> {
         val result = mutableListOf<Any?>()
         var offset = 0
         val totalMaskCount = ceil(rowSchema.rowColumns.size / 8.0).toInt()
@@ -87,7 +87,7 @@ class BinaryRowSerializer(private val rowSchema: RowSchema): ValueSerializer<Lis
             result.add(value)
             offset += consumed
         }
-        return result
+        return result to offset
     }
 
     private fun readValue(bytes: ByteArray, offset: Int, type: ColumnType): Pair<Any, Int> {

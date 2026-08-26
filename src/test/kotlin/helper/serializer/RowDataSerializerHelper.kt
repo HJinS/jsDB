@@ -12,8 +12,8 @@ class RowDataSerializerHelper<V: Any>(
         return Json.encodeToString(kSerializer, value).toByteArray()
     }
 
-    override fun deserialize(bytes: ByteArray): V {
-        return Json.decodeFromString(kSerializer, bytes.toString(Charsets.UTF_8))
+    override fun deserialize(bytes: ByteArray): Pair<V, Int> {
+        return Json.decodeFromString(kSerializer, bytes.toString(Charsets.UTF_8)) to 0
     }
 
 }
