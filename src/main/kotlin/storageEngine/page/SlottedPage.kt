@@ -3,7 +3,7 @@ package storageEngine.page
 import config.IndexConfig
 import index.util.decodeVarInt
 import index.util.encodeVarInt
-import storageEngine.exception.SlottedPageException
+import storageEngine.exception.StorageEngineException
 import storageEngine.util.PageHeaderOffset
 import java.nio.ByteBuffer
 import java.util.Arrays
@@ -112,12 +112,12 @@ open class SlottedPage(
 
     @OptIn(ExperimentalStdlibApi::class)
     fun getData(slotId: Int): Pair<ByteArray, ByteArray>{
-        if(slotId !in 0..<recordCount) throw SlottedPageException.SlotOutOfBoundException(slotId, pageId, type)
+        if(slotId !in 0..<recordCount) throw StorageEngineException.SlotOutOfBoundException(slotId, pageId, type)
         val slotLocation = HEADER_SIZE + slotId * SLOT_SIZE
         val offset = data.getShort(slotLocation)
         val length = data.getShort(slotLocation + 2)
 
-        if(length.toInt() == 0) throw SlottedPageException.SlotOutOfBoundException(slotId, pageId, type)
+        if(length.toInt() == 0) throw StorageEngineException.SlotOutOfBoundException(slotId, pageId, type)
         // slot 데이터를 가지고 실제 데이터 추출
         // 반만 열린 범위인 것을 주의
         val tempBuffer = data.duplicate()
@@ -185,7 +185,7 @@ open class SlottedPage(
             writeView.position(dstOffset)
             writeView.put(temp)
         } catch (e: Exception) {
-            throw SlottedPageException.SlotShiftException(pageId, type, e)
+            throw StorageEngineException.SlotShiftException(pageId, type, e)
         }
         return src
     }
@@ -204,7 +204,7 @@ open class SlottedPage(
 
         if (freeSpace < needed) {
             compaction()
-            if (freeSpace < needed) throw SlottedPageException.PageFullException(totalDataLength, pageId)
+            if (freeSpace < needed) throw StorageEngineException.PageFullException(totalDataLength, pageId)
         }
 
         // 4. [데이터 쓰기] FreeSpace 포인터 이동 및 데이터 기록

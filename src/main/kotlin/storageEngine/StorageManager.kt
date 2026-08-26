@@ -4,7 +4,7 @@ import storageEngine.page.PageLock
 import storageEngine.page.SlottedPage
 import storageEngine.util.PageType
 import storageEngine.util.LockMode
-import storageEngine.exception.StorageManagerException
+import storageEngine.exception.StorageEngineException
 import config.IndexConfig
 
 class StorageManager(
@@ -39,11 +39,11 @@ class StorageManager(
      *
      * */
     fun fetchPage(pageId: Long, lockMode: LockMode): PageLock{
-        if(pageId <= 0L) throw StorageManagerException.InvalidPageIdException(pageId)
+        if(pageId <= 0L) throw StorageEngineException.InvalidPageIdException(pageId)
         val pageLock = bufferPoolManager.fetchPage(pageId, lockMode)
         pageLock.asReadView { buffer ->
             val page = SlottedPage(indexConfig, pageId, buffer)
-            if(!(page.type == PageType.INTERNAL_NODE || page.type == PageType.LEAF_NODE)) throw StorageManagerException.InvalidPageTypeException(pageId, page.type)
+            if(!(page.type == PageType.INTERNAL_NODE || page.type == PageType.LEAF_NODE)) throw StorageEngineException.InvalidPageTypeException(pageId, page.type)
         }
         return pageLock
     }
@@ -56,7 +56,7 @@ class StorageManager(
      * 3. deletePage     — frame 회수
      * */
     fun deletePage(pageId: Long){
-        if(pageId <= 0L) throw StorageManagerException.InvalidPageIdException(pageId)
+        if(pageId <= 0L) throw StorageEngineException.InvalidPageIdException(pageId)
         freeSpaceManager.addFreePageID(pageId)
         bufferPoolManager.flushPage(pageId)
         bufferPoolManager.deletePage(pageId)

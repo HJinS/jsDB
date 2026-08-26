@@ -1,6 +1,6 @@
 package storageEngine.lru
 
-import storageEngine.exception.LRUException
+import storageEngine.exception.StorageEngineException
 
 
 /**
@@ -112,10 +112,10 @@ class GenerationalList(
      * 보정은 필요 없다 - 그 결과가 곧바로 [markAllAsYoung]에 덮어써질 것이기 때문.
      *
      * @return 리스트에서 제거된, evict 대상 노드.
-     * @throws LRUException.LRUEvictException 리스트가 비어 evict할 노드가 없을 때.
+     * @throws StorageEngineException.LRUEvictException 리스트가 비어 evict할 노드가 없을 때.
      * */
     fun removeOldest(): LRUNode {
-        val node = linkedList.removeLast() ?: throw LRUException.LRUEvictException(capacity, youngCount, oldCount)
+        val node = linkedList.removeLast() ?: throw StorageEngineException.LRUEvictException(capacity, youngCount, oldCount)
         if(node.isOld) oldCount-- else youngCount--
         size --
         if(!convertToPlainLruIfNeeded() && midPoint == node) midPoint = null

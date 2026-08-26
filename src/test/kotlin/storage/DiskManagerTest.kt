@@ -6,7 +6,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import storageEngine.DiskManager
-import storageEngine.exception.DiskManagerException
+import storageEngine.exception.StorageEngineException
 import java.io.File
 import java.nio.ByteBuffer
 
@@ -30,7 +30,7 @@ class DiskManagerTest: BehaviorSpec({
         `when`("read page from an empty disk"){
             val buffer = ByteBuffer.allocate(PAGE_SIZE)
             then("should throw an InvalidReadOffsetException"){
-                shouldThrow<DiskManagerException.InvalidReadOffsetException> { diskManager.readPage(0, buffer) }
+                shouldThrow<StorageEngineException.InvalidReadOffsetException> { diskManager.readPage(0, buffer) }
             }
         }
 
@@ -47,7 +47,7 @@ class DiskManagerTest: BehaviorSpec({
         `when`("read page 1 from empty database file"){
             val buffer = ByteBuffer.allocate(PAGE_SIZE)
             then("should throw an InvalidReadOffsetException"){
-                shouldThrow<DiskManagerException.InvalidReadOffsetException> { diskManager.readPage(1, buffer) }
+                shouldThrow<StorageEngineException.InvalidReadOffsetException> { diskManager.readPage(1, buffer) }
             }
         }
         `when`("write data"){

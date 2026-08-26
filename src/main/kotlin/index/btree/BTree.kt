@@ -6,8 +6,6 @@ import index.btree.node.InternalNode
 import index.btree.node.LeafNode
 import index.btree.node.Node
 import index.exception.IndexException
-import index.exception.NodeException
-import index.exception.IllegalLatchStateException
 import index.serializer.KeySerializer
 import index.serializer.PageIDSerializer
 import index.serializer.ValueSerializer
@@ -16,7 +14,7 @@ import storageEngine.util.LockMode
 import storageEngine.page.PageLock
 
 import storageEngine.StorageManager
-import storageEngine.exception.SlottedPageException
+import storageEngine.exception.StorageEngineException
 import storageEngine.page.SlottedPage
 import storageEngine.util.PageType
 import java.util.Arrays
@@ -45,10 +43,10 @@ class BTree<K, V> (
     private val storageManager: StorageManager,
     private val keySerializer: KeySerializer<K>,
     private val valueSerializer: ValueSerializer<V>,
-    private val indexConfig: IndexConfig
+    private val indexConfig: IndexConfig,
+    private var rootPageId: Long,
+    private val onRootChanged: ((Long) -> Unit)? = null,
 ){
-    private var rootPageId: Long = -1
-
     companion object{
         private val pageIDSerializer: PageIDSerializer = PageIDSerializer()
     }
@@ -81,7 +79,7 @@ class BTree<K, V> (
             traceNode.clear()
         } else {
             val writeLock = storageManager.newPage(PageType.LEAF_NODE, lockManager.lockMode)
-            rootPageId = writeLock.pageId
+            changeRootPageId(writeLock.pageId)
             lockManager.push(writeLock)
 
             writeLock.asWriteView { buffer ->
@@ -115,7 +113,7 @@ class BTree<K, V> (
         if(isExist){
             var isUnderflow = false
             val leafLock = lockManager.last
-            if(leafNodePageId != leafLock.pageId) throw IllegalLatchStateException.InvalidTraceObjectError(leafNodePageId)
+            if(leafNodePageId != leafLock.pageId) throw IndexException.InvalidTraceObjectError(leafNodePageId)
             leafLock.asWriteView { buffer ->
                 val page = SlottedPage(indexConfig, leafNodePageId, buffer)
                 val node = Node.from(indexConfig, page, keySerializer)
@@ -157,7 +155,7 @@ class BTree<K, V> (
         var isUnderflow = false
         if(isExist){
             val leafLock = lockManager.last
-            if (leafNodePageId != leafLock.pageId) throw IllegalLatchStateException.InvalidTraceObjectError(leafNodePageId)
+            if (leafNodePageId != leafLock.pageId) throw IndexException.InvalidTraceObjectError(leafNodePageId)
             leafLock.asWriteView { buffer ->
                 val page = SlottedPage(indexConfig, leafNodePageId, buffer)
                 val node = Node.from(indexConfig, page, keySerializer)
@@ -301,8 +299,8 @@ class BTree<K, V> (
                     parentLock.asWriteView { parentBuffer ->
                         val parentPage = SlottedPage(indexConfig, nextTrace.first, parentBuffer)
                         val parentNode = Node.from(indexConfig, parentPage, keySerializer) as InternalNode
-                        val leftSiblingPageId = try{ parentNode.childPageId(keyIdx-1) } catch (_: SlottedPageException.SlotOutOfBoundException){ null }
-                        val rightSiblingPageId = try{ parentNode.childPageId(keyIdx+1) } catch (_: SlottedPageException.SlotOutOfBoundException){ null }
+                        val leftSiblingPageId = try{ parentNode.childPageId(keyIdx-1) } catch (_: StorageEngineException.SlotOutOfBoundException){ null }
+                        val rightSiblingPageId = try{ parentNode.childPageId(keyIdx+1) } catch (_: StorageEngineException.SlotOutOfBoundException){ null }
                         val siblingPageIds = listOf(leftSiblingPageId, rightSiblingPageId)
                         val siblingLocks = mutableListOf<PageLock>()
                         for(siblingId in siblingPageIds){
@@ -370,7 +368,7 @@ class BTree<K, V> (
 
             }
             if(needChangeRoot && newRootId != null){
-                rootPageId = newRootId
+                changeRootPageId(newRootId)
                 lockManager.closeAndRemoveLock(currentLock)
                 storageManager.deletePage(currentPageId)
                 // 트리의 메타데이터(rootPageId) 를 디스크에 써주는 내용 추가해야함
@@ -395,7 +393,7 @@ class BTree<K, V> (
         while(traceNode.isNotEmpty() && continueLoop){
             val (currentPageId, currentSlotIdx, currentPageLock) = try {traceNode.pop()} catch (e: EmptyStackException) { throw IndexException.InvalidTraceStackException(name, targetTable, e) }
             var newPageId: Long = -1L
-            if(currentPageLock.pageId != currentPageId) throw IllegalLatchStateException.InvalidTraceObjectError(currentPageId)
+            if(currentPageLock.pageId != currentPageId) throw IndexException.InvalidTraceObjectError(currentPageId)
 
             currentPageLock.asWriteView { buffer ->
                 val page = SlottedPage(indexConfig, currentPageId, buffer)
@@ -434,7 +432,7 @@ class BTree<K, V> (
                             nodeSplitData
                         }
                     }
-                    else -> throw NodeException.InvalidNodeTypeException(node.page.type)
+                    else -> throw IndexException.InvalidNodeTypeException(node.page.type)
                 }
                 if(traceNode.isEmpty()){
                     val newLock = storageManager.newPage(PageType.INTERNAL_NODE, LockMode.WRITE)
@@ -445,7 +443,7 @@ class BTree<K, V> (
                         val newRootNode = Node.from(indexConfig, newRootPage, keySerializer) as InternalNode
                         newRootPage.leftMostChildPageId = currentPageId
                         newRootNode.insert(nodeSplitData.promotionKey, pageIDSerializer.serialize(newPageId))
-                        rootPageId = newRootPageId
+                        changeRootPageId(newRootPageId)
                     }
                 } else {
                     val parentPageId = traceNode.peek().first
@@ -541,7 +539,7 @@ class BTree<K, V> (
         }
         lockManager.close()
         traceNode.clear()
-        return value?.let { valueSerializer.deserialize(it) }
+        return value?.let { valueSerializer.deserialize(it).first }
     }
 
     /**
@@ -566,7 +564,7 @@ class BTree<K, V> (
                 val values = currentNode.valueView
                 for(idx in keys.indices){
                     val key: K = keySerializer.deserialize(keys[idx])
-                    val value: V = valueSerializer.deserialize(values[idx])
+                    val value: V = valueSerializer.deserialize(values[idx]).first
                     result += key to value
                 }
                 page.rightSiblingPageId
@@ -613,6 +611,11 @@ class BTree<K, V> (
             if(isLeaf) break
         }
         return pageIdCursor
+    }
+
+    private fun changeRootPageId(newRootPageId: Long){
+        rootPageId = newRootPageId
+        onRootChanged?.invoke(newRootPageId)
     }
 
     /**

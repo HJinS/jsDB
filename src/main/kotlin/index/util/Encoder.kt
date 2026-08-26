@@ -8,7 +8,7 @@ import java.util.UUID
 import kotlin.experimental.inv
 import kotlin.experimental.xor
 import kotlin.text.toByteArray
-import index.exception.SerializerException
+import index.exception.IndexException
 
 
 /**
@@ -64,7 +64,7 @@ fun decodeVarInt(bytes: ByteArray, offset: Int = 0): Pair<Int, Int> {
     while (true) {
         // 배열 범위를 벗어나는지 확인
         if (pos >= bytes.size) {
-            throw SerializerException.DecodeException.PositionOutOfBoundsException(pos, bytes.size)
+            throw IndexException.PositionOutOfBoundsException(pos, bytes.size)
         }
 
         val byte = bytes[pos].toInt() and 0xFF
@@ -81,7 +81,7 @@ fun decodeVarInt(bytes: ByteArray, offset: Int = 0): Pair<Int, Int> {
 
         // 32비트 Int를 넘어서는 과도한 데이터 방지
         if (shift >= 32) {
-            throw SerializerException.DecodeException.VarIntTooLongException()
+            throw IndexException.VarIntTooLongException()
         }
     }
     return result to (pos - offset)
@@ -270,7 +270,7 @@ fun ByteArray.decodeSortableBoolean(): Boolean {
 
 fun ByteArray.decodeSortableUUID(): UUID{
     val unEscaped = unescapeZeroBytes(this)
-    if(unEscaped.size != 16) throw SerializerException.DecodeException.InvalidUUIDLengthException(unEscaped.size)
+    if(unEscaped.size != 16) throw IndexException.InvalidUUIDLengthException(unEscaped.size)
 
     val byteBuffer = ByteBuffer.wrap(unEscaped).order(ByteOrder.BIG_ENDIAN)
     return UUID(byteBuffer.long, byteBuffer.long)
