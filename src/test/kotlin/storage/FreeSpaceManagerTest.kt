@@ -5,7 +5,7 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
 import storageEngine.BufferPoolManager
-import storageEngine.DatabaseInitializer
+import storageEngine.MetaPageManager
 import storageEngine.DiskManager
 import storageEngine.FreeSpaceManager
 import storageEngine.lru.FrameNodePolicy
@@ -14,10 +14,10 @@ class FreeSpaceManagerTest: BehaviorSpec({
     given("an empty free space manager"){
         val replacer = FrameNodePolicy(config.storageConfig.midPointLruConfig)
         val bufferPoolManager = BufferPoolManager(diskManager, replacer, config.indexConfig, 100)
-        val databaseInitializer = DatabaseInitializer(bufferPoolManager)
+        val metaPageManager = MetaPageManager(bufferPoolManager)
         val freeSpaceManager = FreeSpaceManager(bufferPoolManager)
         val dummyPageIdsCreated = mutableListOf<Long>()
-        databaseInitializer.initMetaPage()
+        metaPageManager.initMetaPage()
          repeat(10){
              dummyPageIdsCreated.addLast(freeSpaceManager.getFreePageID())
         }

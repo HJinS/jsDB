@@ -12,11 +12,11 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import storageEngine.BufferPoolManager
-import storageEngine.DatabaseInitializer
+import storageEngine.MetaPageManager
 import storageEngine.DiskManager
 import storageEngine.FreeSpaceManager
 import storageEngine.StorageManager
-import storageEngine.exception.StorageManagerException
+import storageEngine.exception.StorageEngineException
 import storageEngine.lru.FrameNodePolicy
 import storageEngine.page.SlottedPage
 import storageEngine.util.LockMode
@@ -31,7 +31,7 @@ class StorageManagerTest: BehaviorSpec({
     }
 
     given("storage manager"){
-        databaseInitializer.initMetaPage()
+        metaPageManager.initMetaPage()
         `when`("get new page with ${PageType.LEAF_NODE} and ${LockMode.READ}"){
             val expectedNewPageId = 1L
             val newPageLock = storageManager.newPage(PageType.LEAF_NODE, LockMode.READ)
@@ -50,7 +50,7 @@ class StorageManagerTest: BehaviorSpec({
         }
         `when`("fetch pageId 0L"){
             then("should throw InvalidPageIdException"){
-                shouldThrow<StorageManagerException.InvalidPageIdException> { storageManager.fetchPage(0L, LockMode.READ) }
+                shouldThrow<StorageEngineException.InvalidPageIdException> { storageManager.fetchPage(0L, LockMode.READ) }
             }
         }
         `when`("fetch pageId 1L"){
@@ -67,7 +67,7 @@ class StorageManagerTest: BehaviorSpec({
         }
         `when`("delete page 0L"){
             then("should throw InvalidPageIdException"){
-                shouldThrow<StorageManagerException.InvalidPageIdException> { storageManager.deletePage(0L) }
+                shouldThrow<StorageEngineException.InvalidPageIdException> { storageManager.deletePage(0L) }
             }
         }
 
@@ -116,6 +116,6 @@ class StorageManagerTest: BehaviorSpec({
         private val bufferPoolManager = BufferPoolManager(diskManager, replacer, config.indexConfig, config.storageConfig.poolSize)
         private val freeSpaceManager = FreeSpaceManager(bufferPoolManager)
         private val storageManager = StorageManager(freeSpaceManager, bufferPoolManager, config.indexConfig)
-        private val databaseInitializer = DatabaseInitializer(bufferPoolManager)
+        private val metaPageManager = MetaPageManager(bufferPoolManager)
     }
 }
