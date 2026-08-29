@@ -14,4 +14,11 @@ sealed class CatalogException(message: String?, cause: Throwable? = null): Runti
     ): CatalogException(
         "Index must have at least one key column.", cause
     )
+
+    class IndexNotFound(
+        indexName: String, cause: Throwable? = null
+    ): CatalogException(
+        "index [$indexName] not found.", cause
+    )
+
 }

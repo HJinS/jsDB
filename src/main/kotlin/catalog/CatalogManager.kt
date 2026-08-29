@@ -14,6 +14,7 @@ import index.serializer.MultiColumnKeySerializer
 import index.util.ColumnType
 import index.util.IndexColumn
 import storageEngine.StorageManager
+import util.requireOrThrow
 
 class CatalogManager(
     metaPageData: MetaPageData,
@@ -104,5 +105,18 @@ class CatalogManager(
             listOf(indexId, indexName, tableId, rootPageId, isPrimary, isUnique, keyColumns.encodeKeyColumns())
         )
         return IndexRow(indexId, indexName, tableId, rootPageId, isPrimary, isUnique, keyColumns)
+    }
+
+    fun updateIndexRootPageId(indexName: String, rootPageId: Long){
+        val value = indexCatalog.search(listOf(indexName))
+        requireOrThrow(value != null){ CatalogException.IndexNotFound(indexName) }
+        val indexRow = IndexRaw(value).toRow()
+        val newRow = indexRow.copy(rootPageId = rootPageId)
+        val rowList = newRow.toList()
+        indexCatalog.update(
+            listOf(indexName),
+            listOf(indexName),
+            rowList
+        )
     }
 }

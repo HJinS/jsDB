@@ -65,7 +65,10 @@ class DataBase(private val config: SimpleConfig) {
             MultiColumnKeySerializer(keySchema),
             BinaryRowSerializer(rowSchema),
             config.indexConfig,
--1L
+-1L,
+            onRootChanged = { newRoot ->
+                catalogManager.updateIndexRootPageId(indexName, newRoot)
+            }
         )
     }
 

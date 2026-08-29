@@ -57,3 +57,6 @@ fun IndexRaw.toRow(): IndexRow {
         throw CatalogException.CorruptedCatalogException(CatalogBoot.COLUMN_CATALOG_NAME, e)
     }
 }
+
+fun IndexRow.toList(): List<Any?>
+    = listOf(indexId, indexName, tableId, rootPageId, isPrimary, isUnique, keyColumns)
