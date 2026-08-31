@@ -15,7 +15,7 @@ import io.kotest.property.arbitrary.*
 import kotlinx.serialization.Serializable
 import storageEngine.page.SlottedPage
 import storageEngine.page.Page
-import storageEngine.util.PageHeaderOffset
+import util.PageHeaderOffset
 import java.lang.reflect.Field
 import java.nio.ByteBuffer
 import java.time.Instant

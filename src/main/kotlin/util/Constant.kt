@@ -1,4 +1,4 @@
-package storageEngine.util
+package util
 
 enum class PageType(val value: Byte){
     EMPTY(0),

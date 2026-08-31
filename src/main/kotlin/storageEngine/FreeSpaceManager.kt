@@ -1,10 +1,10 @@
 package storageEngine
 
-import storageEngine.util.INVALID_PAGE_ID
-import storageEngine.util.META_PAGE_ID
-import storageEngine.util.MetaPageOffset
-import storageEngine.util.PageHeaderOffset
-import storageEngine.util.LockMode
+import util.INVALID_PAGE_ID
+import util.META_PAGE_ID
+import util.MetaPageOffset
+import util.PageHeaderOffset
+import util.LockMode
 
 class FreeSpaceManager (
     private val bufferPoolManager: BufferPoolManager

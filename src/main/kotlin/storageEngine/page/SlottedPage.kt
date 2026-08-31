@@ -4,7 +4,7 @@ import config.IndexConfig
 import index.util.decodeVarInt
 import index.util.encodeVarInt
 import storageEngine.exception.StorageEngineException
-import storageEngine.util.PageHeaderOffset
+import util.PageHeaderOffset
 import java.nio.ByteBuffer
 import java.util.Arrays
 

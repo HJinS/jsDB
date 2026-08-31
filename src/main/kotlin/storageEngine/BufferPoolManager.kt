@@ -4,7 +4,7 @@ import config.IndexConfig
 import storageEngine.lru.FrameNodePolicy
 import storageEngine.page.Frame
 import storageEngine.page.PageLock
-import storageEngine.util.LockMode
+import util.LockMode
 import storageEngine.exception.StorageEngineException
 import java.util.concurrent.locks.ReentrantLock
 

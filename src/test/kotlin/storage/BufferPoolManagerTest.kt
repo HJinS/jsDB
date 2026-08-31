@@ -12,7 +12,7 @@ import storageEngine.BufferPoolManager
 import storageEngine.DiskManager
 import storageEngine.exception.StorageEngineException
 import storageEngine.lru.FrameNodePolicy
-import storageEngine.util.LockMode
+import util.LockMode
 import java.util.concurrent.CountDownLatch
 
 class BufferPoolManagerTest: BehaviorSpec({

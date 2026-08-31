@@ -2,8 +2,8 @@ package storageEngine
 
 import storageEngine.page.PageLock
 import storageEngine.page.SlottedPage
-import storageEngine.util.PageType
-import storageEngine.util.LockMode
+import util.PageType
+import util.LockMode
 import storageEngine.exception.StorageEngineException
 import config.IndexConfig
 

@@ -1,7 +1,7 @@
 package storageEngine.exception
 
-import storageEngine.util.MetaPageOffset
-import storageEngine.util.PageType
+import util.MetaPageOffset
+import util.PageType
 
 sealed class StorageEngineException(message: String?, cause: Throwable? = null): RuntimeException(message, cause) {
     // DiskManager

@@ -1,6 +1,6 @@
 package index.exception
 
-import storageEngine.util.PageType
+import util.PageType
 
 sealed class IndexException(message: String?, cause: Throwable? = null): RuntimeException(message, cause) {
     class InvalidTraceStackException(

@@ -19,8 +19,8 @@ import storageEngine.StorageManager
 import storageEngine.exception.StorageEngineException
 import storageEngine.lru.FrameNodePolicy
 import storageEngine.page.SlottedPage
-import storageEngine.util.LockMode
-import storageEngine.util.PageType
+import util.LockMode
+import util.PageType
 import java.io.File
 
 class StorageManagerTest: BehaviorSpec({

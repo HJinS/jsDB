@@ -1,8 +1,8 @@
 package storageEngine.page
 
 import config.IndexConfig
-import storageEngine.util.PageHeaderOffset
-import storageEngine.util.PageType
+import util.PageHeaderOffset
+import util.PageType
 import java.nio.ByteBuffer
 
 

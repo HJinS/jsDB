@@ -10,13 +10,12 @@ import index.serializer.KeySerializer
 import index.serializer.PageIDSerializer
 import index.serializer.ValueSerializer
 import index.util.BTreeOptMode
-import storageEngine.util.LockMode
+import util.LockMode
 import storageEngine.page.PageLock
-
 import storageEngine.StorageManager
 import storageEngine.exception.StorageEngineException
 import storageEngine.page.SlottedPage
-import storageEngine.util.PageType
+import util.PageType
 import java.util.Arrays
 import java.util.EmptyStackException
 import java.util.Stack

@@ -6,7 +6,7 @@ import index.serializer.KeySerializer
 import index.util.BTreeOptMode
 import storageEngine.exception.StorageEngineException
 import storageEngine.page.SlottedPage
-import storageEngine.util.PageType
+import util.PageType
 import kotlin.math.floor
 
 abstract class Node<K>(

@@ -13,7 +13,8 @@ import storageEngine.DiskManager
 import storageEngine.FreeSpaceManager
 import storageEngine.StorageManager
 import storageEngine.lru.FrameNodePolicy
-import storageEngine.util.MetaPageOffset
+import util.MetaPageOffset
+import util.PRIMARY_KEY_IDX_NAME_PREFIX
 import util.requireOrThrow
 import kotlin.String
 

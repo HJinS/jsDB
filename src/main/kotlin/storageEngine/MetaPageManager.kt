@@ -2,11 +2,11 @@ package storageEngine
 
 import catalog.MetaPageData
 import storageEngine.exception.StorageEngineException
-import storageEngine.util.INVALID_PAGE_ID
-import storageEngine.util.LockMode
-import storageEngine.util.META_PAGE_ID
-import storageEngine.util.MetaPageOffset
-import storageEngine.util.START_PAGE_ID
+import util.INVALID_PAGE_ID
+import util.LockMode
+import util.META_PAGE_ID
+import util.MetaPageOffset
+import util.START_PAGE_ID
 import util.requireOrThrow
 
 class MetaPageManager(
