@@ -12,4 +12,8 @@ sealed class DatabaseException(message: String?, cause: Throwable? = null): Runt
     class ColumnAlreadyExistsException(
         tableId: Long, columnName: String, cause: Throwable? = null
     ): DatabaseException("Column '$columnName' already exists on tableID: $tableId with a different schema.", cause)
+
+    class PrimaryIndexNotYetCreatedException(
+        tableName: String, cause: Throwable? = null
+    ): DatabaseException("Table [$tableName] doesn't have primary index yet.", cause)
 }

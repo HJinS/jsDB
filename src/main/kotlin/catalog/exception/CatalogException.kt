@@ -21,4 +21,16 @@ sealed class CatalogException(message: String?, cause: Throwable? = null): Runti
         "index [$indexName] not found.", cause
     )
 
+    class TableCatalogNotFound(
+        tableName: String, cause: Throwable? = null
+    ): CatalogException(
+        "table catalog [$tableName] not found.", cause
+    )
+
+    class TableRowEmpty(
+        tableName: String, cause: Throwable? = null
+    ): CatalogException(
+        "table [$tableName] row is empty.", cause
+    )
+
 }

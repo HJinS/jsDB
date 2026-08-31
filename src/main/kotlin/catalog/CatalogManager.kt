@@ -107,6 +107,18 @@ class CatalogManager(
         return IndexRow(indexId, indexName, tableName, rootPageId, isPrimary, isUnique, keyColumns)
     }
 
+    fun updatePrimaryIndexName(tableName: String, primaryIndexName: String){
+        val value = tableCatalog.search(listOf(tableName))
+            ?: throw CatalogException.TableCatalogNotFound(tableName)
+        val tableRow = TableRaw(value).toRow()
+        val newTableRow = tableRow.copy(primaryIndexName = primaryIndexName)
+        tableCatalog.update(
+            listOf(tableName),
+            listOf(tableName),
+            newTableRow.toList()
+        )
+    }
+
     fun updateIndexRootPageId(indexName: String, rootPageId: Long){
         val value = indexCatalog.search(listOf(indexName))
         requireOrThrow(value != null){ CatalogException.IndexNotFound(indexName) }
@@ -118,5 +130,13 @@ class CatalogManager(
             listOf(indexName),
             rowList
         )
+    }
+
+    fun getColumns(tableId: Long): List<ColumnRow>{
+        return columnCatalog.traverse().filter {
+            it.first[0] == tableId
+        }.map {
+            ColumnRaw(it.second).toRow()
+        }
     }
 }

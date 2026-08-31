@@ -46,3 +46,4 @@ const val START_PAGE_ID = 1L
 
 enum class LockMode {WRITE, READ}
 
+const val PRIMARY_KEY_IDX_NAME_PREFIX = "%s_PK_IDX"

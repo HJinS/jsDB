@@ -51,21 +51,20 @@ class DataBase(private val config: SimpleConfig) {
         primaryIdxName: String?,
         tableName: String,
         isPrimary: Boolean,
-        targetTable: String,
         isUnique: Boolean,
         keySchema: IndexKeySchema,
-        rowSchema: RowSchema,
     ): BTree<List<Any?>, List<Any?>> {
         val resolved = catalogManager.resolveIndex(indexName)
         requireOrThrow(resolved == null) { DatabaseException.IndexAlreadyExistsException(indexName) }
         val indexId = metaPageManager.getNextId(MetaPageOffset.NEXT_INDEX_ID)
-        catalogManager.registerNewIndex(indexId, indexName, tableId, null, isPrimary, isUnique, keySchema.indexColumns)
+        val valueSchema = resolveIndexValueSchema(primaryIdxName, tableName, isPrimary)
+        catalogManager.registerNewIndex(indexId, indexName, tableName, null, isPrimary, isUnique, keySchema.indexColumns)
         return BTree(
             indexName,
-            targetTable,
+            tableName,
             storageManager,
             MultiColumnKeySerializer(keySchema),
-            BinaryRowSerializer(rowSchema),
+            BinaryRowSerializer(valueSchema),
             config.indexConfig,
 -1L,
             onRootChanged = { newRoot ->
@@ -74,7 +73,31 @@ class DataBase(private val config: SimpleConfig) {
         )
     }
 
-    fun createTable(tableName: String, primaryIndexKeySchema: IndexKeySchema, columns: RowSchema){
+    fun loadIndex(indexName: String): BTree<List<Any?>, List<Any?>> {
+        val indexData = catalogManager.resolveIndex(indexName)
+        requireOrThrow(indexData != null) { CatalogException.IndexNotFound(indexName) }
+        val targetTableData = catalogManager.resolveTable(indexData.tableName)
+        requireOrThrow(targetTableData != null){ CatalogException.TableCatalogNotFound(indexData.tableName) }
+        val valueSchema = resolveIndexValueSchema(
+            targetTableData.primaryIndexName,
+            indexData.tableName,
+            indexName == targetTableData.primaryIndexName,
+        )
+        return BTree(
+            indexName,
+            indexData.tableName,
+            storageManager,
+            MultiColumnKeySerializer(IndexKeySchema(indexData.keyColumns)),
+            BinaryRowSerializer(valueSchema),
+            config.indexConfig,
+            -1L,
+            onRootChanged = { newRoot ->
+                catalogManager.updateIndexRootPageId(indexName, newRoot)
+            }
+        )
+    }
+
+    fun createTable(tableName: String, primaryIdxName: String?, primaryIndexKeySchema: IndexKeySchema, columns: RowSchema){
         val resolved = catalogManager.resolveTable(tableName)
         requireOrThrow(resolved == null) { DatabaseException.TableAlreadyExistsException(tableName) }
         val tableId = metaPageManager.getNextId(MetaPageOffset.NEXT_TABLE_ID)
@@ -82,20 +105,46 @@ class DataBase(private val config: SimpleConfig) {
         for((idx, column) in columns.rowColumns.withIndex()){
             createColumn(tableRow.tableId, idx, column.name, column.type.toString(), column.nullable)
         }
+        val primaryIdxName = primaryIdxName ?: PRIMARY_KEY_IDX_NAME_PREFIX.format(tableName)
         createIndex(
-            "${tableName}_PK_IDX",
-            tableRow.tableId,
-            true,
+            primaryIdxName,
+            null,
             tableRow.tableName,
-            true,
-            primaryIndexKeySchema,
-            columns
+            isPrimary = true,
+            isUnique = true,
+            keySchema = primaryIndexKeySchema
         )
+        catalogManager.updatePrimaryIndexName(tableName, primaryIdxName)
+    }
+
+    fun loadTable(tableName: String): BTree<List<Any?>, List<Any?>> {
+        val tableData = catalogManager.resolveTable(tableName) ?: throw CatalogException.TableCatalogNotFound(tableName)
+        val primaryIdxName = tableData.primaryIndexName ?: throw DatabaseException.PrimaryIndexNotYetCreatedException(tableName)
+        return loadIndex(primaryIdxName)
     }
 
     fun createColumn(tableId: Long, ordinal: Int, name: String, type: String, nullable: Boolean): ColumnRow{
         val resolved = catalogManager.resolveColumn(tableId, ordinal)
         requireOrThrow(resolved == null) { DatabaseException.ColumnAlreadyExistsException(tableId, name) }
         return catalogManager.registerNewColumn(tableId, ordinal, name, type, nullable)
+    }
+
+    private fun resolveIndexValueSchema(
+        primaryIdxName: String?,
+        tableName: String,
+        isPrimary: Boolean
+    ): RowSchema{
+        return if (isPrimary) {
+            val tableData = catalogManager.resolveTable(tableName)
+            requireOrThrow(tableData != null) { CatalogException.TableCatalogNotFound(tableName) }
+            val columns = catalogManager.getColumns(tableData.tableId)
+            requireOrThrow(columns.isNotEmpty()) { CatalogException.TableRowEmpty(tableName) }
+            RowSchema(columns.sortedBy { it.ordinal }.map { it.toRowColumn()})
+        } else {
+            val primaryIdxName = primaryIdxName ?: PRIMARY_KEY_IDX_NAME_PREFIX.format(tableName)
+            val primaryIndexRow = catalogManager.resolveIndex(primaryIdxName)
+                ?: throw CatalogException.IndexNotFound(primaryIdxName)
+            IndexKeySchema(primaryIndexRow.keyColumns).toPrimaryRowSchema()
+        }
     }
 }
