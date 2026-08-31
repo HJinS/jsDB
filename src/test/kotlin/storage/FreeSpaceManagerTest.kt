@@ -17,7 +17,7 @@ class FreeSpaceManagerTest: BehaviorSpec({
         val metaPageManager = MetaPageManager(bufferPoolManager)
         val freeSpaceManager = FreeSpaceManager(bufferPoolManager)
         val dummyPageIdsCreated = mutableListOf<Long>()
-        metaPageManager.initMetaPage()
+        metaPageManager.initialize()
          repeat(10){
              dummyPageIdsCreated.addLast(freeSpaceManager.getFreePageID())
         }

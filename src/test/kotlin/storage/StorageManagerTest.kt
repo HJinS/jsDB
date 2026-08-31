@@ -31,7 +31,7 @@ class StorageManagerTest: BehaviorSpec({
     }
 
     given("storage manager"){
-        metaPageManager.initMetaPage()
+        metaPageManager.initialize()
         `when`("get new page with ${PageType.LEAF_NODE} and ${LockMode.READ}"){
             val expectedNewPageId = 1L
             val newPageLock = storageManager.newPage(PageType.LEAF_NODE, LockMode.READ)

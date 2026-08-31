@@ -1,6 +1,5 @@
 package index.btree
 
-import DataBase
 import config.SimpleConfig
 import config.StorageConfig
 import helper.serializer.LocalDateSerializerHelper
@@ -13,6 +12,12 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.serializer
+import storageEngine.BufferPoolManager
+import storageEngine.DiskManager
+import storageEngine.FreeSpaceManager
+import storageEngine.MetaPageManager
+import storageEngine.StorageManager
+import storageEngine.lru.FrameNodePolicy
 import java.time.LocalDate
 
 class BTreeTest: BehaviorSpec({
@@ -748,13 +753,21 @@ class BTreeTest: BehaviorSpec({
             val config = SimpleConfig(
                 StorageConfig(dbPath = "test-btree.db", poolSize = 100)
             )
-            val db = DataBase(config)
-            db.initialize()
-            return db.createIndex(
+            val diskManager = DiskManager(config.storageConfig, config.indexConfig)
+            val lruPolicy = FrameNodePolicy(config.storageConfig.midPointLruConfig)
+            val bufferPoolManager = BufferPoolManager(diskManager, lruPolicy, config.indexConfig, config.storageConfig.poolSize)
+            val metaPageManager = MetaPageManager(bufferPoolManager)
+            val freeSpaceManager = FreeSpaceManager(bufferPoolManager)
+            val storageManager = StorageManager(freeSpaceManager, bufferPoolManager, config.indexConfig)
+            metaPageManager.initialize()
+            return BTree(
                 "test",
                 "test table",
+                storageManager,
                 MultiColumnKeySerializer(schema),
                 RowDataSerializerHelper(serializer<T>()),
+                config.indexConfig,
+                -1L,
             )
         }
     }
