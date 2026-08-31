@@ -5,7 +5,7 @@ import index.util.IndexColumn
 data class IndexRow(
     val indexId: Long,
     val indexName: String,
-    val tableId: Long,
+    val tableName: String,
     val rootPageId: Long?,
     val isPrimary: Boolean,
     val isUnique: Boolean,

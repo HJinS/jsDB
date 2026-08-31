@@ -83,18 +83,18 @@ class CatalogManager(
         return ColumnRow(tableId, ordinal, name, columnType, nullable)
     }
 
-    fun registerNewTable(tableId: Long, tableName: String, primaryIndexId: Long?): TableRow{
+    fun registerNewTable(tableId: Long, tableName: String, primaryIndexName: String?): TableRow{
         tableCatalog.insert(
             listOf(tableName),
-            listOf(tableId, tableName, primaryIndexId)
+            listOf(tableId, tableName, primaryIndexName)
         )
-        return TableRow(tableId, tableName, primaryIndexId)
+        return TableRow(tableId, tableName, primaryIndexName)
     }
 
     fun registerNewIndex(
         indexId: Long,
         indexName: String,
-        tableId: Long,
+        tableName: String,
         rootPageId: Long?,
         isPrimary: Boolean,
         isUnique: Boolean,
@@ -102,9 +102,9 @@ class CatalogManager(
     ): IndexRow{
         indexCatalog.insert(
             listOf(indexName),
-            listOf(indexId, indexName, tableId, rootPageId, isPrimary, isUnique, keyColumns.encodeKeyColumns())
+            listOf(indexId, indexName, tableName, rootPageId, isPrimary, isUnique, keyColumns.encodeKeyColumns())
         )
-        return IndexRow(indexId, indexName, tableId, rootPageId, isPrimary, isUnique, keyColumns)
+        return IndexRow(indexId, indexName, tableName, rootPageId, isPrimary, isUnique, keyColumns)
     }
 
     fun updateIndexRootPageId(indexName: String, rootPageId: Long){

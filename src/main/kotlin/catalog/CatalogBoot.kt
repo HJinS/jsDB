@@ -11,7 +11,7 @@ object CatalogBoot {
         listOf(
             RowColumn("tableId", ColumnType.LONG, false),
             RowColumn("tableName", ColumnType.STRING, false),
-            RowColumn("primaryIndexId", ColumnType.LONG, true)
+            RowColumn("primaryIndexName", ColumnType.STRING, true)
         )
     )
     val TABLE_CATALOG_KEY = IndexKeySchema(
@@ -44,7 +44,7 @@ object CatalogBoot {
         listOf(
             RowColumn("indexId", ColumnType.LONG, false),
             RowColumn("indexName", ColumnType.STRING, false),
-            RowColumn("tableId", ColumnType.LONG, false),
+            RowColumn("tableName", ColumnType.STRING, false),
             RowColumn("rootPageId", ColumnType.LONG, true),
             RowColumn("isPrimary", ColumnType.BOOLEAN, false),
             RowColumn("isUnique", ColumnType.BOOLEAN, false),

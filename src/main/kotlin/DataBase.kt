@@ -48,7 +48,8 @@ class DataBase(private val config: SimpleConfig) {
 
     fun createIndex(
         indexName: String,
-        tableId: Long,
+        primaryIdxName: String?,
+        tableName: String,
         isPrimary: Boolean,
         targetTable: String,
         isUnique: Boolean,

@@ -31,12 +31,12 @@ fun TableRaw.toRow(): TableRow {
         TableRow(
             tableId = values[0] as Long,
             tableName = values[1] as String,
-            primaryIndexId = values[2] as Long?
+            primaryIndexName = values[2] as String?
         )
     } catch (e: IndexOutOfBoundsException){
-        throw CatalogException.CorruptedCatalogException(CatalogBoot.COLUMN_CATALOG_NAME, e)
+        throw CatalogException.CorruptedCatalogException(CatalogBoot.TABLE_CATALOG_NAME, e)
     } catch (e: ClassCastException){
-        throw CatalogException.CorruptedCatalogException(CatalogBoot.COLUMN_CATALOG_NAME, e)
+        throw CatalogException.CorruptedCatalogException(CatalogBoot.TABLE_CATALOG_NAME, e)
     }
 }
 
@@ -45,18 +45,21 @@ fun IndexRaw.toRow(): IndexRow {
         IndexRow(
             indexId = values[0] as Long,
             indexName = values[1] as String,
-            tableId = values[2] as Long,
-            rootPageId = values[3] as Long,
+            tableName = values[2] as String,
+            rootPageId = values[3] as Long?,
             isPrimary = values[4] as Boolean,
             isUnique = values[5] as Boolean,
             keyColumns = (values[6] as ByteArray).decodeKeyColumns()
         )
     } catch (e: IndexOutOfBoundsException){
-        throw CatalogException.CorruptedCatalogException(CatalogBoot.COLUMN_CATALOG_NAME, e)
+        throw CatalogException.CorruptedCatalogException(CatalogBoot.INDEX_CATALOG_NAME, e)
     } catch (e: ClassCastException){
-        throw CatalogException.CorruptedCatalogException(CatalogBoot.COLUMN_CATALOG_NAME, e)
+        throw CatalogException.CorruptedCatalogException(CatalogBoot.INDEX_CATALOG_NAME, e)
     }
 }
 
 fun IndexRow.toList(): List<Any?>
-    = listOf(indexId, indexName, tableId, rootPageId, isPrimary, isUnique, keyColumns)
+    = listOf(indexId, indexName, tableName, rootPageId, isPrimary, isUnique, keyColumns.encodeKeyColumns())
+
+fun TableRow.toList(): List<Any?>
+    = listOf(tableId, tableName, primaryIndexName)
