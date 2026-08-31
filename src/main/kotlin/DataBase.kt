@@ -1,5 +1,6 @@
 import catalog.CatalogManager
 import catalog.data.ColumnRow
+import catalog.exception.CatalogException
 import config.SimpleConfig
 import exception.DatabaseException
 import index.btree.BTree
@@ -7,6 +8,8 @@ import index.serializer.BinaryRowSerializer
 import index.serializer.MultiColumnKeySerializer
 import index.util.IndexKeySchema
 import index.util.RowSchema
+import index.util.toPrimaryRowSchema
+import index.util.toRowColumn
 import storageEngine.BufferPoolManager
 import storageEngine.MetaPageManager
 import storageEngine.DiskManager
