@@ -19,10 +19,16 @@ import storageEngine.MetaPageManager
 import storageEngine.StorageManager
 import storageEngine.lru.FrameNodePolicy
 import util.INVALID_PAGE_ID
+import java.io.File
 import java.time.LocalDate
 
 class BTreeTest: BehaviorSpec({
     timeout = 5 * 60 * 1000L  // 5 minutes — deadlock / infinite loop guard
+
+    afterSpec {
+        diskManager.close()
+        File(config.storageConfig.dbPath).delete()
+    }
 
     given("A Tree with two ids"){
         @Serializable
@@ -750,17 +756,23 @@ class BTreeTest: BehaviorSpec({
     }
 }){
     companion object{
+        val config = SimpleConfig(
+            StorageConfig(dbPath = "test-btree.db", poolSize = 100)
+        )
+        val diskManager = DiskManager(config.storageConfig, config.indexConfig)
+        val lruPolicy = FrameNodePolicy(config.storageConfig.midPointLruConfig)
+        val bufferPoolManager = BufferPoolManager(diskManager, lruPolicy, config.indexConfig, config.storageConfig.poolSize)
+        val metaPageManager = MetaPageManager(bufferPoolManager)
+        val freeSpaceManager = FreeSpaceManager(bufferPoolManager)
+        val storageManager = StorageManager(freeSpaceManager, bufferPoolManager, config.indexConfig)
+        var metaInitialized = false
+
+
         inline fun <reified T: Any> initData(schema: IndexKeySchema): BTree<List<Any?>, T>{
-            val config = SimpleConfig(
-                StorageConfig(dbPath = "test-btree.db", poolSize = 100)
-            )
-            val diskManager = DiskManager(config.storageConfig, config.indexConfig)
-            val lruPolicy = FrameNodePolicy(config.storageConfig.midPointLruConfig)
-            val bufferPoolManager = BufferPoolManager(diskManager, lruPolicy, config.indexConfig, config.storageConfig.poolSize)
-            val metaPageManager = MetaPageManager(bufferPoolManager)
-            val freeSpaceManager = FreeSpaceManager(bufferPoolManager)
-            val storageManager = StorageManager(freeSpaceManager, bufferPoolManager, config.indexConfig)
-            metaPageManager.initialize()
+            if (!metaInitialized) {
+                metaPageManager.initialize()
+                metaInitialized = true
+            }
             return BTree(
                 "test",
                 "test table",
