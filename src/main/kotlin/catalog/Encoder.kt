@@ -25,13 +25,21 @@ fun ByteArray.decodeKeyColumns(): List<IndexColumn> {
         System.arraycopy(this, offset, decodeTarget, 0, this.size - offset)
         val (raw, consumed) = indexColumnSerializer.deserialize(decodeTarget)
         offset += consumed
-        result += IndexColumn(
-            name = raw[0] as String,
-            type = ColumnType.valueOf(raw[1] as String),
-            descending = raw[2] as Boolean,
-            localeTag = raw[3] as String?,
-            collationStrength = raw[4] as Int?,
-        )
+        try{
+            result += IndexColumn(
+                name = raw[0] as String,
+                type = ColumnType.valueOf(raw[1] as String),
+                descending = raw[2] as Boolean,
+                localeTag = raw[3] as String?,
+                collationStrength = raw[4] as Int?,
+            )
+        } catch (e: IndexOutOfBoundsException){
+            throw CatalogException.CorruptedCatalogException(CatalogBoot.COLUMN_CATALOG_NAME, e)
+        } catch (e: ClassCastException){
+            throw CatalogException.CorruptedCatalogException(CatalogBoot.COLUMN_CATALOG_NAME, e)
+        } catch (e: IllegalArgumentException){
+            throw CatalogException.CorruptedCatalogException(CatalogBoot.COLUMN_CATALOG_NAME, e)
+        }
     }
     return result
 }

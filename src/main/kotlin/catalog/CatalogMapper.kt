@@ -23,6 +23,8 @@ fun ColumnRaw.toRow(): ColumnRow {
         throw CatalogException.CorruptedCatalogException(CatalogBoot.COLUMN_CATALOG_NAME, e)
     } catch (e: ClassCastException){
         throw CatalogException.CorruptedCatalogException(CatalogBoot.COLUMN_CATALOG_NAME, e)
+    } catch (e: IllegalArgumentException){
+        throw CatalogException.CorruptedCatalogException(CatalogBoot.COLUMN_CATALOG_NAME, e)
     }
 }
 
