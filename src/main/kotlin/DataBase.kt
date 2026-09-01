@@ -16,6 +16,7 @@ import storageEngine.DiskManager
 import storageEngine.FreeSpaceManager
 import storageEngine.StorageManager
 import storageEngine.lru.FrameNodePolicy
+import util.INVALID_PAGE_ID
 import util.MetaPageOffset
 import util.PRIMARY_KEY_IDX_NAME_PREFIX
 import util.requireOrThrow
@@ -69,7 +70,7 @@ class DataBase(private val config: SimpleConfig) {
             MultiColumnKeySerializer(keySchema),
             BinaryRowSerializer(valueSchema),
             config.indexConfig,
--1L,
+            INVALID_PAGE_ID,
             onRootChanged = { newRoot ->
                 catalogManager.updateIndexRootPageId(indexName, newRoot)
             }
@@ -93,7 +94,7 @@ class DataBase(private val config: SimpleConfig) {
             MultiColumnKeySerializer(IndexKeySchema(indexData.keyColumns)),
             BinaryRowSerializer(valueSchema),
             config.indexConfig,
-            -1L,
+            INVALID_PAGE_ID,
             onRootChanged = { newRoot ->
                 catalogManager.updateIndexRootPageId(indexName, newRoot)
             }

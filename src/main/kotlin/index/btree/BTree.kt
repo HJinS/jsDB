@@ -15,6 +15,7 @@ import storageEngine.page.PageLock
 import storageEngine.StorageManager
 import storageEngine.exception.StorageEngineException
 import storageEngine.page.SlottedPage
+import util.INVALID_PAGE_ID
 import util.PageType
 import java.util.Arrays
 import java.util.EmptyStackException
@@ -66,7 +67,7 @@ class BTree<K, V> (
         val traceNode: Stack<Triple<Long, Int, PageLock>> = Stack<Triple<Long, Int, PageLock>>()
         val lockManager = LockManager(LockMode.WRITE)
 
-        if (rootPageId != -1L) {
+        if (rootPageId != INVALID_PAGE_ID) {
             val (leafNodePageId, _, _) = searchLeafNode(serializedKey, serializedValue, traceNode, lockManager, BTreeOptMode.INSERT)
             val writeLock = storageManager.fetchPage(leafNodePageId, lockManager.lockMode)
             lockManager.push(writeLock)
@@ -491,7 +492,7 @@ class BTree<K, V> (
         lockManager: LockManager,
         operationMode: BTreeOptMode
     ): Triple<Long, Int, Boolean> {
-        if(rootPageId == -1L) throw IndexException.EmptyTreeException(name, targetTable)
+        if(rootPageId == INVALID_PAGE_ID) throw IndexException.EmptyTreeException(name, targetTable)
 
         var pageIdCursor: Long = rootPageId
         val rootPageLock = storageManager.fetchPage(pageIdCursor, lockManager.lockMode)
@@ -523,7 +524,7 @@ class BTree<K, V> (
     }
 
     fun search(key: K): V?{
-        if (rootPageId == -1L) return null
+        if (rootPageId == INVALID_PAGE_ID) return null
         val serializedKey = keySerializer.serialize(key)
         val traceNode: Stack<Triple<Long, Int, PageLock>> = Stack<Triple<Long, Int, PageLock>>()
         val lockManager = LockManager(LockMode.READ)

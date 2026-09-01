@@ -71,7 +71,7 @@ class CatalogManager(
     }
 
     fun registerNewColumn(tableId: Long, ordinal: Int, name: String, type: String, nullable: Boolean): ColumnRow{
-        val columnType = try{
+        val columnType = try {
             ColumnType.valueOf(type)
         } catch (e: IllegalArgumentException){
             throw CatalogException.CorruptedCatalogException(CatalogBoot.COLUMN_CATALOG_NAME, e)

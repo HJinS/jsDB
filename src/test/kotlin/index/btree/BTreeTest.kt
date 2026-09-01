@@ -18,6 +18,7 @@ import storageEngine.FreeSpaceManager
 import storageEngine.MetaPageManager
 import storageEngine.StorageManager
 import storageEngine.lru.FrameNodePolicy
+import util.INVALID_PAGE_ID
 import java.time.LocalDate
 
 class BTreeTest: BehaviorSpec({
@@ -767,7 +768,7 @@ class BTreeTest: BehaviorSpec({
                 MultiColumnKeySerializer(schema),
                 RowDataSerializerHelper(serializer<T>()),
                 config.indexConfig,
-                -1L,
+                INVALID_PAGE_ID,
             )
         }
     }
