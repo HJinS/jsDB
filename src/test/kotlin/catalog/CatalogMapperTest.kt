@@ -143,7 +143,7 @@ class CatalogMapperTest: BehaviorSpec({
         `when`("Convert columnRaw to columnRow again"){
             val convertedRow = columnRaw.toRow()
             then("ReconvertedRow should be indexRow"){
-                convertedRow.tableID shouldBe tableId
+                convertedRow.tableId shouldBe tableId
                 convertedRow.ordinal shouldBe ordinal
                 convertedRow.name shouldBe name
                 convertedRow.type.name shouldBe type

@@ -3,7 +3,7 @@ package catalog.data
 import index.util.ColumnType
 
 data class ColumnRow(
-    val tableID: Long,
+    val tableId: Long,
     val ordinal: Int,
     val name: String,
     val type: ColumnType,

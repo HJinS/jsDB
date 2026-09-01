@@ -13,7 +13,7 @@ import kotlin.Long
 fun ColumnRaw.toRow(): ColumnRow {
     return try {
         ColumnRow(
-            tableID = values[0] as Long,
+            tableId = values[0] as Long,
             ordinal = values[1] as Int,
             name = values[2] as String,
             type = ColumnType.valueOf(values[3] as String),

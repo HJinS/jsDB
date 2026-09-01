@@ -96,7 +96,7 @@ class CatalogManagerTest: BehaviorSpec({
                 columnRow.nullable shouldBe nullable
                 columnRow.name shouldBe columnName1
                 columnRow.type shouldBe validColumnType
-                columnRow.tableID shouldBe tableId1
+                columnRow.tableId shouldBe tableId1
             }
             then("The column row should be resolved with name"){
                 val resolvedRow = catalogManager.resolveColumn(tableId1, ordinal)
@@ -115,7 +115,7 @@ class CatalogManagerTest: BehaviorSpec({
                 columnRow.nullable shouldBe nullable2
                 columnRow.name shouldBe columnName2
                 columnRow.type shouldBe validColumnType2
-                columnRow.tableID shouldBe tableId2
+                columnRow.tableId shouldBe tableId2
             }
             then("The column row should be resolved with name"){
                 val resolvedRow = catalogManager.resolveColumn(tableId2, ordinal2)
@@ -185,7 +185,7 @@ class CatalogManagerTest: BehaviorSpec({
             val columns = catalogManager.getColumns(tableId1)
             then("Table column should be returned"){
                 columns.size shouldBe 1
-                columns[0].tableID shouldBe tableId1
+                columns[0].tableId shouldBe tableId1
                 columns[0].ordinal shouldBe ordinal
                 columns[0].name shouldBe columnName1
                 columns[0].type shouldBe validColumnType
