@@ -12,6 +12,7 @@ import storageEngine.BufferPoolManager
 import storageEngine.DiskManager
 import storageEngine.exception.StorageEngineException
 import storageEngine.lru.FrameNodePolicy
+import util.INVALID_PAGE_ID
 import util.LockMode
 import java.util.concurrent.CountDownLatch
 
@@ -65,8 +66,8 @@ class BufferPoolManagerTest: BehaviorSpec({
         }
         `when`("delete page 1L"){
             bufferPoolManager.deletePage(1L)
-            then("frame's pageId should be -1L"){
-                frame1.pageId.get() shouldBe -1L
+            then("frame's pageId should be $INVALID_PAGE_ID"){
+                frame1.pageId.get() shouldBe INVALID_PAGE_ID
             }
             then("frame's isDirty should be false"){
                 frame1.isDirty.get() shouldBe false

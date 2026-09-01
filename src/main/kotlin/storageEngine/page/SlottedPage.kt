@@ -4,6 +4,7 @@ import config.IndexConfig
 import index.util.decodeVarInt
 import index.util.encodeVarInt
 import storageEngine.exception.StorageEngineException
+import util.INVALID_PAGE_ID
 import util.PageHeaderOffset
 import java.nio.ByteBuffer
 import java.util.Arrays
@@ -78,7 +79,7 @@ import java.util.Arrays
  * */
 open class SlottedPage(
     indexConfig: IndexConfig,
-    pageId: Long = -1,
+    pageId: Long = INVALID_PAGE_ID,
     data: ByteBuffer
 ): Page(indexConfig, data, pageId){
 

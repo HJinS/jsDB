@@ -6,6 +6,7 @@ import storageEngine.page.Frame
 import storageEngine.page.PageLock
 import util.LockMode
 import storageEngine.exception.StorageEngineException
+import util.INVALID_PAGE_ID
 import java.util.concurrent.locks.ReentrantLock
 
 /**
@@ -89,7 +90,7 @@ class BufferPoolManager(
                 isReadLocked = false
                 isWriteLocked = true
                 val currentPageId = frame.pageId.get()
-                if(frame.isDirty.get() && currentPageId != -1L){
+                if(frame.isDirty.get() && currentPageId != INVALID_PAGE_ID){
                     victimPageId = currentPageId
                 }
                 pageTable.remove(currentPageId)
@@ -154,7 +155,7 @@ class BufferPoolManager(
             frame = frames[frameId]
             frame.latch.writeLock().lock()
             val currentPageId = frame.pageId.get()
-            if(frame.isDirty.get() && currentPageId != -1L){
+            if(frame.isDirty.get() && currentPageId != INVALID_PAGE_ID){
                 victimPageId = currentPageId
             }
             pageTable.remove(currentPageId)
@@ -239,7 +240,7 @@ class BufferPoolManager(
             frame.latch.writeLock().lock()
             try{
                 pageTable.remove(pageId)
-                frame.pageId.set(-1L)
+                frame.pageId.set(INVALID_PAGE_ID)
                 frame.pinCount.set(0)
                 frame.reset()
                 freeList.add(frameId)

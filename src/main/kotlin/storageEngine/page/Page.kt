@@ -1,6 +1,7 @@
 package storageEngine.page
 
 import config.IndexConfig
+import util.INVALID_PAGE_ID
 import util.PageHeaderOffset
 import util.PageType
 import java.nio.ByteBuffer
@@ -9,7 +10,7 @@ import java.nio.ByteBuffer
 open class Page(
     val indexConfig: IndexConfig,
     internal val data: ByteBuffer,
-    internal val pageId: Long = -1
+    internal val pageId: Long = INVALID_PAGE_ID
 ){
 
     fun initData(){
@@ -22,8 +23,8 @@ open class Page(
         data.putShort(PageHeaderOffset.FREE_SLOT_HEAD.offset, (-1).toShort())
         data.putShort(PageHeaderOffset.RESERVED_TWO.offset, 0)
         data.putLong(PageHeaderOffset.PARENT_PAGE_ID.offset, 0)
-        data.putLong(PageHeaderOffset.LEFT_SIBLING_PAGE_ID.offset, -1)
-        data.putLong(PageHeaderOffset.RIGHT_SIBLING_PAGE_ID.offset, -1)
+        data.putLong(PageHeaderOffset.LEFT_SIBLING_PAGE_ID.offset, INVALID_PAGE_ID)
+        data.putLong(PageHeaderOffset.RIGHT_SIBLING_PAGE_ID.offset, INVALID_PAGE_ID)
         data.putLong(PageHeaderOffset.LSN.offset, 0)
     }
 

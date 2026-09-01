@@ -361,7 +361,7 @@ class BTree<K, V> (
                         needChangeRoot = true
                     }
                     node.isLeaf && node.keyCount == 0 -> {
-                        newRootId = -1L
+                        newRootId = INVALID_PAGE_ID
                         needChangeRoot = true
                     }
                 }
@@ -392,7 +392,7 @@ class BTree<K, V> (
         var continueLoop = true
         while(traceNode.isNotEmpty() && continueLoop){
             val (currentPageId, currentSlotIdx, currentPageLock) = try {traceNode.pop()} catch (e: EmptyStackException) { throw IndexException.InvalidTraceStackException(name, targetTable, e) }
-            var newPageId: Long = -1L
+            var newPageId: Long = INVALID_PAGE_ID
             if(currentPageLock.pageId != currentPageId) throw IndexException.InvalidTraceObjectError(currentPageId)
 
             currentPageLock.asWriteView { buffer ->
@@ -571,7 +571,7 @@ class BTree<K, V> (
             }
             if(isSafeToUnlockAncestor) lockManager.releaseAncestor(currentLock)
             currentLock.close()
-            if(nextLeafNodePageId == -1L) break
+            if(nextLeafNodePageId == INVALID_PAGE_ID) break
             val nextLock = storageManager.fetchPage(nextLeafNodePageId, LockMode.READ)
             lockManager.push(nextLock)
             leafNodePageIdCursor = nextLeafNodePageId
@@ -586,7 +586,7 @@ class BTree<K, V> (
      * @return The left most child of B+tree.
      * */
     private fun findLeftMostLeafPageId(lockManager: LockManager): Long?{
-        var pageIdCursor = if(rootPageId != -1L) rootPageId else return null
+        var pageIdCursor = if(rootPageId != INVALID_PAGE_ID) rootPageId else return null
         var isLeaf = false
         lockManager.push(storageManager.fetchPage(pageIdCursor, lockManager.lockMode))
         while(true){
