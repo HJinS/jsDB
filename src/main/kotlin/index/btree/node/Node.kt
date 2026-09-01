@@ -1,12 +1,12 @@
 package index.btree.node
 
 import config.IndexConfig
-import index.exception.NodeException
+import index.exception.IndexException
 import index.serializer.KeySerializer
 import index.util.BTreeOptMode
-import storageEngine.exception.SlottedPageException
+import storageEngine.exception.StorageEngineException
 import storageEngine.page.SlottedPage
-import storageEngine.util.PageType
+import util.PageType
 import kotlin.math.floor
 
 abstract class Node<K>(
@@ -24,7 +24,7 @@ abstract class Node<K>(
             return when(page.type){
                 PageType.LEAF_NODE -> LeafNode(indexConfig, page, keySerializer)
                 PageType.INTERNAL_NODE -> InternalNode(indexConfig, page, keySerializer)
-                else -> throw NodeException.InvalidNodeTypeException(page.type)
+                else -> throw IndexException.InvalidNodeTypeException(page.type)
             }
         }
     }
@@ -91,7 +91,7 @@ abstract class Node<K>(
         return try {
             val rightChildId = parentNode.childPageId(keyIdx + 1)
             targetPageId == rightChildId
-        } catch (_: SlottedPageException.SlotOutOfBoundException){
+        } catch (_: StorageEngineException.SlotOutOfBoundException){
             val leftChildId = parentNode.childPageId(keyIdx-1)
             targetPageId != leftChildId
         }
@@ -168,7 +168,7 @@ abstract class Node<K>(
      * */
     fun isSafeNode(optMode: BTreeOptMode, key: ByteArray?=null, value: ByteArray?=null) = when(optMode){
         BTreeOptMode.INSERT -> {
-            if(!(key != null && value != null)) throw NodeException.InvalidSafeCheckException()
+            if(!(key != null && value != null)) throw IndexException.InvalidSafeCheckException()
             keyCount < indexConfig.maxKeys && !wouldOverflow(key, value)
         }
         BTreeOptMode.DELETE -> hasSurplusKey

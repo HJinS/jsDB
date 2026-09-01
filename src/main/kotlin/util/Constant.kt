@@ -1,4 +1,4 @@
-package storageEngine.util
+package util
 
 enum class PageType(val value: Byte){
     EMPTY(0),
@@ -33,7 +33,9 @@ enum class MetaPageOffset(val offset: Int, val bytes: Int){
     NEXT_PAGE_ID(8, 16),
     TABLE_CATALOG_ROOT_PAGE_ID(16, 24),
     COLUMN_CATALOG_ROOT_PAGE_ID(24, 32),
-    INDEX_CATALOG_ROOT_PAGE_ID(32, 40)
+    INDEX_CATALOG_ROOT_PAGE_ID(32, 40),
+    NEXT_TABLE_ID(40, 48),
+    NEXT_INDEX_ID(48, 56),
 }
 
 const val META_PAGE_ID = 0L
@@ -44,3 +46,4 @@ const val START_PAGE_ID = 1L
 
 enum class LockMode {WRITE, READ}
 
+const val PRIMARY_KEY_IDX_NAME_PREFIX = "%s_PK_IDX"

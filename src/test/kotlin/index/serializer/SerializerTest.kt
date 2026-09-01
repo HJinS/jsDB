@@ -119,7 +119,7 @@ class SerializerTest: FunSpec({
         val schema = IndexKeySchema(
             listOf(
                 IndexColumn("id", ColumnType.INT, descending = false),
-                IndexColumn("name", ColumnType.STRING, descending = false, collation = collatorInstance),
+                IndexColumn("name", ColumnType.STRING, descending = false, localeTag = "en-US"),
                 IndexColumn("birth", ColumnType.LOCAL_DATE, descending = false)
             )
         )

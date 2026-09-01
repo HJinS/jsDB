@@ -11,8 +11,6 @@ import java.lang.IndexOutOfBoundsException
  * @see IndexKeySchema
  * */
 class MultiColumnKeySerializer(schema: IndexKeySchema): BaseKeySerializer<List<Any?>>(schema) {
-
-
     override fun serialize(key: List<Any?>): ByteArray {
         require(key.size <= schema.indexColumns.size) { "Too many key values for schema" }
         var totalByteSize = 0
