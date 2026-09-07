@@ -192,6 +192,85 @@ class CatalogManagerTest: BehaviorSpec({
             }
         }
     }
+
+    given("encodeKeyColumns / decodeKeyColumns"){
+        `when`("encoding and decoding a single IndexColumn"){
+            val columns = listOf(IndexColumn("email", ColumnType.STRING, false))
+            val decoded = columns.encodeKeyColumns().decodeKeyColumns()
+            then("decoded result should equal the original"){
+                decoded shouldBe columns
+            }
+        }
+
+        `when`("encoding and decoding multiple IndexColumns (composite key)"){
+            val columns = listOf(
+                IndexColumn("lastName", ColumnType.STRING, false),
+                IndexColumn("firstName", ColumnType.STRING, true),
+                IndexColumn("id", ColumnType.LONG, false),
+            )
+            val decoded = columns.encodeKeyColumns().decodeKeyColumns()
+            then("decoded result should equal the original list, in the same order"){
+                decoded shouldBe columns
+            }
+        }
+
+        `when`("encoding a column with localeTag and collationStrength set"){
+            val columns = listOf(IndexColumn("name", ColumnType.STRING, false, "ko-KR", 2))
+            val decoded = columns.encodeKeyColumns().decodeKeyColumns()
+            then("localeTag and collationStrength should be preserved"){
+                decoded shouldBe columns
+                decoded[0].localeTag shouldBe "ko-KR"
+                decoded[0].collationStrength shouldBe 2
+            }
+        }
+
+        `when`("encoding a column without localeTag/collationStrength"){
+            val columns = listOf(IndexColumn("id", ColumnType.LONG, false))
+            val decoded = columns.encodeKeyColumns().decodeKeyColumns()
+            then("localeTag and collationStrength should remain null"){
+                decoded[0].localeTag shouldBe null
+                decoded[0].collationStrength shouldBe null
+            }
+        }
+
+        `when`("encoding an empty list of IndexColumns"){
+            then("IndexKeyViolation should be thrown"){
+                shouldThrow<CatalogException.IndexKeyViolation> { emptyList<IndexColumn>().encodeKeyColumns() }
+            }
+        }
+
+        `when`("decoding a truncated (corrupted) byte array"){
+            val columns = listOf(
+                IndexColumn("lastName", ColumnType.STRING, false),
+                IndexColumn("firstName", ColumnType.STRING, true),
+            )
+            val encoded = columns.encodeKeyColumns()
+            val truncated = encoded.copyOfRange(0, encoded.size - 3)
+            then("CorruptedCatalogException should be thrown"){
+                shouldThrow<CatalogException.CorruptedCatalogException> { truncated.decodeKeyColumns() }
+            }
+        }
+
+        `when`("decoding garbage bytes that don't represent a valid IndexColumn"){
+            val garbage = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+            then("CorruptedCatalogException should be thrown"){
+                shouldThrow<CatalogException.CorruptedCatalogException> { garbage.decodeKeyColumns() }
+            }
+        }
+
+        `when`("decoding bytes with a malformed VarInt length prefix"){
+            // 첫 바이트(0x00)는 null bitmap: 5개 컬럼 전부 null이 아니라는 뜻 -> deserialize가 첫 필드(name, STRING)를 실제로 읽음.
+            // name은 STRING이라 값을 읽기 전에 길이를 VarInt로 먼저 읽는데, 그 길이 자리에 0x80을 5번 연속 넣음.
+            // VarInt는 각 바이트의 최상위 비트(MSB)가 1이면 "다음 바이트도 이어진다"는 신호인데,
+            // 0x80(=1000_0000)은 하위 7비트가 전부 0이면서 MSB만 1이라 "값 없이 계속 이어지기만" 함.
+            // 그래서 5바이트를 다 읽어도 안 끝나고 shift가 32를 넘어가서(끝나지 않는 VarInt에 대한 안전장치)
+            // IndexException.VarIntTooLongException이 던져지고, 그게 CorruptedCatalogException으로 감싸지는지 확인.
+            val malformed = byteArrayOf(0x00, 0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0x80.toByte())
+            then("CorruptedCatalogException should be thrown"){
+                shouldThrow<CatalogException.CorruptedCatalogException> { malformed.decodeKeyColumns() }
+            }
+        }
+    }
 }){
     companion object {
         fun initCatalogManager(config: SimpleConfig): CatalogManager{
