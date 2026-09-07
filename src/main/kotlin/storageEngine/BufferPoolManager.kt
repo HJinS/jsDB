@@ -4,8 +4,9 @@ import config.IndexConfig
 import storageEngine.lru.FrameNodePolicy
 import storageEngine.page.Frame
 import storageEngine.page.PageLock
-import storageEngine.util.LockMode
-import storageEngine.exception.BufferPoolManagerException
+import util.LockMode
+import storageEngine.exception.StorageEngineException
+import util.INVALID_PAGE_ID
 import java.util.concurrent.locks.ReentrantLock
 
 /**
@@ -89,7 +90,7 @@ class BufferPoolManager(
                 isReadLocked = false
                 isWriteLocked = true
                 val currentPageId = frame.pageId.get()
-                if(frame.isDirty.get() && currentPageId != -1L){
+                if(frame.isDirty.get() && currentPageId != INVALID_PAGE_ID){
                     victimPageId = currentPageId
                 }
                 pageTable.remove(currentPageId)
@@ -98,7 +99,7 @@ class BufferPoolManager(
                 replacer.pin(frameId)
             }
         } catch(e: Exception){
-            throw BufferPoolManagerException.UnExpectedException(pageId, e)
+            throw StorageEngineException.UnExpectedException(pageId, e)
         }finally {
             globalLatch.unlock()
         }
@@ -154,7 +155,7 @@ class BufferPoolManager(
             frame = frames[frameId]
             frame.latch.writeLock().lock()
             val currentPageId = frame.pageId.get()
-            if(frame.isDirty.get() && currentPageId != -1L){
+            if(frame.isDirty.get() && currentPageId != INVALID_PAGE_ID){
                 victimPageId = currentPageId
             }
             pageTable.remove(currentPageId)
@@ -162,7 +163,7 @@ class BufferPoolManager(
             frame.pinCount.set(1)
             replacer.pin(frameId)
         } catch(e: Exception){
-            throw BufferPoolManagerException.UnExpectedException(pageId, e)
+            throw StorageEngineException.UnExpectedException(pageId, e)
         }finally {
             globalLatch.unlock()
         }
@@ -177,7 +178,7 @@ class BufferPoolManager(
             }
         } catch(e: Exception){
             frame.latch.writeLock().unlock()
-            throw BufferPoolManagerException.UnExpectedException(pageId, e)
+            throw StorageEngineException.UnExpectedException(pageId, e)
         }
         return PageLock(frame, this, false, true)
     }
@@ -193,7 +194,7 @@ class BufferPoolManager(
 
         globalLatch.lock()
         try{
-            frameId = pageTable[pageId] ?: throw BufferPoolManagerException.PageNotFoundInCacheException(pageId)
+            frameId = pageTable[pageId] ?: throw StorageEngineException.PageNotFoundInCacheException(pageId)
             frame = frames[frameId]
             if(frame.pinCount.get() <= 0) return
             val pinCount = frame.pinCount.decrementAndGet()
@@ -209,7 +210,7 @@ class BufferPoolManager(
         val frameId: Int
         globalLatch.lock() 
         try{
-            frameId = pageTable[pageId] ?: throw BufferPoolManagerException.PageNotFoundInCacheException(pageId)
+            frameId = pageTable[pageId] ?: throw StorageEngineException.PageNotFoundInCacheException(pageId)
             frame = frames[frameId]
             frame.latch.readLock().lock()
         } finally{
@@ -234,12 +235,12 @@ class BufferPoolManager(
             frameId = pageTable[pageId] ?: return
             frame = frames[frameId]
             if(frame.pinCount.get() > 0) {
-                throw BufferPoolManagerException.PageInUseException(pageId)
+                throw StorageEngineException.PageInUseException(pageId)
             }
             frame.latch.writeLock().lock()
             try{
                 pageTable.remove(pageId)
-                frame.pageId.set(-1L)
+                frame.pageId.set(INVALID_PAGE_ID)
                 frame.pinCount.set(0)
                 frame.reset()
                 freeList.add(frameId)
@@ -251,6 +252,8 @@ class BufferPoolManager(
         }
 
     }
+
+    fun getNumPages() = diskManager.getNumPages()
 
     private fun getFreeFrameId() = if(freeList.isEmpty()) replacer.evict() else freeList.removeFirst()
 

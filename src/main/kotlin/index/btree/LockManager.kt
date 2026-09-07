@@ -1,6 +1,6 @@
 package index.btree
 
-import storageEngine.util.LockMode
+import util.LockMode
 import storageEngine.page.PageLock
 
 

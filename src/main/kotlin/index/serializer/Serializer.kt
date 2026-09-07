@@ -8,5 +8,5 @@ interface KeySerializer<K> {
 
 interface ValueSerializer<V> {
     fun serialize(value: V): ByteArray
-    fun deserialize(bytes: ByteArray): V
+    fun deserialize(bytes: ByteArray): Pair<V, Int>
 }

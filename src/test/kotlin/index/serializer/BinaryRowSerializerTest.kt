@@ -277,7 +277,7 @@ class BinaryRowSerializerTest: FunSpec({
             val serializer = BinaryRowSerializer(parameter.second)
             val serializedKey1 = serializer.serialize(parameter.first)
             val deSerialized = serializer.deserialize(serializedKey1)
-            for ((key1, key2) in parameter.first.zip(deSerialized)){
+            for ((key1, key2) in parameter.first.zip(deSerialized.first)){
                 key1 shouldBe key2
             }
         }

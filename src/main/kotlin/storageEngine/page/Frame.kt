@@ -1,5 +1,6 @@
 package storageEngine.page
 
+import util.INVALID_PAGE_ID
 import java.nio.ByteBuffer
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import java.util.concurrent.atomic.AtomicInteger
@@ -8,7 +9,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 class Frame(
     val frameId: Int,
-    val pageId: AtomicLong = AtomicLong(-1L),
+    val pageId: AtomicLong = AtomicLong(INVALID_PAGE_ID),
     pageSize: Int
 ){
     val data: ByteBuffer = ByteBuffer.allocateDirect(pageSize)

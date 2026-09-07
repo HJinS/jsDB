@@ -4,7 +4,6 @@ import index.btree.inMemory.node.InternalNode
 import index.btree.inMemory.node.LeafNode
 import index.btree.inMemory.node.Node
 import index.comparator.KeyComparator
-import index.exception.BTreeException
 import index.exception.IndexException
 import index.serializer.KeySerializer
 import index.serializer.ValueSerializer
@@ -255,7 +254,7 @@ class BTree<K, V> (
     fun search(key: K): V?{
         val serializedKey = keySerializer.serialize(key)
         val (leafNode, keyIdx, isExist) = searchLeafNode(serializedKey)
-        return if(isExist) valueSerializer.deserialize(leafNode.values[keyIdx]) else null
+        return if(isExist) valueSerializer.deserialize(leafNode.values[keyIdx]).first else null
     }
 
     /**
@@ -266,13 +265,13 @@ class BTree<K, V> (
      * */
     fun traverse(): List<Pair<K, V>>{
         val result = mutableListOf<Pair<K, V>>()
-        var currentNode: Node? = findLeftMostLeaf() ?: throw BTreeException.LeafNodeNotFoundException(null)
+        var currentNode: Node? = findLeftMostLeaf() ?: throw IndexException.LeafNodeNotFoundException(null)
         while(currentNode != null){
             currentNode = currentNode as LeafNode
             val keys = currentNode.keyView
             for(i in keys.indices){
                 val key: K = keySerializer.deserialize(keys[i])
-                val value: V = valueSerializer.deserialize(currentNode.values[i])
+                val value: V = valueSerializer.deserialize(currentNode.values[i]).first
                 result += key to value
             }
             currentNode = currentNode.next

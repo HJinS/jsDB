@@ -1,5 +1,0 @@
-package index
-
-class IndexMetadata {
-
-}
