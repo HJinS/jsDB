@@ -1,0 +1,224 @@
+import catalog.exception.CatalogException
+import config.SimpleConfig
+import config.StorageConfig
+import exception.DatabaseException
+import index.util.ColumnType
+import index.util.IndexColumn
+import index.util.IndexKeySchema
+import index.util.RowColumn
+import index.util.RowSchema
+import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.shouldBe
+import java.io.File
+import java.util.UUID
+
+class DataBaseTest: BehaviorSpec({
+    given("A database"){
+        val dbPath = "test-database-${UUID.randomUUID()}.db"
+        val config = SimpleConfig(StorageConfig(dbPath = dbPath, poolSize = 100))
+        val db = DataBase(config).apply { initialize() }
+        afterSpec { db.close(); File(dbPath).delete() }
+
+        val tableName = "test-table"
+        val primaryIdxName = "test-table-primary-index"
+        val primaryKeyName = "id"
+        val columns = RowSchema(listOf(
+            RowColumn(primaryKeyName, ColumnType.LONG, false, 0),
+            RowColumn("column1", ColumnType.INT, true, null),
+            RowColumn("column2", ColumnType.DOUBLE, true, null),
+            RowColumn("column3", ColumnType.FLOAT, true, null)
+
+        ))
+        `when`("Load non-exist table"){
+            then("Should throw an TableCatalogNotFound"){}
+            shouldThrow<CatalogException.TableCatalogNotFound> {
+                db.loadTable("non-exist-table")
+            }
+        }
+        `when`("Create a table"){
+            val primaryIndex = db.createTable(
+                tableName,
+                primaryIdxName,
+                columns
+            )
+
+            then("A primary index should be returned"){
+                primaryIndex.name shouldBe primaryIdxName
+                primaryIndex.targetTable shouldBe tableName
+            }
+
+            then("loadTable should return primary index"){
+                val loadedTable = db.loadTable(tableName)
+                loadedTable.name shouldBe primaryIndex.name
+                loadedTable.targetTable shouldBe primaryIndex.targetTable
+                loadedTable.targetTable shouldBe tableName
+            }
+
+            then("Creating primary index should throw an exception"){
+                shouldThrow<DatabaseException.PrimaryIndexAlreadyExistsException> {
+                    db.createIndex(
+                        "temp1",
+                        null,
+                        tableName,
+                        isPrimary = true,
+                        isUnique = true,
+                        keySchema = IndexKeySchema(listOf(
+                            IndexColumn("id", ColumnType.LONG, false)
+                        ))
+                    )
+                }
+            }
+            then("Creating primary index with non-existing table name should throw TableCatalogNotFound Exception"){
+                shouldThrow<CatalogException.TableCatalogNotFound> {
+                    db.createIndex(
+                        "temp2",
+                        null,
+                        "non-existing table",
+                        isPrimary = true,
+                        isUnique = true,
+                        keySchema = IndexKeySchema(listOf(
+                            IndexColumn("id", ColumnType.LONG, false)
+                        ))
+                    )
+                }
+            }
+        }
+        val duplicatedColumns = RowSchema(listOf(
+            RowColumn(primaryKeyName, ColumnType.LONG, false, 0),
+            RowColumn("column1", ColumnType.INT, true, null),
+            RowColumn("column2", ColumnType.DOUBLE, true, null),
+            RowColumn("column3", ColumnType.FLOAT, true, null),
+            RowColumn("column3", ColumnType.FLOAT, true, null)
+
+        ))
+        val tableNameNew = "test-table-2"
+        val primaryIdxNameNew = "test-table-primary-index-3"
+        `when`("Creating a table with duplicated columns"){
+            then("DuplicateColumnNameException should be thrown"){
+                shouldThrow<DatabaseException.DuplicateColumnNameException> {
+                    db.createTable(
+                        tableNameNew,
+                        primaryIdxNameNew,
+                        duplicatedColumns
+                    )
+                }
+            }
+        }
+
+        val newTableName3 = "test-table-3"
+        `when`("Creating a table with already existing primary index name"){
+            then("IndexAlreadyExistsException should be thrown"){
+                shouldThrow<DatabaseException.IndexAlreadyExistsException> {
+                    db.createTable(
+                        newTableName3,
+                        primaryIdxName,
+                        columns
+                    )
+                }
+            }
+        }
+
+        val secondaryIndexName = "temp-idx"
+        val indexSchema = IndexKeySchema(listOf(
+            IndexColumn("column2", ColumnType.DOUBLE, true),
+            IndexColumn("column3", ColumnType.FLOAT, true)
+        ))
+        `when`("Create secondary index with valid name, type"){
+            val secondaryIndex = db.createIndex(
+                secondaryIndexName,
+                primaryIdxName,
+                tableName,
+                isPrimary = false,
+                isUnique = false,
+                keySchema = indexSchema
+            )
+            then("Secondary index should be created"){
+                secondaryIndex.name shouldBe secondaryIndexName
+                secondaryIndex.targetTable shouldBe tableName
+            }
+        }
+        val invalidSchema1 = IndexKeySchema(listOf(
+            IndexColumn("column2", ColumnType.DOUBLE, true),
+            IndexColumn("column4", ColumnType.FLOAT, true)
+        ))
+        `when`("Create secondary index with invalid name"){
+            then("UnknownKeyColumnException should be thrown"){
+                shouldThrow<DatabaseException.UnknownKeyColumnException> {
+                    db.createIndex(
+                        "invalidIndexName1",
+                        primaryIdxName,
+                        tableName,
+                        isPrimary = false,
+                        isUnique = false,
+                        keySchema = invalidSchema1
+                    )
+                }
+            }
+        }
+        val invalidSchema2 = IndexKeySchema(listOf(
+            IndexColumn("column2", ColumnType.DOUBLE, true),
+            IndexColumn("column3", ColumnType.STRING, true)
+        ))
+        `when`("Create secondary index with invalid type"){
+            then("UnknownKeyColumnException should be thrown"){
+                shouldThrow<DatabaseException.UnknownKeyColumnException> {
+                    db.createIndex(
+                        "invalidIndexName2",
+                        primaryIdxName,
+                        tableName,
+                        isPrimary = false,
+                        isUnique = false,
+                        keySchema = invalidSchema2
+                    )
+                }
+            }
+        }
+
+        `when`("Create secondary index with duplicated name"){
+            then("IndexAlreadyExistsException should be thrown"){
+                shouldThrow<DatabaseException.IndexAlreadyExistsException> {
+                    db.createIndex(
+                        secondaryIndexName,
+                        primaryIdxName,
+                        tableName,
+                        isPrimary = false,
+                        isUnique = false,
+                        keySchema = indexSchema
+                    )
+                }
+            }
+        }
+
+        val secondaryIndexName2 = "temp-idx-2"
+        `when`("Create secondary index with non-exist primary index name"){
+            then("IndexNotFound should be thrown"){
+                shouldThrow<CatalogException.IndexNotFound> {
+                    db.createIndex(
+                        secondaryIndexName2,
+                        "non-existing primary index name",
+                        tableName,
+                        isPrimary = false,
+                        isUnique = false,
+                        keySchema = indexSchema
+                    )
+                }
+            }
+        }
+        `when`("Load index $secondaryIndexName"){
+            then("Index should be returned"){
+                val loadedIndex = db.loadIndex(secondaryIndexName)
+                loadedIndex.name shouldBe secondaryIndexName
+                loadedIndex.targetTable shouldBe tableName
+            }
+        }
+
+        `when`("Load non-exist index"){
+            then("IndexNotFound should be thrown"){
+                shouldThrow<CatalogException.IndexNotFound> {
+                    db.loadIndex("non-existing index")
+                }
+            }
+        }
+    }
+})

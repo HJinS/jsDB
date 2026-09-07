@@ -6,6 +6,7 @@ import exception.DatabaseException
 import index.btree.BTree
 import index.serializer.BinaryRowSerializer
 import index.serializer.MultiColumnKeySerializer
+import index.util.IndexColumn
 import index.util.IndexKeySchema
 import index.util.RowSchema
 import index.util.toPrimaryRowSchema
@@ -50,6 +51,10 @@ class DataBase(private val config: SimpleConfig) {
         )
     }
 
+    fun close(){
+        diskManager.close()
+    }
+
     fun createIndex(
         indexName: String,
         primaryIdxName: String?,
@@ -60,6 +65,23 @@ class DataBase(private val config: SimpleConfig) {
     ): BTree<List<Any?>, List<Any?>> {
         val resolved = catalogManager.resolveIndex(indexName)
         requireOrThrow(resolved == null) { DatabaseException.IndexAlreadyExistsException(indexName) }
+        val tableData = catalogManager.resolveTable(tableName)
+        requireOrThrow(tableData != null) { CatalogException.TableCatalogNotFound(tableName) }
+        if (isPrimary) {
+            requireOrThrow(tableData.primaryIndexName == null) {
+                DatabaseException.PrimaryIndexAlreadyExistsException(tableName)
+            }
+        }
+
+        val tableColumns = catalogManager.getColumns(tableData.tableId).associateBy { it.name }
+
+        val invalidColumns = keySchema.indexColumns.filter { col ->
+            val tableColumn = tableColumns[col.name]
+            tableColumn == null || tableColumn.type != col.type
+        }
+
+        requireOrThrow(invalidColumns.isEmpty()) { DatabaseException.UnknownKeyColumnException(indexName, tableName, invalidColumns.map { it.name }) }
+
         val indexId = metaPageManager.getNextId(MetaPageOffset.NEXT_INDEX_ID)
         val valueSchema = resolveIndexValueSchema(primaryIdxName, tableName, isPrimary)
         catalogManager.registerNewIndex(indexId, indexName, tableName, null, isPrimary, isUnique, keySchema.indexColumns)
@@ -101,16 +123,32 @@ class DataBase(private val config: SimpleConfig) {
         )
     }
 
-    fun createTable(tableName: String, primaryIdxName: String?, primaryIndexKeySchema: IndexKeySchema, columns: RowSchema){
+    fun createTable(tableName: String, primaryIdxName: String?, columns: RowSchema): BTree<List<Any?>, List<Any?>>{
         val resolved = catalogManager.resolveTable(tableName)
         requireOrThrow(resolved == null) { DatabaseException.TableAlreadyExistsException(tableName) }
+        val duplicateNames = columns.rowColumns
+            .groupingBy { it.name }
+            .eachCount()
+            .filter { it.value > 1 }
+            .keys.toList()
+        requireOrThrow(duplicateNames.isEmpty()) { DatabaseException.DuplicateColumnNameException(tableName, duplicateNames) }
         val tableId = metaPageManager.getNextId(MetaPageOffset.NEXT_TABLE_ID)
         val tableRow = catalogManager.registerNewTable(tableId, tableName, null)
+        var primaryKeyColumns = columns.rowColumns.filter { it.primaryKeyOrder != null }
+        val nullablePkColumns = primaryKeyColumns.filter { it.nullable }
+        requireOrThrow(nullablePkColumns.isEmpty()) {
+            DatabaseException.PrimaryKeyMustNotBeNullableException(tableName, nullablePkColumns.map{ it.name })
+        }
         for((idx, column) in columns.rowColumns.withIndex()){
             createColumn(tableRow.tableId, idx, column.name, column.type.toString(), column.nullable)
         }
+        primaryKeyColumns = primaryKeyColumns.sortedBy { it.primaryKeyOrder }
+        val primaryIndexKeySchema = IndexKeySchema(
+            primaryKeyColumns.map { IndexColumn(it.name, it.type, descending = false) }
+        )
+
         val primaryIdxName = primaryIdxName ?: PRIMARY_KEY_IDX_NAME_PREFIX.format(tableName)
-        createIndex(
+        val primaryIndex = createIndex(
             primaryIdxName,
             null,
             tableRow.tableName,
@@ -119,6 +157,7 @@ class DataBase(private val config: SimpleConfig) {
             keySchema = primaryIndexKeySchema
         )
         catalogManager.updatePrimaryIndexName(tableName, primaryIdxName)
+        return primaryIndex
     }
 
     fun loadTable(tableName: String): BTree<List<Any?>, List<Any?>> {
