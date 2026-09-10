@@ -1,12 +1,14 @@
-import catalog.exception.CatalogException
+package database
+
+import exception.CatalogException
 import config.SimpleConfig
 import config.StorageConfig
 import exception.DatabaseException
-import index.util.ColumnType
-import index.util.IndexColumn
-import index.util.IndexKeySchema
-import index.util.RowColumn
-import index.util.RowSchema
+import schema.ColumnType
+import schema.IndexColumn
+import schema.IndexKeySchema
+import schema.RowColumn
+import schema.RowSchema
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -31,8 +33,8 @@ class DataBaseTest: BehaviorSpec({
 
         ))
         `when`("Load non-exist table"){
-            then("Should throw an TableCatalogNotFound"){}
-            shouldThrow<CatalogException.TableCatalogNotFound> {
+            then("Should throw an UndefinedTable"){}
+            shouldThrow<CatalogException.UndefinedTable> {
                 db.loadTable("non-exist-table")
             }
         }
@@ -56,7 +58,7 @@ class DataBaseTest: BehaviorSpec({
             }
 
             then("Creating primary index should throw an exception"){
-                shouldThrow<DatabaseException.PrimaryIndexAlreadyExistsException> {
+                shouldThrow<DatabaseException.DuplicateObject> {
                     db.createIndex(
                         "temp1",
                         null,
@@ -69,8 +71,8 @@ class DataBaseTest: BehaviorSpec({
                     )
                 }
             }
-            then("Creating primary index with non-existing table name should throw TableCatalogNotFound Exception"){
-                shouldThrow<CatalogException.TableCatalogNotFound> {
+            then("Creating primary index with non-existing table name should throw UndefinedTable Exception"){
+                shouldThrow<CatalogException.UndefinedTable> {
                     db.createIndex(
                         "temp2",
                         null,
@@ -95,8 +97,8 @@ class DataBaseTest: BehaviorSpec({
         val tableNameNew = "test-table-2"
         val primaryIdxNameNew = "test-table-primary-index-3"
         `when`("Creating a table with duplicated columns"){
-            then("DuplicateColumnNameException should be thrown"){
-                shouldThrow<DatabaseException.DuplicateColumnNameException> {
+            then("DuplicateColumn should be thrown"){
+                shouldThrow<DatabaseException.DuplicateColumn> {
                     db.createTable(
                         tableNameNew,
                         primaryIdxNameNew,
@@ -108,8 +110,8 @@ class DataBaseTest: BehaviorSpec({
 
         val newTableName3 = "test-table-3"
         `when`("Creating a table with already existing primary index name"){
-            then("IndexAlreadyExistsException should be thrown"){
-                shouldThrow<DatabaseException.IndexAlreadyExistsException> {
+            then("DuplicateObject should be thrown"){
+                shouldThrow<DatabaseException.DuplicateObject> {
                     db.createTable(
                         newTableName3,
                         primaryIdxName,
@@ -143,8 +145,8 @@ class DataBaseTest: BehaviorSpec({
             IndexColumn("column4", ColumnType.FLOAT, true)
         ))
         `when`("Create secondary index with invalid name"){
-            then("UnknownKeyColumnException should be thrown"){
-                shouldThrow<DatabaseException.UnknownKeyColumnException> {
+            then("UndefinedColumn should be thrown"){
+                shouldThrow<DatabaseException.UndefinedColumn> {
                     db.createIndex(
                         "invalidIndexName1",
                         primaryIdxName,
@@ -161,8 +163,8 @@ class DataBaseTest: BehaviorSpec({
             IndexColumn("column3", ColumnType.STRING, true)
         ))
         `when`("Create secondary index with invalid type"){
-            then("UnknownKeyColumnException should be thrown"){
-                shouldThrow<DatabaseException.UnknownKeyColumnException> {
+            then("UndefinedColumn should be thrown"){
+                shouldThrow<DatabaseException.UndefinedColumn> {
                     db.createIndex(
                         "invalidIndexName2",
                         primaryIdxName,
@@ -176,8 +178,8 @@ class DataBaseTest: BehaviorSpec({
         }
 
         `when`("Create secondary index with duplicated name"){
-            then("IndexAlreadyExistsException should be thrown"){
-                shouldThrow<DatabaseException.IndexAlreadyExistsException> {
+            then("DuplicateObject should be thrown"){
+                shouldThrow<DatabaseException.DuplicateObject> {
                     db.createIndex(
                         secondaryIndexName,
                         primaryIdxName,
@@ -192,8 +194,8 @@ class DataBaseTest: BehaviorSpec({
 
         val secondaryIndexName2 = "temp-idx-2"
         `when`("Create secondary index with non-exist primary index name"){
-            then("IndexNotFound should be thrown"){
-                shouldThrow<CatalogException.IndexNotFound> {
+            then("UndefinedObject should be thrown"){
+                shouldThrow<CatalogException.UndefinedObject> {
                     db.createIndex(
                         secondaryIndexName2,
                         "non-existing primary index name",
@@ -214,8 +216,8 @@ class DataBaseTest: BehaviorSpec({
         }
 
         `when`("Load non-exist index"){
-            then("IndexNotFound should be thrown"){
-                shouldThrow<CatalogException.IndexNotFound> {
+            then("UndefinedObject should be thrown"){
+                shouldThrow<CatalogException.UndefinedObject> {
                     db.loadIndex("non-existing index")
                 }
             }

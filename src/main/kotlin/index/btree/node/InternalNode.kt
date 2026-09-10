@@ -3,7 +3,7 @@ package index.btree.node
 import config.IndexConfig
 import index.serializer.KeySerializer
 import index.serializer.PageIDSerializer
-import index.util.NodeSplitData
+import index.btree.NodeSplitData
 import storageEngine.page.SlottedPage
 
 
@@ -25,7 +25,11 @@ class InternalNode<K>(
             }
         }
 
-    fun childPageId(index: Int): Long = if(index == 0) page.leftMostChildPageId else valueSerializer.deserialize(page.getData(index - 1).second)
+    fun childPageId(index: Int): Long =
+        if(index == 0)
+            page.leftMostChildPageId
+        else
+            valueSerializer.deserialize(page.getData(index - 1).second)
 
     fun updateKey(slotId: Int, key: ByteArray){
         val (_, value) = page.getData(slotId)

@@ -1,4 +1,4 @@
-package index.util
+package util
 
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -12,7 +12,7 @@ class EncoderTest: BehaviorSpec({
     given("an integer $originalInteger encoded with encodeVarInt"){
         val encodedNumber = encodeVarInt(originalInteger)
         `when`("decode the integer"){
-            val (decodedInteger, length) = decodeVarInt(encodedNumber)
+            val (decodedInteger, _) = decodeVarInt(encodedNumber)
             then("the decodedInteger $decodedInteger should be same as originalInteger $originalInteger.") {
                 originalInteger shouldBe decodedInteger
             }
@@ -23,7 +23,7 @@ class EncoderTest: BehaviorSpec({
     given("an integer $originalInteger encoded with encodeVarInt"){
         val encodedNumber = encodeVarInt(originalInteger)
         `when`("decode the integer"){
-            val (decodedInteger, length) = decodeVarInt(encodedNumber)
+            val (decodedInteger, _) = decodeVarInt(encodedNumber)
             then("the decodedInteger $decodedInteger should be same as originalInteger $originalInteger.") {
                 originalInteger shouldBe decodedInteger
             }
@@ -34,7 +34,7 @@ class EncoderTest: BehaviorSpec({
     given("an integer $originalInteger encoded with encodeVarInt"){
         val encodedNumber = encodeVarInt(originalInteger)
         `when`("decode the integer"){
-            val (decodedInteger, length) = decodeVarInt(encodedNumber)
+            val (decodedInteger, _) = decodeVarInt(encodedNumber)
             then("the decodedInteger $decodedInteger should be same as originalInteger $originalInteger.") {
                 originalInteger shouldBe decodedInteger
             }

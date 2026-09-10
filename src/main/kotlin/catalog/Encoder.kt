@@ -1,15 +1,19 @@
 package catalog
 
-import catalog.exception.CatalogException
-import index.exception.IndexException
+import exception.CatalogException
+import exception.IndexException
 import index.serializer.BinaryRowSerializer
-import index.util.ColumnType
-import index.util.IndexColumn
+import schema.ColumnType
+import schema.IndexColumn
+import util.EntityType
+import util.SQLErrorDetail
 
 private val indexColumnSerializer = BinaryRowSerializer(CatalogBoot.INDEX_COLUMN_ROW)
 
 fun List<IndexColumn>.encodeKeyColumns(): ByteArray {
-    if (this.isEmpty()) throw CatalogException.IndexKeyViolation()
+    if (this.isEmpty()) throw CatalogException.InvalidDefinition(
+        SQLErrorDetail(entityType = EntityType.INDEX, reason = "must have at least one key column")
+    )
     val rows = this.map { column ->
         indexColumnSerializer.serialize(listOf(
             column.name, column.type.name, column.descending, column.localeTag, column.collationStrength
@@ -35,13 +39,37 @@ fun ByteArray.decodeKeyColumns(): List<IndexColumn> {
                 collationStrength = raw[4] as Int?,
             )
         } catch (e: IndexOutOfBoundsException){
-            throw CatalogException.CorruptedCatalogException(CatalogBoot.COLUMN_CATALOG_NAME, e)
+            throw CatalogException.CorruptedRow(
+                SQLErrorDetail(
+                    entityType = EntityType.CATALOG_ROW,
+                    entityName = CatalogBoot.COLUMN_CATALOG_NAME
+                ),
+                e
+            )
         } catch (e: ClassCastException){
-            throw CatalogException.CorruptedCatalogException(CatalogBoot.COLUMN_CATALOG_NAME, e)
+            throw CatalogException.CorruptedRow(
+                SQLErrorDetail(
+                    entityType = EntityType.CATALOG_ROW,
+                    entityName = CatalogBoot.COLUMN_CATALOG_NAME
+                ),
+                e
+            )
         } catch (e: IllegalArgumentException){
-            throw CatalogException.CorruptedCatalogException(CatalogBoot.COLUMN_CATALOG_NAME, e)
+            throw CatalogException.CorruptedRow(
+                SQLErrorDetail(
+                    entityType = EntityType.CATALOG_ROW,
+                    entityName = CatalogBoot.COLUMN_CATALOG_NAME
+                ),
+                e
+            )
         } catch (e: IndexException){
-            throw CatalogException.CorruptedCatalogException(CatalogBoot.COLUMN_CATALOG_NAME, e)
+            throw CatalogException.CorruptedRow(
+                SQLErrorDetail(
+                    entityType = EntityType.CATALOG_ROW,
+                    entityName = CatalogBoot.COLUMN_CATALOG_NAME
+                ),
+                e
+            )
         }
     }
     return result

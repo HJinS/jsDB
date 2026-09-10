@@ -1,7 +1,8 @@
 package index.serializer
 
-import index.exception.IndexException
-import index.util.*
+import exception.IndexException
+import schema.*
+import util.*
 import java.lang.IndexOutOfBoundsException
 import java.time.Instant
 import java.time.LocalDate
@@ -82,7 +83,12 @@ abstract class BaseKeySerializer<K>(protected val schema: IndexKeySchema): KeySe
         val nullFlag = try {
             bytesInverted[position++]
         } catch( exception: IndexOutOfBoundsException) {
-            throw IndexException.InvalidBytesException(exception)
+            throw IndexException.InvalidBytes(
+                EngineErrorDetail(
+                    reason = "Invalid bytes for serialization/deserialization."
+                ),
+                exception
+            )
         }
         if (nullFlag.toInt() == 0x00) return null to 1
 

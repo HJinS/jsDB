@@ -1,10 +1,11 @@
 package index.btree.node
 
 import config.IndexConfig
-import index.exception.IndexException
+import exception.IndexException
+import util.EngineErrorDetail
 import index.serializer.KeySerializer
-import index.util.BTreeOptMode
-import storageEngine.exception.StorageEngineException
+import index.btree.BTreeOptMode
+import exception.StorageEngineException
 import storageEngine.page.SlottedPage
 import util.PageType
 import kotlin.math.floor
@@ -24,7 +25,12 @@ abstract class Node<K>(
             return when(page.type){
                 PageType.LEAF_NODE -> LeafNode(indexConfig, page, keySerializer)
                 PageType.INTERNAL_NODE -> InternalNode(indexConfig, page, keySerializer)
-                else -> throw IndexException.InvalidNodeTypeException(page.type)
+                else -> throw IndexException.InvalidNodeType(
+                    EngineErrorDetail(
+                        pageType = page.type,
+                        reason = "Invalid node type"
+                    )
+                )
             }
         }
     }
@@ -91,7 +97,7 @@ abstract class Node<K>(
         return try {
             val rightChildId = parentNode.childPageId(keyIdx + 1)
             targetPageId == rightChildId
-        } catch (_: StorageEngineException.SlotOutOfBoundException){
+        } catch (_: StorageEngineException.SlotOutOfBound){
             val leftChildId = parentNode.childPageId(keyIdx-1)
             targetPageId != leftChildId
         }
@@ -168,7 +174,12 @@ abstract class Node<K>(
      * */
     fun isSafeNode(optMode: BTreeOptMode, key: ByteArray?=null, value: ByteArray?=null) = when(optMode){
         BTreeOptMode.INSERT -> {
-            if(!(key != null && value != null)) throw IndexException.InvalidSafeCheckException()
+            if(!(key != null && value != null))
+                throw IndexException.InvalidSafeCheck(
+                    EngineErrorDetail(
+                        reason = "Key, Value must be provided for safe check when optMode is Insert or Update"
+                    )
+                )
             keyCount < indexConfig.maxKeys && !wouldOverflow(key, value)
         }
         BTreeOptMode.DELETE -> hasSurplusKey
@@ -176,5 +187,6 @@ abstract class Node<K>(
         BTreeOptMode.SELECT -> true
     }
 
-    fun wouldOverflow(key: ByteArray, value: ByteArray) = page.freeSpace < page.getRequiredSpace(key, value) || keyCount >= indexConfig.maxKeys
+    fun wouldOverflow(key: ByteArray, value: ByteArray) =
+        page.freeSpace < page.getRequiredSpace(key, value) || keyCount >= indexConfig.maxKeys
 }

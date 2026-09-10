@@ -1,11 +1,11 @@
 package catalog
 
-import catalog.exception.CatalogException
+import exception.CatalogException
 import config.MidpointLruConfig
 import config.SimpleConfig
 import config.StorageConfig
-import index.util.ColumnType
-import index.util.IndexColumn
+import schema.ColumnType
+import schema.IndexColumn
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.equals.shouldBeEqual
@@ -82,8 +82,8 @@ class CatalogManagerTest: BehaviorSpec({
         val invalidColumnType = "INVALID_COLUMN_TYPE"
         val nullable = false
         `when`("Register new column with invalid column type $invalidColumnType"){
-            then("CorruptedCatalogException should be thrown"){
-                shouldThrow<CatalogException.CorruptedCatalogException> { catalogManager.registerNewColumn(
+            then("CorruptedRow should be thrown"){
+                shouldThrow<CatalogException.CorruptedRow> { catalogManager.registerNewColumn(
                     tableId1, ordinal, columnName1, invalidColumnType, nullable
                 )}
             }
@@ -166,8 +166,8 @@ class CatalogManagerTest: BehaviorSpec({
         }
         val invalidTableName = "test_table_invalid"
         `when`("Update primary index name but there is no such table"){
-            then("TableCatalogNotFound should be thrown"){
-                shouldThrow<CatalogException.TableCatalogNotFound> { catalogManager.updatePrimaryIndexName(
+            then("UndefinedTable should be thrown"){
+                shouldThrow<CatalogException.UndefinedTable> { catalogManager.updatePrimaryIndexName(
                     invalidTableName, "new index name"
                 ) }
             }
@@ -234,8 +234,8 @@ class CatalogManagerTest: BehaviorSpec({
         }
 
         `when`("encoding an empty list of IndexColumns"){
-            then("IndexKeyViolation should be thrown"){
-                shouldThrow<CatalogException.IndexKeyViolation> { emptyList<IndexColumn>().encodeKeyColumns() }
+            then("InvalidDefinition should be thrown"){
+                shouldThrow<CatalogException.InvalidDefinition> { emptyList<IndexColumn>().encodeKeyColumns() }
             }
         }
 
@@ -246,15 +246,15 @@ class CatalogManagerTest: BehaviorSpec({
             )
             val encoded = columns.encodeKeyColumns()
             val truncated = encoded.copyOfRange(0, encoded.size - 3)
-            then("CorruptedCatalogException should be thrown"){
-                shouldThrow<CatalogException.CorruptedCatalogException> { truncated.decodeKeyColumns() }
+            then("CorruptedRow should be thrown"){
+                shouldThrow<CatalogException.CorruptedRow> { truncated.decodeKeyColumns() }
             }
         }
 
         `when`("decoding garbage bytes that don't represent a valid IndexColumn"){
             val garbage = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
-            then("CorruptedCatalogException should be thrown"){
-                shouldThrow<CatalogException.CorruptedCatalogException> { garbage.decodeKeyColumns() }
+            then("CorruptedRow should be thrown"){
+                shouldThrow<CatalogException.CorruptedRow> { garbage.decodeKeyColumns() }
             }
         }
 
@@ -264,10 +264,10 @@ class CatalogManagerTest: BehaviorSpec({
             // VarInt는 각 바이트의 최상위 비트(MSB)가 1이면 "다음 바이트도 이어진다"는 신호인데,
             // 0x80(=1000_0000)은 하위 7비트가 전부 0이면서 MSB만 1이라 "값 없이 계속 이어지기만" 함.
             // 그래서 5바이트를 다 읽어도 안 끝나고 shift가 32를 넘어가서(끝나지 않는 VarInt에 대한 안전장치)
-            // IndexException.VarIntTooLongException이 던져지고, 그게 CorruptedCatalogException으로 감싸지는지 확인.
+            // IndexException.VarIntTooLong이 던져지고, 그게 CorruptedRow로 감싸지는지 확인.
             val malformed = byteArrayOf(0x00, 0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0x80.toByte())
-            then("CorruptedCatalogException should be thrown"){
-                shouldThrow<CatalogException.CorruptedCatalogException> { malformed.decodeKeyColumns() }
+            then("CorruptedRow should be thrown"){
+                shouldThrow<CatalogException.CorruptedRow> { malformed.decodeKeyColumns() }
             }
         }
     }

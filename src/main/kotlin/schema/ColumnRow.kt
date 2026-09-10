@@ -1,6 +1,4 @@
-package catalog.data
-
-import index.util.ColumnType
+package schema
 
 data class ColumnRow(
     val tableId: Long,

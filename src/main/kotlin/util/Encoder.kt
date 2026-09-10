@@ -1,4 +1,4 @@
-package index.util
+package util
 
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -8,7 +8,7 @@ import java.util.UUID
 import kotlin.experimental.inv
 import kotlin.experimental.xor
 import kotlin.text.toByteArray
-import index.exception.IndexException
+import exception.IndexException
 
 
 /**
@@ -63,9 +63,12 @@ fun decodeVarInt(bytes: ByteArray, offset: Int = 0): Pair<Int, Int> {
 
     while (true) {
         // 배열 범위를 벗어나는지 확인
-        if (pos >= bytes.size) {
-            throw IndexException.PositionOutOfBoundsException(pos, bytes.size)
-        }
+        if (pos >= bytes.size)
+            throw IndexException.PositionOutOfBounds(
+                EngineErrorDetail(
+                    reason = "Position $pos should be less than total byte size ${bytes.size}."
+                )
+            )
 
         val byte = bytes[pos].toInt() and 0xFF
         // ByteArray 에서 디코딩 대상 byte 가져옴 + 부호 없는 정수로 변환(int 변환 시 부호 확장을 고려하여 마지막 8bit만 가져옴)
@@ -81,7 +84,7 @@ fun decodeVarInt(bytes: ByteArray, offset: Int = 0): Pair<Int, Int> {
 
         // 32비트 Int를 넘어서는 과도한 데이터 방지
         if (shift >= 32) {
-            throw IndexException.VarIntTooLongException()
+            throw IndexException.VarIntTooLong(EngineErrorDetail(reason = "VarInt is too long"))
         }
     }
     return result to (pos - offset)
@@ -270,7 +273,12 @@ fun ByteArray.decodeSortableBoolean(): Boolean {
 
 fun ByteArray.decodeSortableUUID(): UUID{
     val unEscaped = unescapeZeroBytes(this)
-    if(unEscaped.size != 16) throw IndexException.InvalidUUIDLengthException(unEscaped.size)
+    if(unEscaped.size != 16)
+        throw IndexException.InvalidUUIDLength(
+            EngineErrorDetail(
+                reason = "UUID should be 16 bytes, but got ${unEscaped.size}"
+            )
+        )
 
     val byteBuffer = ByteBuffer.wrap(unEscaped).order(ByteOrder.BIG_ENDIAN)
     return UUID(byteBuffer.long, byteBuffer.long)

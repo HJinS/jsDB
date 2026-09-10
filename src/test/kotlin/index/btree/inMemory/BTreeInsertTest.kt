@@ -4,9 +4,9 @@ import index.comparator.MultiColumnKeyComparator
 import helper.serializer.LocalDateSerializerHelper
 import index.serializer.MultiColumnKeySerializer
 import helper.serializer.RowDataSerializerHelper
-import index.util.IndexColumn
-import index.util.ColumnType
-import index.util.IndexKeySchema
+import schema.IndexColumn
+import schema.ColumnType
+import schema.IndexKeySchema
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import kotlinx.serialization.Serializable
@@ -102,7 +102,7 @@ class BTreeInsertTest: FunSpec({
                 "test table",
                 keySerializer,
                 idValueSerializer,
-                MultiColumnKeyComparator(parameter.third),
+                MultiColumnKeyComparator(),
                 2
             )
 
@@ -211,7 +211,7 @@ class BTreeInsertTest: FunSpec({
                 "test table",
                 keySerializer,
                 userDataSerializer,
-                MultiColumnKeyComparator(parameter.third),
+                MultiColumnKeyComparator(),
                 2
             )
 

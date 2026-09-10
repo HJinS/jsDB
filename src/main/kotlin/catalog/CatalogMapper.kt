@@ -1,13 +1,15 @@
 package catalog
 
 import catalog.data.ColumnRaw
-import catalog.data.ColumnRow
+import schema.ColumnRow
 import catalog.data.IndexRaw
-import catalog.data.IndexRow
+import schema.IndexRow
 import catalog.data.TableRaw
-import catalog.data.TableRow
-import catalog.exception.CatalogException
-import index.util.ColumnType
+import schema.TableRow
+import exception.CatalogException
+import schema.ColumnType
+import util.EntityType
+import util.SQLErrorDetail
 import kotlin.Long
 
 fun ColumnRaw.toRow(): ColumnRow {
@@ -20,11 +22,29 @@ fun ColumnRaw.toRow(): ColumnRow {
             nullable = values[4] as Boolean
         )
     } catch (e: IndexOutOfBoundsException){
-        throw CatalogException.CorruptedCatalogException(CatalogBoot.COLUMN_CATALOG_NAME, e)
+        throw CatalogException.CorruptedRow(
+            SQLErrorDetail(
+                entityType = EntityType.CATALOG_ROW,
+                entityName = CatalogBoot.COLUMN_CATALOG_NAME
+            ),
+            e
+        )
     } catch (e: ClassCastException){
-        throw CatalogException.CorruptedCatalogException(CatalogBoot.COLUMN_CATALOG_NAME, e)
+        throw CatalogException.CorruptedRow(
+            SQLErrorDetail(
+                entityType = EntityType.CATALOG_ROW,
+                entityName = CatalogBoot.COLUMN_CATALOG_NAME
+            ),
+            e
+        )
     } catch (e: IllegalArgumentException){
-        throw CatalogException.CorruptedCatalogException(CatalogBoot.COLUMN_CATALOG_NAME, e)
+        throw CatalogException.CorruptedRow(
+            SQLErrorDetail(
+                entityType = EntityType.CATALOG_ROW,
+                entityName = CatalogBoot.COLUMN_CATALOG_NAME
+            ),
+            e
+        )
     }
 }
 
@@ -36,9 +56,21 @@ fun TableRaw.toRow(): TableRow {
             primaryIndexName = values[2] as String?
         )
     } catch (e: IndexOutOfBoundsException){
-        throw CatalogException.CorruptedCatalogException(CatalogBoot.TABLE_CATALOG_NAME, e)
+        throw CatalogException.CorruptedRow(
+            SQLErrorDetail(
+                entityType = EntityType.CATALOG_ROW,
+                entityName = CatalogBoot.TABLE_CATALOG_NAME
+            ),
+            e
+        )
     } catch (e: ClassCastException){
-        throw CatalogException.CorruptedCatalogException(CatalogBoot.TABLE_CATALOG_NAME, e)
+        throw CatalogException.CorruptedRow(
+            SQLErrorDetail(
+                entityType = EntityType.CATALOG_ROW,
+                entityName = CatalogBoot.TABLE_CATALOG_NAME
+            ),
+            e
+        )
     }
 }
 
@@ -54,9 +86,21 @@ fun IndexRaw.toRow(): IndexRow {
             keyColumns = (values[6] as ByteArray).decodeKeyColumns()
         )
     } catch (e: IndexOutOfBoundsException){
-        throw CatalogException.CorruptedCatalogException(CatalogBoot.INDEX_CATALOG_NAME, e)
+        throw CatalogException.CorruptedRow(
+            SQLErrorDetail(
+                entityType = EntityType.CATALOG_ROW,
+                entityName = CatalogBoot.INDEX_CATALOG_NAME
+            ),
+            e
+        )
     } catch (e: ClassCastException){
-        throw CatalogException.CorruptedCatalogException(CatalogBoot.INDEX_CATALOG_NAME, e)
+        throw CatalogException.CorruptedRow(
+            SQLErrorDetail(
+                entityType = EntityType.CATALOG_ROW,
+                entityName = CatalogBoot.INDEX_CATALOG_NAME
+            ),
+            e
+        )
     }
 }
 

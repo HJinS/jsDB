@@ -4,7 +4,8 @@ import storageEngine.page.PageLock
 import storageEngine.page.SlottedPage
 import util.PageType
 import util.LockMode
-import storageEngine.exception.StorageEngineException
+import exception.StorageEngineException
+import util.EngineErrorDetail
 import config.IndexConfig
 
 class StorageManager(
@@ -39,11 +40,23 @@ class StorageManager(
      *
      * */
     fun fetchPage(pageId: Long, lockMode: LockMode): PageLock{
-        if(pageId <= 0L) throw StorageEngineException.InvalidPageIdException(pageId)
+        if(pageId <= 0L)
+            throw StorageEngineException.InvalidPageId(
+                EngineErrorDetail(
+                    pageId = pageId, reason = "Attempt to fetch invalid page"
+                )
+            )
         val pageLock = bufferPoolManager.fetchPage(pageId, lockMode)
         pageLock.asReadView { buffer ->
             val page = SlottedPage(indexConfig, pageId, buffer)
-            if(!(page.type == PageType.INTERNAL_NODE || page.type == PageType.LEAF_NODE)) throw StorageEngineException.InvalidPageTypeException(pageId, page.type)
+            if(!(page.type == PageType.INTERNAL_NODE || page.type == PageType.LEAF_NODE))
+                throw StorageEngineException.InvalidPageType(
+                    EngineErrorDetail(
+                        pageId = pageId,
+                        pageType = page.type,
+                        reason = "Incompatible page type"
+                    )
+                )
         }
         return pageLock
     }
@@ -56,7 +69,13 @@ class StorageManager(
      * 3. deletePage     — frame 회수
      * */
     fun deletePage(pageId: Long){
-        if(pageId <= 0L) throw StorageEngineException.InvalidPageIdException(pageId)
+        if(pageId <= 0L)
+            throw StorageEngineException.InvalidPageId(
+                EngineErrorDetail(
+                    pageId = pageId,
+                    reason = "Attempt to fetch invalid page"
+                )
+            )
         freeSpaceManager.addFreePageID(pageId)
         bufferPoolManager.flushPage(pageId)
         bufferPoolManager.deletePage(pageId)

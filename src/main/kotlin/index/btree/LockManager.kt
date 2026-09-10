@@ -4,7 +4,6 @@ import util.LockMode
 import storageEngine.page.PageLock
 
 
-
 class LockManager(val lockMode: LockMode): AutoCloseable{
     private val lockQueue = ArrayDeque<PageLock>()
 

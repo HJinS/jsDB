@@ -1,4 +1,4 @@
-package index.util
+package schema
 
 import java.text.Collator
 import java.util.Locale
@@ -8,7 +8,7 @@ data class IndexColumn(
     val type: ColumnType,
     val descending: Boolean,
     val localeTag: String? = null,
-    val collationStrength: Int? = null,
+    val collationStrength: Int? = null
 ){
     val collation: Collator? by lazy {
         localeTag?.let { tag ->

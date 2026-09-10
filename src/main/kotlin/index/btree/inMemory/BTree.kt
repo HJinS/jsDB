@@ -4,7 +4,8 @@ import index.btree.inMemory.node.InternalNode
 import index.btree.inMemory.node.LeafNode
 import index.btree.inMemory.node.Node
 import index.comparator.KeyComparator
-import index.exception.IndexException
+import exception.IndexException
+import util.EngineErrorDetail
 import index.serializer.KeySerializer
 import index.serializer.ValueSerializer
 import java.util.EmptyStackException
@@ -171,7 +172,16 @@ class BTree<K, V> (
      * */
     private fun split(){
         while(traceNode.isNotEmpty()){
-            val (currentNode, currentNodeIdx) = try {traceNode.pop()} catch (e: EmptyStackException) { throw IndexException.InvalidTraceStackException("InMemoryBTree", "Memory", e)}
+            val (currentNode, currentNodeIdx) = try {
+                traceNode.pop()
+            } catch (e: EmptyStackException) {
+                throw IndexException.InvalidTraceStack(
+                    EngineErrorDetail(
+                        reason = "Unexpected node trace data invalid. IndexName: InMemoryBTree TargetTableName: Memory"
+                    ),
+                    e
+                )
+            }
             if(currentNode.isOverflow){
                 val promotionKey = currentNode.promotionKey()
                 val newNode = when(currentNode){
@@ -265,7 +275,12 @@ class BTree<K, V> (
      * */
     fun traverse(): List<Pair<K, V>>{
         val result = mutableListOf<Pair<K, V>>()
-        var currentNode: Node? = findLeftMostLeaf() ?: throw IndexException.LeafNodeNotFoundException(null)
+        var currentNode: Node? = findLeftMostLeaf()
+            ?: throw IndexException.LeafNodeNotFound(
+                EngineErrorDetail(
+                    reason = "Could not find leaf node for key: null"
+                )
+            )
         while(currentNode != null){
             currentNode = currentNode as LeafNode
             val keys = currentNode.keyView

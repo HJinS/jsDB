@@ -1,19 +1,22 @@
 package catalog
 
 import catalog.data.ColumnRaw
-import catalog.data.ColumnRow
+import schema.ColumnRow
 import catalog.data.IndexRaw
-import catalog.data.IndexRow
+import schema.IndexRow
 import catalog.data.TableRaw
-import catalog.data.TableRow
-import catalog.exception.CatalogException
+import schema.TableRow
+import exception.CatalogException
 import config.IndexConfig
 import index.btree.BTree
 import index.serializer.BinaryRowSerializer
 import index.serializer.MultiColumnKeySerializer
-import index.util.ColumnType
-import index.util.IndexColumn
+import schema.ColumnType
+import schema.IndexColumn
+import schema.MetaPageData
 import storageEngine.StorageManager
+import util.EntityType
+import util.SQLErrorDetail
 import util.requireOrThrow
 
 class CatalogManager(
@@ -74,7 +77,13 @@ class CatalogManager(
         val columnType = try {
             ColumnType.valueOf(type)
         } catch (e: IllegalArgumentException){
-            throw CatalogException.CorruptedCatalogException(CatalogBoot.COLUMN_CATALOG_NAME, e)
+            throw CatalogException.CorruptedRow(
+                SQLErrorDetail(
+                    entityType = EntityType.CATALOG_ROW,
+                    entityName = CatalogBoot.COLUMN_CATALOG_NAME
+                ),
+                e
+            )
         }
         columnCatalog.insert(
             listOf(tableId, ordinal),
@@ -109,7 +118,12 @@ class CatalogManager(
 
     fun updatePrimaryIndexName(tableName: String, primaryIndexName: String){
         val value = tableCatalog.search(listOf(tableName))
-            ?: throw CatalogException.TableCatalogNotFound(tableName)
+            ?: throw CatalogException.UndefinedTable(
+                SQLErrorDetail(
+                    entityType = EntityType.TABLE,
+                    entityName = tableName
+                )
+            )
         val tableRow = TableRaw(value).toRow()
         val newTableRow = tableRow.copy(primaryIndexName = primaryIndexName)
         tableCatalog.update(
@@ -121,7 +135,12 @@ class CatalogManager(
 
     fun updateIndexRootPageId(indexName: String, rootPageId: Long){
         val value = indexCatalog.search(listOf(indexName))
-        requireOrThrow(value != null){ CatalogException.IndexNotFound(indexName) }
+        requireOrThrow(value != null){ CatalogException.UndefinedObject(
+            SQLErrorDetail(
+                entityType = EntityType.INDEX,
+                entityName = indexName
+            )
+        ) }
         val indexRow = IndexRaw(value).toRow()
         val newRow = indexRow.copy(rootPageId = rootPageId)
         val rowList = newRow.toList()

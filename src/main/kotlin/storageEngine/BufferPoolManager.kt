@@ -5,7 +5,8 @@ import storageEngine.lru.FrameNodePolicy
 import storageEngine.page.Frame
 import storageEngine.page.PageLock
 import util.LockMode
-import storageEngine.exception.StorageEngineException
+import exception.StorageEngineException
+import util.EngineErrorDetail
 import util.INVALID_PAGE_ID
 import java.util.concurrent.locks.ReentrantLock
 
@@ -99,7 +100,12 @@ class BufferPoolManager(
                 replacer.pin(frameId)
             }
         } catch(e: Exception){
-            throw StorageEngineException.UnExpectedException(pageId, e)
+            throw StorageEngineException.UnExpected(
+                EngineErrorDetail(
+                    pageId = pageId,
+                    reason = "Something went wrong. Maybe buffer full exhausted."
+                ), e
+            )
         }finally {
             globalLatch.unlock()
         }
@@ -163,7 +169,12 @@ class BufferPoolManager(
             frame.pinCount.set(1)
             replacer.pin(frameId)
         } catch(e: Exception){
-            throw StorageEngineException.UnExpectedException(pageId, e)
+            throw StorageEngineException.UnExpected(
+                EngineErrorDetail(
+                    pageId = pageId,
+                    reason = "Something went wrong. Maybe buffer full exhausted."
+                ), e
+            )
         }finally {
             globalLatch.unlock()
         }
@@ -171,14 +182,20 @@ class BufferPoolManager(
             if(victimPageId != null){
                 diskManager.writePage(victimPageId, frame.data)
             }
-            frame.apply { 
+            frame.apply {
                 reset()
                 isDirty.set(true)
                 this.pageId.set(pageId)
             }
         } catch(e: Exception){
             frame.latch.writeLock().unlock()
-            throw StorageEngineException.UnExpectedException(pageId, e)
+            throw StorageEngineException.UnExpected(
+                EngineErrorDetail(
+                    pageId = pageId,
+                    reason = "Something went wrong. Maybe buffer full exhausted."
+                ),
+                e
+            )
         }
         return PageLock(frame, this, false, true)
     }
@@ -194,7 +211,13 @@ class BufferPoolManager(
 
         globalLatch.lock()
         try{
-            frameId = pageTable[pageId] ?: throw StorageEngineException.PageNotFoundInCacheException(pageId)
+            frameId = pageTable[pageId]
+                ?: throw StorageEngineException.PageNotFoundInCache(
+                    EngineErrorDetail(
+                        pageId = pageId,
+                        reason = "Unable to find page in buffer pool"
+                    )
+                )
             frame = frames[frameId]
             if(frame.pinCount.get() <= 0) return
             val pinCount = frame.pinCount.decrementAndGet()
@@ -210,7 +233,13 @@ class BufferPoolManager(
         val frameId: Int
         globalLatch.lock() 
         try{
-            frameId = pageTable[pageId] ?: throw StorageEngineException.PageNotFoundInCacheException(pageId)
+            frameId = pageTable[pageId]
+                ?: throw StorageEngineException.PageNotFoundInCache(
+                    EngineErrorDetail(
+                        pageId = pageId,
+                        reason = "Unable to find page in buffer pool"
+                    )
+                )
             frame = frames[frameId]
             frame.latch.readLock().lock()
         } finally{
@@ -234,9 +263,13 @@ class BufferPoolManager(
         try{
             frameId = pageTable[pageId] ?: return
             frame = frames[frameId]
-            if(frame.pinCount.get() > 0) {
-                throw StorageEngineException.PageInUseException(pageId)
-            }
+            if(frame.pinCount.get() > 0)
+                throw StorageEngineException.PageInUse(
+                    EngineErrorDetail(
+                        pageId = pageId,
+                        reason = "Page is currently in use (pin count > 0) and cannot be deleted."
+                    )
+                )
             frame.latch.writeLock().lock()
             try{
                 pageTable.remove(pageId)

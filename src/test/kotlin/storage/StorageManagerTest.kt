@@ -5,9 +5,9 @@ import config.SimpleConfig
 import config.StorageConfig
 import index.btree.node.Node
 import index.serializer.MultiColumnKeySerializer
-import index.util.IndexColumn
-import index.util.ColumnType
-import index.util.IndexKeySchema
+import schema.IndexColumn
+import schema.ColumnType
+import schema.IndexKeySchema
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -16,7 +16,7 @@ import storageEngine.MetaPageManager
 import storageEngine.DiskManager
 import storageEngine.FreeSpaceManager
 import storageEngine.StorageManager
-import storageEngine.exception.StorageEngineException
+import exception.StorageEngineException
 import storageEngine.lru.FrameNodePolicy
 import storageEngine.page.SlottedPage
 import util.LockMode
@@ -50,7 +50,7 @@ class StorageManagerTest: BehaviorSpec({
         }
         `when`("fetch pageId 0L"){
             then("should throw InvalidPageIdException"){
-                shouldThrow<StorageEngineException.InvalidPageIdException> { storageManager.fetchPage(0L, LockMode.READ) }
+                shouldThrow<StorageEngineException.InvalidPageId> { storageManager.fetchPage(0L, LockMode.READ) }
             }
         }
         `when`("fetch pageId 1L"){
@@ -67,7 +67,7 @@ class StorageManagerTest: BehaviorSpec({
         }
         `when`("delete page 0L"){
             then("should throw InvalidPageIdException"){
-                shouldThrow<StorageEngineException.InvalidPageIdException> { storageManager.deletePage(0L) }
+                shouldThrow<StorageEngineException.InvalidPageId> { storageManager.deletePage(0L) }
             }
         }
 

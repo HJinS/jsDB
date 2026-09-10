@@ -1,4 +1,4 @@
-package catalog
+package schema
 
 data class MetaPageData(
     val tableCatalogRootPageId: Long,
