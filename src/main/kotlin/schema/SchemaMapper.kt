@@ -1,6 +1,4 @@
-package index.util
-
-import catalog.data.ColumnRow
+package schema
 
 fun IndexKeySchema.toPrimaryRowSchema()
     = RowSchema(indexColumns.map { RowColumn(name = it.name, type = it.type, nullable = false) })

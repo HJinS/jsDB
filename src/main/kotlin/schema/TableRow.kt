@@ -1,4 +1,4 @@
-package catalog.data
+package schema
 
 data class TableRow(
     val tableId: Long,

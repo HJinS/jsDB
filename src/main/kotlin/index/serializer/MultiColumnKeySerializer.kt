@@ -1,6 +1,6 @@
 package index.serializer
 
-import index.util.*
+import schema.*
 import java.lang.IndexOutOfBoundsException
 
 /**

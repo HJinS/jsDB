@@ -35,7 +35,7 @@ enum class MetaPageOffset(val offset: Int, val bytes: Int){
     COLUMN_CATALOG_ROOT_PAGE_ID(24, 32),
     INDEX_CATALOG_ROOT_PAGE_ID(32, 40),
     NEXT_TABLE_ID(40, 48),
-    NEXT_INDEX_ID(48, 56),
+    NEXT_INDEX_ID(48, 56)
 }
 
 const val META_PAGE_ID = 0L

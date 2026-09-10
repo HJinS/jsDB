@@ -1,4 +1,4 @@
-package index.util
+package index.btree
 
 enum class BTreeOptMode {
     SELECT,

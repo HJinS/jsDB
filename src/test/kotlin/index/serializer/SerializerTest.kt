@@ -1,8 +1,8 @@
 package index.serializer
 
-import index.util.IndexColumn
-import index.util.ColumnType
-import index.util.IndexKeySchema
+import schema.IndexColumn
+import schema.ColumnType
+import schema.IndexKeySchema
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import java.nio.ByteBuffer

@@ -1,10 +1,10 @@
 package catalog
 
-import index.util.ColumnType
-import index.util.IndexColumn
-import index.util.IndexKeySchema
-import index.util.RowColumn
-import index.util.RowSchema
+import schema.ColumnType
+import schema.IndexColumn
+import schema.IndexKeySchema
+import schema.RowColumn
+import schema.RowSchema
 
 object CatalogBoot {
     val TABLE_CATALOG_ROW = RowSchema(

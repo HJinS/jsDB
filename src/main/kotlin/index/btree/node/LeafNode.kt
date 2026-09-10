@@ -2,7 +2,7 @@ package index.btree.node
 
 import config.IndexConfig
 import index.serializer.KeySerializer
-import index.util.NodeSplitData
+import index.btree.NodeSplitData
 import storageEngine.page.SlottedPage
 
 

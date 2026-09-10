@@ -5,15 +5,15 @@ import mu.KotlinLogging
 import index.btree.node.InternalNode
 import index.btree.node.LeafNode
 import index.btree.node.Node
-import index.exception.IndexException
+import exception.IndexException
+import util.EngineErrorDetail
 import index.serializer.KeySerializer
 import index.serializer.PageIDSerializer
 import index.serializer.ValueSerializer
-import index.util.BTreeOptMode
 import util.LockMode
 import storageEngine.page.PageLock
 import storageEngine.StorageManager
-import storageEngine.exception.StorageEngineException
+import exception.StorageEngineException
 import storageEngine.page.SlottedPage
 import util.INVALID_PAGE_ID
 import util.PageType
@@ -68,7 +68,14 @@ class BTree<K, V> (
         val lockManager = LockManager(LockMode.WRITE)
 
         if (rootPageId != INVALID_PAGE_ID) {
-            val (leafNodePageId, _, _) = searchLeafNode(serializedKey, serializedValue, traceNode, lockManager, BTreeOptMode.INSERT)
+            val (leafNodePageId, _, _) =
+                searchLeafNode(
+                    serializedKey,
+                    serializedValue,
+                    traceNode,
+                    lockManager,
+                    BTreeOptMode.INSERT
+                )
             val writeLock = storageManager.fetchPage(leafNodePageId, lockManager.lockMode)
             lockManager.push(writeLock)
             writeLock.asWriteView { buffer ->
@@ -109,11 +116,24 @@ class BTree<K, V> (
         val serializedKey = keySerializer.serialize(key)
         val traceNode: Stack<Triple<Long, Int, PageLock>> = Stack<Triple<Long, Int, PageLock>>()
         val lockManager = LockManager(LockMode.WRITE)
-        val (leafNodePageId, keyIdx, isExist) = searchLeafNode(serializedKey, null, traceNode, lockManager, BTreeOptMode.DELETE)
+        val (leafNodePageId, keyIdx, isExist) =
+            searchLeafNode(
+                serializedKey,
+                null,
+                traceNode,
+                lockManager,
+                BTreeOptMode.DELETE
+            )
         if(isExist){
             var isUnderflow = false
             val leafLock = lockManager.last
-            if(leafNodePageId != leafLock.pageId) throw IndexException.InvalidTraceObjectError(leafNodePageId)
+            if(leafNodePageId != leafLock.pageId)
+                throw IndexException.InvalidTraceObject(
+                    EngineErrorDetail(
+                        pageId = leafNodePageId,
+                        reason = "The provided trace object does not match the most recently pushed lock in the latch queue."
+                    )
+                )
             leafLock.asWriteView { buffer ->
                 val page = SlottedPage(indexConfig, leafNodePageId, buffer)
                 val node = Node.from(indexConfig, page, keySerializer)
@@ -149,13 +169,25 @@ class BTree<K, V> (
         val serializedNewValue = valueSerializer.serialize(newValue)
         val traceNode: Stack<Triple<Long, Int, PageLock>> = Stack()
         val lockManager = LockManager(LockMode.WRITE)
-        val (leafNodePageId, keyIdx, isExist) = searchLeafNode(serializedKey, null, traceNode, lockManager, BTreeOptMode.UPDATE)
+        val (leafNodePageId, keyIdx, isExist) = searchLeafNode(
+            serializedKey,
+            null,
+            traceNode,
+            lockManager,
+            BTreeOptMode.UPDATE
+        )
         val isSameKey = serializedKey.contentEquals(serializedNewKey)
         var searchAnotherPage = false
         var isUnderflow = false
         if(isExist){
             val leafLock = lockManager.last
-            if (leafNodePageId != leafLock.pageId) throw IndexException.InvalidTraceObjectError(leafNodePageId)
+            if (leafNodePageId != leafLock.pageId)
+                throw IndexException.InvalidTraceObject(
+                    EngineErrorDetail(
+                        pageId = leafNodePageId,
+                        reason = "The provided trace object does not match the most recently pushed lock in the latch queue."
+                    )
+                )
             leafLock.asWriteView { buffer ->
                 val page = SlottedPage(indexConfig, leafNodePageId, buffer)
                 val node = Node.from(indexConfig, page, keySerializer)
@@ -168,8 +200,15 @@ class BTree<K, V> (
                         propagateSeparatorUpdate(traceNode, newFirstKey, lockManager)
                     }
                     val insertSlot = node.search(serializedNewKey).first
-                    if(0 < insertSlot && insertSlot < node.keyCount-1){
-                        checkOverflowAndSplitFirst(node, page, serializedNewKey, serializedNewValue, lockManager, traceNode)
+                    if(0 < insertSlot && insertSlot < node.keyCount-1) {
+                        checkOverflowAndSplitFirst(
+                            node,
+                            page,
+                            serializedNewKey,
+                            serializedNewValue,
+                            lockManager,
+                            traceNode
+                        )
                     } else {
                         isUnderflow = checkUnderflow(node, leafNodePageId)
                         searchAnotherPage = true
@@ -230,7 +269,11 @@ class BTree<K, V> (
      * non-leftmost child. This keeps the strict B+tree separator invariant:
      * `sep.at(i) == leftmostLeafFirstKey(child[i+1])`
      */
-    private fun propagateSeparatorUpdate(traceNode: Stack<Triple<Long, Int, PageLock>>, newFirstKey: ByteArray, lockManager: LockManager) {
+    private fun propagateSeparatorUpdate(
+        traceNode: Stack<Triple<Long, Int, PageLock>>,
+        newFirstKey: ByteArray,
+        lockManager: LockManager
+    ) {
         val stackList = traceNode.toList()
         for (i in stackList.size - 1 downTo 1) {
             val childIdx = stackList[i].second
@@ -299,8 +342,16 @@ class BTree<K, V> (
                     parentLock.asWriteView { parentBuffer ->
                         val parentPage = SlottedPage(indexConfig, nextTrace.first, parentBuffer)
                         val parentNode = Node.from(indexConfig, parentPage, keySerializer) as InternalNode
-                        val leftSiblingPageId = try{ parentNode.childPageId(keyIdx-1) } catch (_: StorageEngineException.SlotOutOfBoundException){ null }
-                        val rightSiblingPageId = try{ parentNode.childPageId(keyIdx+1) } catch (_: StorageEngineException.SlotOutOfBoundException){ null }
+                        val leftSiblingPageId = try {
+                            parentNode.childPageId(keyIdx-1)
+                        } catch (_: StorageEngineException.SlotOutOfBound) {
+                            null
+                        }
+                        val rightSiblingPageId = try {
+                            parentNode.childPageId(keyIdx+1)
+                        } catch (_: StorageEngineException.SlotOutOfBound) {
+                            null
+                        }
                         val siblingPageIds = listOf(leftSiblingPageId, rightSiblingPageId)
                         val siblingLocks = mutableListOf<PageLock>()
                         for(siblingId in siblingPageIds){
@@ -391,9 +442,24 @@ class BTree<K, V> (
     private fun split(traceNode: Stack<Triple<Long, Int, PageLock>>, lockManager: LockManager){
         var continueLoop = true
         while(traceNode.isNotEmpty() && continueLoop){
-            val (currentPageId, currentSlotIdx, currentPageLock) = try {traceNode.pop()} catch (e: EmptyStackException) { throw IndexException.InvalidTraceStackException(name, targetTable, e) }
+            val (currentPageId, currentSlotIdx, currentPageLock) =
+                try {
+                    traceNode.pop()
+                } catch (e: EmptyStackException) {
+                    throw IndexException.InvalidTraceStack(
+                        EngineErrorDetail(
+                            reason = "Unexpected node trace data invalid. IndexName: $name TargetTableName: $targetTable"),
+                        e
+                    )
+                }
             var newPageId: Long = INVALID_PAGE_ID
-            if(currentPageLock.pageId != currentPageId) throw IndexException.InvalidTraceObjectError(currentPageId)
+            if(currentPageLock.pageId != currentPageId)
+                throw IndexException.InvalidTraceObject(
+                    EngineErrorDetail(
+                        pageId = currentPageId,
+                        reason = "The provided trace object does not match the most recently pushed lock in the latch queue."
+                    )
+                )
 
             currentPageLock.asWriteView { buffer ->
                 val page = SlottedPage(indexConfig, currentPageId, buffer)
@@ -432,7 +498,12 @@ class BTree<K, V> (
                             nodeSplitData
                         }
                     }
-                    else -> throw IndexException.InvalidNodeTypeException(node.page.type)
+                    else -> throw IndexException.InvalidNodeType(
+                        EngineErrorDetail(
+                            pageType = node.page.type,
+                            reason = "Invalid node type"
+                        )
+                    )
                 }
                 if(traceNode.isEmpty()){
                     val newLock = storageManager.newPage(PageType.INTERNAL_NODE, LockMode.WRITE)
@@ -492,7 +563,12 @@ class BTree<K, V> (
         lockManager: LockManager,
         operationMode: BTreeOptMode
     ): Triple<Long, Int, Boolean> {
-        if(rootPageId == INVALID_PAGE_ID) throw IndexException.EmptyTreeException(name, targetTable)
+        if(rootPageId == INVALID_PAGE_ID)
+            throw IndexException.EmptyTree(
+                EngineErrorDetail(
+                    reason = "Search function should be called when the tree is not empty. IndexName: $name TargetTableName: $targetTable"
+                )
+            )
 
         var pageIdCursor: Long = rootPageId
         val rootPageLock = storageManager.fetchPage(pageIdCursor, lockManager.lockMode)
@@ -528,7 +604,8 @@ class BTree<K, V> (
         val serializedKey = keySerializer.serialize(key)
         val traceNode: Stack<Triple<Long, Int, PageLock>> = Stack<Triple<Long, Int, PageLock>>()
         val lockManager = LockManager(LockMode.READ)
-        val (leafNodePageId, keyIdx, isExist) = searchLeafNode(serializedKey, null, traceNode, lockManager, BTreeOptMode.SELECT)
+        val (leafNodePageId, keyIdx, isExist) =
+            searchLeafNode(serializedKey, null, traceNode, lockManager, BTreeOptMode.SELECT)
         val lock = storageManager.fetchPage(leafNodePageId, lockManager.lockMode)
         lockManager.push(lock)
         val value: ByteArray? = lock.asReadView { buffer ->

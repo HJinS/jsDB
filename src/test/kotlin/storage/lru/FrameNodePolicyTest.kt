@@ -5,8 +5,9 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.throwable.shouldHaveMessage
-import storageEngine.exception.StorageEngineException
+import exception.StorageEngineException
 import storageEngine.lru.FrameNodePolicy
+import util.SqlState
 
 class FrameNodePolicyTest: BehaviorSpec({
     given("a midpoint lruPolicy with 10 frames"){
@@ -23,8 +24,8 @@ class FrameNodePolicyTest: BehaviorSpec({
         }
         `when`("evict one time"){
             then("LRUEvictException error should be thrown"){
-                val error = shouldThrow<StorageEngineException.LRUEvictException> { midPointLruPolicy.evict() }
-                error shouldHaveMessage "Could not evict frame. May be all frame is pinned or buffer pool is empty. young: 0, old: 0, capacity: 30"
+                val error = shouldThrow<StorageEngineException.LRUEvict> { midPointLruPolicy.evict() }
+                error shouldHaveMessage "[${SqlState.INTERNAL_ERROR.code}]: Could not evict frame. May be all frame is pinned or buffer pool is empty. young: 0, old: 0, capacity: 30"
             }
         }
         `when`("unpin first 5 frames and evict one time"){

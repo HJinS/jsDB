@@ -4,9 +4,9 @@ import config.SimpleConfig
 import helper.serializer.InstantSerializerHelper
 import index.serializer.MultiColumnKeySerializer
 import helper.serializer.RowDataSerializerHelper
-import index.util.IndexColumn
-import index.util.ColumnType
-import index.util.IndexKeySchema
+import schema.IndexColumn
+import schema.ColumnType
+import schema.IndexKeySchema
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.shouldBe

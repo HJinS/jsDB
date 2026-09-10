@@ -1,6 +1,4 @@
-package catalog.data
-
-import index.util.IndexColumn
+package schema
 
 data class IndexRow(
     val indexId: Long,

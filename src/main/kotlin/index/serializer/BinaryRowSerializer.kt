@@ -1,6 +1,7 @@
 package index.serializer
 
-import index.util.*
+import schema.*
+import util.*
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.time.Instant
@@ -45,7 +46,9 @@ class BinaryRowSerializer(private val rowSchema: RowSchema): ValueSerializer<Lis
                 ColumnType.LOCAL_DATE -> ByteBuffer.allocate(Long.SIZE_BYTES)
                     .order(ByteOrder.BIG_ENDIAN).putLong((valueItem as LocalDate).toEpochDay()).array()
                 ColumnType.LOCAL_DATE_TIME -> ByteBuffer.allocate(Long.SIZE_BYTES)
-                    .order(ByteOrder.BIG_ENDIAN).putLong((valueItem as LocalDateTime).toEpochSecond(ZoneOffset.UTC)).array()
+                    .order(ByteOrder.BIG_ENDIAN)
+                    .putLong((valueItem as LocalDateTime).toEpochSecond(ZoneOffset.UTC))
+                    .array()
                 ColumnType.INSTANT -> ByteBuffer.allocate(Long.SIZE_BYTES)
                     .order(ByteOrder.BIG_ENDIAN).putLong((valueItem as Instant).epochSecond).array()
                 ColumnType.UUID -> {
@@ -94,11 +97,26 @@ class BinaryRowSerializer(private val rowSchema: RowSchema): ValueSerializer<Lis
         return when (type) {
             ColumnType.BOOLEAN -> (bytes[offset].toInt() == 1) to 1
             ColumnType.BYTE -> bytes[offset] to 1
-            ColumnType.SHORT -> ByteBuffer.wrap(bytes, offset, Short.SIZE_BYTES).order(ByteOrder.BIG_ENDIAN).short to Short.SIZE_BYTES
-            ColumnType.INT -> ByteBuffer.wrap(bytes, offset, Int.SIZE_BYTES).order(ByteOrder.BIG_ENDIAN).int to Int.SIZE_BYTES
-            ColumnType.LONG -> ByteBuffer.wrap(bytes, offset, Long.SIZE_BYTES).order(ByteOrder.BIG_ENDIAN).long to Long.SIZE_BYTES
-            ColumnType.FLOAT -> ByteBuffer.wrap(bytes, offset, Float.SIZE_BYTES).order(ByteOrder.BIG_ENDIAN).float to Float.SIZE_BYTES
-            ColumnType.DOUBLE -> ByteBuffer.wrap(bytes, offset, Double.SIZE_BYTES).order(ByteOrder.BIG_ENDIAN).double to Double.SIZE_BYTES
+            ColumnType.SHORT -> ByteBuffer
+                .wrap(bytes, offset, Short.SIZE_BYTES)
+                .order(ByteOrder.BIG_ENDIAN)
+                .short to Short.SIZE_BYTES
+            ColumnType.INT -> ByteBuffer
+                .wrap(bytes, offset, Int.SIZE_BYTES)
+                .order(ByteOrder.BIG_ENDIAN)
+                .int to Int.SIZE_BYTES
+            ColumnType.LONG -> ByteBuffer
+                .wrap(bytes, offset, Long.SIZE_BYTES)
+                .order(ByteOrder.BIG_ENDIAN)
+                .long to Long.SIZE_BYTES
+            ColumnType.FLOAT -> ByteBuffer
+                .wrap(bytes, offset, Float.SIZE_BYTES)
+                .order(ByteOrder.BIG_ENDIAN)
+                .float to Float.SIZE_BYTES
+            ColumnType.DOUBLE -> ByteBuffer
+                .wrap(bytes, offset, Double.SIZE_BYTES)
+                .order(ByteOrder.BIG_ENDIAN)
+                .double to Double.SIZE_BYTES
             ColumnType.STRING -> bytes.decodeBinaryString(offset)
             ColumnType.BYTES -> bytes.decodeBinaryByteArray(offset)
             ColumnType.LOCAL_DATE -> {

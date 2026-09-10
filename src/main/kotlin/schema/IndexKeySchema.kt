@@ -1,4 +1,4 @@
-package index.util
+package schema
 
 data class IndexKeySchema(
     val indexColumns: List<IndexColumn>

@@ -1,7 +1,8 @@
 package storageEngine
 
-import catalog.MetaPageData
-import storageEngine.exception.StorageEngineException
+import schema.MetaPageData
+import exception.StorageEngineException
+import util.EngineErrorDetail
 import util.INVALID_PAGE_ID
 import util.LockMode
 import util.META_PAGE_ID
@@ -25,7 +26,7 @@ class MetaPageManager(
                 MetaPageOffset.COLUMN_CATALOG_ROOT_PAGE_ID
             )
         ){
-            StorageEngineException.InvalidMetaArgument(metaPageOffset)
+            StorageEngineException.InvalidMetaArgument(EngineErrorDetail(reason = "Invalid argument: $metaPageOffset"))
         }
         val pageLock = bufferPoolManager.fetchPage(META_PAGE_ID, LockMode.WRITE)
         pageLock.asWriteView { buffer ->
@@ -36,7 +37,7 @@ class MetaPageManager(
 
     fun getNextId(metaPageOffset: MetaPageOffset): Long{
         requireOrThrow(metaPageOffset in setOf(MetaPageOffset.NEXT_INDEX_ID, MetaPageOffset.NEXT_TABLE_ID)){
-            StorageEngineException.InvalidMetaArgument(metaPageOffset)
+            StorageEngineException.InvalidMetaArgument(EngineErrorDetail(reason = "Invalid argument: $metaPageOffset"))
         }
         val pageLock = bufferPoolManager.fetchPage(META_PAGE_ID, LockMode.WRITE)
         var tableId = -1L
