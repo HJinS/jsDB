@@ -158,4 +158,12 @@ class CatalogManager(
             ColumnRaw(it.second).toRow()
         }
     }
+
+    fun getIndexes(tableName: String): List<IndexRow>{
+        return indexCatalog.traverse().filter {
+            it.first[2] == tableName
+        }.map {
+            IndexRaw(it.second).toRow()
+        }
+    }
 }
