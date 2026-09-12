@@ -45,7 +45,7 @@ class FrameNodePolicyTest: BehaviorSpec({
                 framesPinned.addFirst(frameId)
             }
             framesUnpinned.clear()
-            `when`("unpin all frames and add all frames"){
+            and("unpin all frames and add all frames"){
                 for(frameId in framesPinned){
                     midPointLruPolicy.unpin(frameId)
                     framesUnpinned.addFirst(frameId)
@@ -57,7 +57,7 @@ class FrameNodePolicyTest: BehaviorSpec({
                 }
                 framesUnpinned.clear()
 
-                `when`("evict one frame"){
+                and("evict one frame"){
                     val evicted = midPointLruPolicy.evict()
                     // add()가 매번 head(가장 최근 접근)로 옮기므로, evict()가 지우는 tail은
                     // "가장 먼저 add()된, 그 뒤로 다시 안 만져진" 노드다 — removeLast가 아니라 removeFirst.

@@ -278,8 +278,15 @@ class BinaryRowSerializerTest: FunSpec({
             val serializedKey1 = serializer.serialize(parameter.first)
             val deSerialized = serializer.deserialize(serializedKey1)
             for ((key1, key2) in parameter.first.zip(deSerialized.first)){
-                key1 shouldBe key2
+                elementsEqual(key1, key2) shouldBe true
             }
         }
     }
 })
+
+private fun elementsEqual(a: Any?, b: Any?): Boolean = when (a) {
+    is ByteArray if b is ByteArray -> a.contentEquals(b)
+    is Float if b is Float -> a.isNaN() && b.isNaN() || a == b
+    is Double if b is Double -> a.isNaN() && b.isNaN() || a == b
+    else -> a == b
+}

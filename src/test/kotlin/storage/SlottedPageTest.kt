@@ -34,12 +34,12 @@ class SlottedPageTest:BehaviorSpec({
         val dummyItems = mutableListOf<Pair<ByteArray, ByteArray>>()
         val keyGenerator = Arb.bind(
             Arb.int(),
-            Arb.instant(),
+            Arb.javaInstant(),
             Arb.string(maxSize = 6)
         ){ id, epoch, name -> listOf(id, epoch, name) }
         val valueGenerator = Arb.bind(
             Arb.int(),
-            Arb.instant(),
+            Arb.javaInstant(),
             Arb.string(maxSize = 6)
         ){ id, epoch, name -> SampleData(id, epoch, name) }
         `when`("insert 5 key, value items"){
@@ -60,9 +60,9 @@ class SlottedPageTest:BehaviorSpec({
             val deleteSlotId = 2
             val (deletedKey, deletedValue) = page.deleteData(deleteSlotId)
             val (expectedDeleteKey, expectedDeleteValue) = dummyItemsSorted[2]
-            then("delete result should be $expectedDeleteKey, $expectedDeleteValue"){
-                deletedKey contentEquals expectedDeleteKey
-                deletedValue contentEquals expectedDeleteValue
+            then("delete result should be ${expectedDeleteKey.contentToString()}, ${expectedDeleteValue.contentToString()}"){
+                (deletedKey contentEquals expectedDeleteKey) shouldBe true
+                (deletedValue contentEquals expectedDeleteValue) shouldBe true
             }
             dummyItemsSorted.removeAt(deleteSlotId)
         }
@@ -84,15 +84,16 @@ class SlottedPageTest:BehaviorSpec({
             then("the record count should be 2"){
                 page.recordCount shouldBe 9
             }
+            dummyItemsSorted[1] = dummyKey to dummyNewValueSerialized
         }
 
         `when`("delete 1 key, value pair"){
             val deleteSlotId = 1
             val (deletedKey, deletedValue) = page.deleteData(deleteSlotId)
-            val (expectedDeleteKey, expectedDeleteValue) = dummyItemsSorted[2]
-            then("delete result should be $expectedDeleteKey, $expectedDeleteValue"){
-                deletedKey contentEquals expectedDeleteKey
-                deletedValue contentEquals expectedDeleteValue
+            val (expectedDeleteKey, expectedDeleteValue) = dummyItemsSorted[1]
+            then("delete result should be ${expectedDeleteKey.contentToString()}, ${expectedDeleteValue.contentToString()}"){
+                (deletedKey contentEquals expectedDeleteKey) shouldBe true
+                (deletedValue contentEquals expectedDeleteValue) shouldBe true
             }
             dummyItemsSorted.removeAt(deleteSlotId)
         }
@@ -128,9 +129,9 @@ class SlottedPageTest:BehaviorSpec({
             val deleteSlotId = 2
             val (deletedKey, deletedValue) = page.deleteData(deleteSlotId)
             val (expectedDeleteKey, expectedDeleteValue) = dummyItemsSorted[2]
-            then("delete result should be $expectedDeleteKey, $expectedDeleteValue"){
-                deletedKey contentEquals expectedDeleteKey
-                deletedValue contentEquals expectedDeleteValue
+            then("delete result should be ${expectedDeleteKey.contentToString()}, ${expectedDeleteValue.contentToString()}"){
+                (deletedKey contentEquals expectedDeleteKey) shouldBe true
+                (deletedValue contentEquals expectedDeleteValue) shouldBe true
             }
             dummyItemsSorted.removeAt(deleteSlotId)
         }
@@ -152,15 +153,16 @@ class SlottedPageTest:BehaviorSpec({
             then("the record count should be 2"){
                 page.recordCount shouldBe 8
             }
+            dummyItemsSorted[1] = dummyKey to dummyNewValueSerialized
         }
 
         `when`("delete 1 key, value pair"){
             val deleteSlotId = 1
             val (deletedKey, deletedValue) = page.deleteData(deleteSlotId)
-            val (expectedDeleteKey, expectedDeleteValue) = dummyItemsSorted[2]
-            then("delete result should be $expectedDeleteKey, $expectedDeleteValue"){
-                deletedKey contentEquals expectedDeleteKey
-                deletedValue contentEquals expectedDeleteValue
+            val (expectedDeleteKey, expectedDeleteValue) = dummyItemsSorted[1]
+            then("delete result should be ${expectedDeleteKey.contentToString()}, ${expectedDeleteValue.contentToString()}"){
+                (deletedKey contentEquals expectedDeleteKey) shouldBe true
+                (deletedValue contentEquals expectedDeleteValue) shouldBe true
             }
             dummyItemsSorted.removeAt(deleteSlotId)
         }

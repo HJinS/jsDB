@@ -1,7 +1,7 @@
 package index.btree
 
 import config.IndexConfig
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 import index.btree.node.InternalNode
 import index.btree.node.LeafNode
 import index.btree.node.Node
