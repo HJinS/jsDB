@@ -4,10 +4,10 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.charset.StandardCharsets
 import java.text.Collator
-import java.util.UUID
 import kotlin.experimental.inv
 import kotlin.experimental.xor
 import kotlin.text.toByteArray
+import kotlin.uuid.Uuid
 import exception.IndexException
 
 
@@ -136,13 +136,8 @@ fun Boolean.encodeSortable(): ByteArray {
     return escapeZeroBytes(byteArrayOf(rawByte))
 }
 
-fun UUID.encodeSortable(): ByteArray{
-    val bytes = ByteBuffer.allocate(16)
-        .order(ByteOrder.BIG_ENDIAN)
-        .putLong(this.mostSignificantBits)
-        .putLong(this.leastSignificantBits)
-        .array()
-    return escapeZeroBytes(bytes)
+fun Uuid.encodeSortable(): ByteArray{
+    return escapeZeroBytes(this.toByteArray())
 }
 
 /**
@@ -271,7 +266,7 @@ fun ByteArray.decodeSortableBoolean(): Boolean {
 }
 
 
-fun ByteArray.decodeSortableUUID(): UUID{
+fun ByteArray.decodeSortableUUID(): Uuid{
     val unEscaped = unescapeZeroBytes(this)
     if(unEscaped.size != 16)
         throw IndexException.InvalidUUIDLength(
@@ -280,8 +275,7 @@ fun ByteArray.decodeSortableUUID(): UUID{
             )
         )
 
-    val byteBuffer = ByteBuffer.wrap(unEscaped).order(ByteOrder.BIG_ENDIAN)
-    return UUID(byteBuffer.long, byteBuffer.long)
+    return Uuid.fromByteArray(unEscaped)
 }
 
 fun unescapeZeroBytes(bytes: ByteArray): ByteArray{

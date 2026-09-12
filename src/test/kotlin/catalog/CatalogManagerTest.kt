@@ -19,12 +19,12 @@ import storageEngine.StorageManager
 import storageEngine.lru.FrameNodePolicy
 import util.MetaPageOffset
 import java.io.File
-import java.util.UUID
 import kotlin.random.Random
+import kotlin.uuid.Uuid
 
 
 class CatalogManagerTest: BehaviorSpec({
-    val dbPath = "test-catalog-manager-${UUID.randomUUID()}"
+    val dbPath = "test-catalog-manager-${Uuid.random()}"
     val config = SimpleConfig(
         storageConfig=StorageConfig(
             dbPath = dbPath,

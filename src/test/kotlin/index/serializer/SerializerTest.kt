@@ -11,7 +11,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.Locale
-import java.util.UUID
+import kotlin.uuid.Uuid
 
 class SerializerTest: FunSpec({
     listOf(
@@ -71,7 +71,7 @@ class SerializerTest: FunSpec({
                 IndexColumn("epoch", ColumnType.INSTANT, descending = false)
             )
         ),
-        listOf(UUID.randomUUID()) to IndexKeySchema(
+        listOf(Uuid.random()) to IndexKeySchema(
             listOf(
                 IndexColumn("uuid", ColumnType.UUID, descending = false)
             )
@@ -88,7 +88,7 @@ class SerializerTest: FunSpec({
                 IndexColumn("birth", ColumnType.LOCAL_DATE, descending = false)
             )
         ),
-        listOf(true, 10.0f, UUID.randomUUID()) to IndexKeySchema(
+        listOf(true, 10.0f, Uuid.random()) to IndexKeySchema(
             listOf(
                 IndexColumn("isActive", ColumnType.BOOLEAN, descending = false),
                 IndexColumn("price", ColumnType.FLOAT, descending = false),

@@ -15,11 +15,11 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import java.io.File
-import java.util.UUID
+import kotlin.uuid.Uuid
 
 class DataBaseTest: BehaviorSpec({
     given("A database"){
-        val dbPath = "test-database-${UUID.randomUUID()}.db"
+        val dbPath = "test-database-${Uuid.random()}.db"
         val config = SimpleConfig(StorageConfig(dbPath = dbPath, poolSize = 100))
         val db = DataBase(config).apply { initialize() }
         afterSpec { db.close(); File(dbPath).delete() }

@@ -8,7 +8,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneOffset
-import java.util.*
+import kotlin.uuid.Uuid
 
 
 abstract class BaseKeySerializer<K>(protected val schema: IndexKeySchema): KeySerializer<K> {
@@ -66,7 +66,7 @@ abstract class BaseKeySerializer<K>(protected val schema: IndexKeySchema): KeySe
                 (byteArrayOf(0x01)) + packedKey
             }
             ColumnType.UUID -> {
-                val packedKey = (key as UUID).encodeSortable()
+                val packedKey = (key as Uuid).encodeSortable()
                 (byteArrayOf(0x01)) + packedKey
             }
             ColumnType.BYTES -> {

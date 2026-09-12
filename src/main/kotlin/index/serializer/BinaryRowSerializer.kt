@@ -8,8 +8,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneOffset
-import java.util.UUID
 import kotlin.math.ceil
+import kotlin.uuid.Uuid
 
 class BinaryRowSerializer(private val rowSchema: RowSchema): ValueSerializer<List<Any?>>{
     override fun serialize(value: List<Any?>): ByteArray {
@@ -51,11 +51,7 @@ class BinaryRowSerializer(private val rowSchema: RowSchema): ValueSerializer<Lis
                     .array()
                 ColumnType.INSTANT -> ByteBuffer.allocate(Long.SIZE_BYTES)
                     .order(ByteOrder.BIG_ENDIAN).putLong((valueItem as Instant).epochSecond).array()
-                ColumnType.UUID -> {
-                    val uuidValue = valueItem as UUID
-                    ByteBuffer.allocate(16).order(ByteOrder.BIG_ENDIAN)
-                        .putLong(uuidValue.mostSignificantBits).putLong(uuidValue.leastSignificantBits).array()
-                }
+                ColumnType.UUID -> (valueItem as Uuid).toByteArray()
             }
             tempArray.add(serialized)
             totalSize += serialized.size
@@ -133,7 +129,7 @@ class BinaryRowSerializer(private val rowSchema: RowSchema): ValueSerializer<Lis
             }
             ColumnType.UUID -> {
                 val buffer = ByteBuffer.wrap(bytes, offset, 16).order(ByteOrder.BIG_ENDIAN)
-                UUID(buffer.long, buffer.long) to 16
+                Uuid.fromLongs(buffer.long, buffer.long) to 16
             }
         }
     }

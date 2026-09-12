@@ -8,7 +8,7 @@ import io.kotest.matchers.shouldBe
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
-import java.util.UUID
+import kotlin.uuid.Uuid
 import kotlin.random.Random
 
 
@@ -70,7 +70,7 @@ class BinaryRowSerializerTest: FunSpec({
                 RowColumn("epoch", ColumnType.INSTANT)
             )
         ),
-        listOf(UUID.randomUUID()) to RowSchema(
+        listOf(Uuid.random()) to RowSchema(
             listOf(
                 RowColumn("uuid", ColumnType.UUID)
             )
@@ -87,7 +87,7 @@ class BinaryRowSerializerTest: FunSpec({
                 RowColumn("birth", ColumnType.LOCAL_DATE)
             )
         ),
-        listOf(true, 10.0f, UUID.randomUUID()) to RowSchema(
+        listOf(true, 10.0f, Uuid.random()) to RowSchema(
             listOf(
                 RowColumn("isActive", ColumnType.BOOLEAN),
                 RowColumn("price", ColumnType.FLOAT),
@@ -126,7 +126,7 @@ class BinaryRowSerializerTest: FunSpec({
         ),
         listOf(
             Random.nextInt(),
-            UUID.randomUUID(),
+            Uuid.random(),
             null,
             Random.nextInt(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort(),
             Random.nextLong(),
