@@ -92,3 +92,4 @@ bin
 # Gemini & Skills
 *.skill
 .gemini/
+.claude/
