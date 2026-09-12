@@ -97,7 +97,6 @@ open class SlottedPage(
         data.putShort(slotLocation + 2, length)
     }
 
-    @OptIn(ExperimentalStdlibApi::class)
     private fun insertRecord(offset: Int, key: ByteArray, value: ByteArray, keyLengthEncoded: ByteArray, valueLengthEncoded: ByteArray){
         var insertLocation = offset
         data.put(insertLocation, keyLengthEncoded)
@@ -112,7 +111,6 @@ open class SlottedPage(
         data.put(insertLocation, value)
     }
 
-    @OptIn(ExperimentalStdlibApi::class)
     fun getData(slotId: Int): Pair<ByteArray, ByteArray>{
         if(slotId !in 0..<recordCount)
             throw StorageEngineException.SlotOutOfBound(
@@ -214,7 +212,6 @@ open class SlottedPage(
         return src
     }
 
-    @OptIn(ExperimentalStdlibApi::class)
     fun insertData(slotId: Int, key: ByteArray, value: ByteArray): Int {
         // 1. [공간 확인] 헤더, 슬롯, 데이터가 들어갈 공간이 충분한지 확인
         // (Total Length + Slot Size) <= Free Space
