@@ -33,7 +33,6 @@ class Table(
                 tableName = primaryIndex.metadata.tableName,
                 columnNames = primaryIndex.columnNames
             ))
-        primaryTree.insert(primaryKey, row.toList())
 
         for((_, handle) in secondaryIndexes){
             val indexKey = handle.extractKey(row)
@@ -45,6 +44,12 @@ class Table(
                     columnNames = handle.columnNames
                 ))
             }
+        }
+
+        primaryTree.insert(primaryKey, row.toList())
+
+        for((_, handle) in secondaryIndexes){
+            val indexKey = handle.extractKey(row)
             handle.btree.insert(indexKey, primaryKey)
         }
     }
@@ -111,8 +116,7 @@ class Table(
     }
 
     private fun keysEqual(a: List<Any?>, b: List<Any?>): Boolean {
-        if (a.size != b.size) return false
-        return a.zip(b).all { (x, y) ->
+        return a.size == b.size && a.zip(b).all { (x, y) ->
             if (x is ByteArray && y is ByteArray) x.contentEquals(y) else x == y
         }
     }

@@ -11,6 +11,7 @@ import index.btree.BTree
 import index.serializer.BinaryRowSerializer
 import index.serializer.MultiColumnKeySerializer
 import schema.IndexColumn
+import schema.IndexHandle
 import schema.IndexKeySchema
 import schema.RowSchema
 import schema.toPrimaryRowSchema
@@ -66,7 +67,7 @@ class DataBase(private val config: SimpleConfig) {
         isPrimary: Boolean,
         isUnique: Boolean,
         keySchema: IndexKeySchema,
-    ): BTree<List<Any?>, List<Any?>> {
+    ): IndexHandle {
         val resolved = catalogManager.resolveIndex(indexName)
         requireOrThrow(resolved == null) { DatabaseException.DuplicateObject(SQLErrorDetail(entityType = EntityType.INDEX, entityName = indexName)) }
         val tableData = catalogManager.resolveTable(tableName)
@@ -92,8 +93,8 @@ class DataBase(private val config: SimpleConfig) {
 
         val indexId = metaPageManager.getNextId(MetaPageOffset.NEXT_INDEX_ID)
         val valueSchema = resolveIndexValueSchema(primaryIdxName, tableName, isPrimary)
-        catalogManager.registerNewIndex(indexId, indexName, tableName, null, isPrimary, isUnique, keySchema.indexColumns)
-        return BTree(
+        val indexData = catalogManager.registerNewIndex(indexId, indexName, tableName, null, isPrimary, isUnique, keySchema.indexColumns)
+        val index = BTree(
             indexName,
             tableName,
             storageManager,
@@ -105,9 +106,13 @@ class DataBase(private val config: SimpleConfig) {
                 catalogManager.updateIndexRootPageId(indexName, newRoot)
             }
         )
+        return IndexHandle(
+            indexData,
+            index
+        )
     }
 
-    fun loadIndex(indexName: String): BTree<List<Any?>, List<Any?>> {
+    fun loadIndex(indexName: String): IndexHandle {
         val indexData = catalogManager.resolveIndex(indexName)
         requireOrThrow(indexData != null) { CatalogException.UndefinedObject(SQLErrorDetail(entityType = EntityType.INDEX, entityName = indexName)) }
         val targetTableData = catalogManager.resolveTable(indexData.tableName)
@@ -117,21 +122,25 @@ class DataBase(private val config: SimpleConfig) {
             indexData.tableName,
             indexName == targetTableData.primaryIndexName,
         )
-        return BTree(
+        val index = BTree(
             indexName,
             indexData.tableName,
             storageManager,
             MultiColumnKeySerializer(IndexKeySchema(indexData.keyColumns)),
             BinaryRowSerializer(valueSchema),
             config.indexConfig,
-            INVALID_PAGE_ID,
+            indexData.rootPageId ?: INVALID_PAGE_ID,
             onRootChanged = { newRoot ->
                 catalogManager.updateIndexRootPageId(indexName, newRoot)
             }
         )
+        return IndexHandle(
+            indexData,
+            index
+        )
     }
 
-    fun createTable(tableName: String, primaryIdxName: String?, columns: RowSchema): BTree<List<Any?>, List<Any?>>{
+    fun createTable(tableName: String, primaryIdxName: String?, columns: RowSchema): Table{
         val resolved = catalogManager.resolveTable(tableName)
         requireOrThrow(resolved == null) { DatabaseException.DuplicateTable(SQLErrorDetail(entityType = EntityType.TABLE, entityName = tableName)) }
         val duplicateNames = columns.rowColumns
@@ -168,15 +177,32 @@ class DataBase(private val config: SimpleConfig) {
             isUnique = true,
             keySchema = primaryIndexKeySchema
         )
+        val rowSchema = resolveIndexValueSchema(tableRow.primaryIndexName, tableName, true)
         catalogManager.updatePrimaryIndexName(tableName, primaryIdxName)
-        return primaryIndex
+        return Table(
+            rowSchema,
+            primaryIndex,
+            emptyMap()
+        )
+
     }
 
-    fun loadTable(tableName: String): BTree<List<Any?>, List<Any?>> {
+    fun loadTable(tableName: String): Table {
         val tableData = catalogManager.resolveTable(tableName) ?: throw CatalogException.UndefinedTable(SQLErrorDetail(entityType = EntityType.TABLE, entityName = tableName))
         val primaryIdxName = tableData.primaryIndexName
             ?: throw DatabaseException.UndefinedObject(SQLErrorDetail(entityType = EntityType.PRIMARY_INDEX, tableName = tableName))
-        return loadIndex(primaryIdxName)
+        val primaryIdxHandle = loadIndex(primaryIdxName)
+        val rowSchema = resolveIndexValueSchema(tableData.primaryIndexName, tableName, true)
+        val secondaryIndexes = catalogManager.getIndexes(tableName)
+            .filter { !it.isPrimary }
+            .map { it.indexName }
+            .associateWith { loadIndex(it) }
+
+        return Table(
+            rowSchema,
+            primaryIdxHandle,
+            secondaryIndexes
+        )
     }
 
     fun createColumn(tableId: Long, ordinal: Int, name: String, type: String, nullable: Boolean): ColumnRow{

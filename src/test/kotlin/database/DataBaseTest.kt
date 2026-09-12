@@ -7,10 +7,12 @@ import exception.DatabaseException
 import schema.ColumnType
 import schema.IndexColumn
 import schema.IndexKeySchema
+import schema.Row
 import schema.RowColumn
 import schema.RowSchema
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import java.io.File
 import java.util.UUID
@@ -39,22 +41,19 @@ class DataBaseTest: BehaviorSpec({
             }
         }
         `when`("Create a table"){
-            val primaryIndex = db.createTable(
+            val primaryTable = db.createTable(
                 tableName,
                 primaryIdxName,
                 columns
             )
+            val row = Row(columns, listOf(1L, 10, 2.5, 3.5f))
+            primaryTable.insertRow(row)
 
-            then("A primary index should be returned"){
-                primaryIndex.name shouldBe primaryIdxName
-                primaryIndex.targetTable shouldBe tableName
-            }
-
-            then("loadTable should return primary index"){
+            then("loadTable should return a table backed by the same underlying data"){
                 val loadedTable = db.loadTable(tableName)
-                loadedTable.name shouldBe primaryIndex.name
-                loadedTable.targetTable shouldBe primaryIndex.targetTable
-                loadedTable.targetTable shouldBe tableName
+                loadedTable.selectByKey(listOf(1L)).shouldNotBeNull {
+                    this["column1"] shouldBe 10
+                }
             }
 
             then("Creating primary index should throw an exception"){
@@ -136,8 +135,8 @@ class DataBaseTest: BehaviorSpec({
                 keySchema = indexSchema
             )
             then("Secondary index should be created"){
-                secondaryIndex.name shouldBe secondaryIndexName
-                secondaryIndex.targetTable shouldBe tableName
+                secondaryIndex.metadata.indexName shouldBe secondaryIndexName
+                secondaryIndex.metadata.tableName shouldBe tableName
             }
         }
         val invalidSchema1 = IndexKeySchema(listOf(
@@ -210,8 +209,8 @@ class DataBaseTest: BehaviorSpec({
         `when`("Load index $secondaryIndexName"){
             then("Index should be returned"){
                 val loadedIndex = db.loadIndex(secondaryIndexName)
-                loadedIndex.name shouldBe secondaryIndexName
-                loadedIndex.targetTable shouldBe tableName
+                loadedIndex.metadata.indexName shouldBe secondaryIndexName
+                loadedIndex.metadata.tableName shouldBe tableName
             }
         }
 
