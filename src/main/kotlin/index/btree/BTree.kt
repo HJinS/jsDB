@@ -227,6 +227,65 @@ class BTree<K, V>(
         lockManager.close()
     }
 
+    fun search(key: K): V? {
+        if (rootPageId == INVALID_PAGE_ID) return null
+        val serializedKey = keySerializer.serialize(key)
+        val traceNode: Stack<Triple<Long, Int, PageLock>> = Stack<Triple<Long, Int, PageLock>>()
+        val lockManager = LockManager(LockMode.READ)
+        val (leafNodePageId, keyIdx, isExist) =
+            searchLeafNode(serializedKey, null, traceNode, lockManager, BTreeOptMode.SELECT)
+        val lock = storageManager.fetchPage(leafNodePageId, lockManager.lockMode)
+        lockManager.push(lock)
+        val value: ByteArray? = lock.asReadView { buffer ->
+            val currentPage = SlottedPage(indexConfig, leafNodePageId, buffer)
+            val node = Node.from(indexConfig, currentPage, keySerializer)
+            if (node.isSafeNode(BTreeOptMode.SELECT)) lockManager.releaseAncestor(lock)
+            if (isExist) currentPage.getData(keyIdx).second else null
+        }
+        lockManager.close()
+        traceNode.clear()
+        return value?.let { valueSerializer.deserialize(it).first }
+    }
+
+    /**
+     * Traverse all the leaf nodes from left to right and return key, value of leaf node.
+     *
+     * @return Key, Value of the leaf node.
+     * @see findLeftMostLeafPageId
+     * */
+    fun traverse(): List<Pair<K, V>> {
+        val result = mutableListOf<Pair<K, V>>()
+        val lockManager = LockManager(LockMode.READ)
+        var leafNodePageIdCursor: Long? = findLeftMostLeafPageId(lockManager) ?: return emptyList()
+        lockManager.push(storageManager.fetchPage(leafNodePageIdCursor!!, LockMode.READ))
+        while (true) {
+            val currentLock = lockManager.last
+            var isSafeToUnlockAncestor = false
+            val nextLeafNodePageId = currentLock.asReadView { buffer ->
+                val page = SlottedPage(indexConfig, leafNodePageIdCursor!!, buffer)
+                val currentNode = Node.from(indexConfig, page, keySerializer)
+                isSafeToUnlockAncestor = currentNode.isSafeNode(BTreeOptMode.SELECT)
+                val keys = currentNode.keyView
+                val values = currentNode.valueView
+                for (idx in keys.indices) {
+                    val key: K = keySerializer.deserialize(keys[idx])
+                    val value: V = valueSerializer.deserialize(values[idx]).first
+                    result += key to value
+                }
+                page.rightSiblingPageId
+            }
+            if (isSafeToUnlockAncestor) lockManager.releaseAncestor(currentLock)
+            currentLock.close()
+            if (nextLeafNodePageId == INVALID_PAGE_ID) break
+            val nextLock = storageManager.fetchPage(nextLeafNodePageId, LockMode.READ)
+            lockManager.push(nextLock)
+            leafNodePageIdCursor = nextLeafNodePageId
+        }
+        lockManager.close()
+        return result
+    }
+
+
     private fun checkOverflowAndSplitFirst(
         node: Node<K>,
         page: SlottedPage,
@@ -608,63 +667,6 @@ class BTree<K, V>(
         }
     }
 
-    fun search(key: K): V? {
-        if (rootPageId == INVALID_PAGE_ID) return null
-        val serializedKey = keySerializer.serialize(key)
-        val traceNode: Stack<Triple<Long, Int, PageLock>> = Stack<Triple<Long, Int, PageLock>>()
-        val lockManager = LockManager(LockMode.READ)
-        val (leafNodePageId, keyIdx, isExist) =
-            searchLeafNode(serializedKey, null, traceNode, lockManager, BTreeOptMode.SELECT)
-        val lock = storageManager.fetchPage(leafNodePageId, lockManager.lockMode)
-        lockManager.push(lock)
-        val value: ByteArray? = lock.asReadView { buffer ->
-            val currentPage = SlottedPage(indexConfig, leafNodePageId, buffer)
-            val node = Node.from(indexConfig, currentPage, keySerializer)
-            if (node.isSafeNode(BTreeOptMode.SELECT)) lockManager.releaseAncestor(lock)
-            if (isExist) currentPage.getData(keyIdx).second else null
-        }
-        lockManager.close()
-        traceNode.clear()
-        return value?.let { valueSerializer.deserialize(it).first }
-    }
-
-    /**
-     * Traverse all the leaf nodes from left to right and return key, value of leaf node.
-     *
-     * @return Key, Value of the leaf node.
-     * @see findLeftMostLeafPageId
-     * */
-    fun traverse(): List<Pair<K, V>> {
-        val result = mutableListOf<Pair<K, V>>()
-        val lockManager = LockManager(LockMode.READ)
-        var leafNodePageIdCursor: Long? = findLeftMostLeafPageId(lockManager) ?: return emptyList()
-        lockManager.push(storageManager.fetchPage(leafNodePageIdCursor!!, LockMode.READ))
-        while (true) {
-            val currentLock = lockManager.last
-            var isSafeToUnlockAncestor = false
-            val nextLeafNodePageId = currentLock.asReadView { buffer ->
-                val page = SlottedPage(indexConfig, leafNodePageIdCursor!!, buffer)
-                val currentNode = Node.from(indexConfig, page, keySerializer)
-                isSafeToUnlockAncestor = currentNode.isSafeNode(BTreeOptMode.SELECT)
-                val keys = currentNode.keyView
-                val values = currentNode.valueView
-                for (idx in keys.indices) {
-                    val key: K = keySerializer.deserialize(keys[idx])
-                    val value: V = valueSerializer.deserialize(values[idx]).first
-                    result += key to value
-                }
-                page.rightSiblingPageId
-            }
-            if (isSafeToUnlockAncestor) lockManager.releaseAncestor(currentLock)
-            currentLock.close()
-            if (nextLeafNodePageId == INVALID_PAGE_ID) break
-            val nextLock = storageManager.fetchPage(nextLeafNodePageId, LockMode.READ)
-            lockManager.push(nextLock)
-            leafNodePageIdCursor = nextLeafNodePageId
-        }
-        lockManager.close()
-        return result
-    }
 
     /**
      * Find the left most leaf of the B+tree.
