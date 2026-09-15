@@ -695,25 +695,45 @@ class BTree<K, V>(
      *
      * @return The left most child of B+tree.
      * */
-    private fun findLeftMostLeafPageId(lockManager: LockManager): Long? {
+    private fun findLeftMostLeafPageId(lockManager: LockManager): Long? = findExtremeLeafPageId(lockManager) { it.childPageId(0) }
+
+    /**
+     * Find the right most leaf of the B+tree.
+     *
+     * @return The right most child of B+tree.
+     * */
+    private fun findRightMostLeafPageId(lockManager: LockManager): Long? = findExtremeLeafPageId(lockManager) { it.rightMostChildPageId }
+
+    /**
+     * Descend from the root to a leaf without comparing against any key, always following the
+     * child that [selectChild] picks at each internal node — e.g. the left-most or right-most one.
+     * Used when there's no key to seek by (e.g. no lower/upper bound), so [searchLeafNode]'s
+     * comparison-based descent doesn't apply.
+     *
+     * @return The left/right-most leaf page id, or null if the tree is empty.
+     * */
+    private fun findExtremeLeafPageId(
+        lockManager: LockManager,
+        selectChild: (InternalNode<K>) -> Long,
+    ): Long? {
         var pageIdCursor = if (rootPageId != INVALID_PAGE_ID) rootPageId else return null
         var isLeaf = false
         lockManager.push(storageManager.fetchPage(pageIdCursor, lockManager.lockMode))
         while (true) {
             val currentPageLock = lockManager.last
             var isSafeToUnlockAncestor = false
-            val nextPageId = currentPageLock.asReadView { buffer ->
-                val currentPage = SlottedPage(indexConfig, pageIdCursor, buffer)
-                val currentNode = Node.from(indexConfig, currentPage, keySerializer)
-                isSafeToUnlockAncestor = currentNode.isSafeNode(BTreeOptMode.SELECT)
-                if (currentNode.isLeaf) {
-                    isLeaf = true
-                    pageIdCursor
-                } else {
-                    val currentInternalNode = currentNode as InternalNode
-                    currentInternalNode.childPageId(0)
+            val nextPageId =
+                currentPageLock.asReadView { buffer ->
+                    val currentPage = SlottedPage(indexConfig, pageIdCursor, buffer)
+                    val currentNode = Node.from(indexConfig, currentPage, keySerializer)
+                    isSafeToUnlockAncestor = currentNode.isSafeNode(BTreeOptMode.SELECT)
+                    if (currentNode.isLeaf) {
+                        isLeaf = true
+                        pageIdCursor
+                    } else {
+                        selectChild(currentNode as InternalNode)
+                    }
                 }
-            }
             val nextLock = storageManager.fetchPage(nextPageId, lockManager.lockMode)
             if (isSafeToUnlockAncestor) lockManager.releaseAncestor(currentPageLock)
             lockManager.push(nextLock)
