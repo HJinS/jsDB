@@ -1,4 +1,4 @@
-package index.btree
+package index.data
 
 data class NodeSplitData(
     val splitKeys: MutableList<ByteArray>,
