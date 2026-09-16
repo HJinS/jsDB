@@ -6,6 +6,7 @@ import exception.StorageEngineException
 import index.btree.node.InternalNode
 import index.btree.node.LeafNode
 import index.btree.node.Node
+import index.data.SearchPosition
 import index.serializer.KeySerializer
 import index.serializer.PageIDSerializer
 import index.serializer.ValueSerializer
@@ -254,6 +255,44 @@ class BTree<K, V>(
         lockManager.close()
         traceNode.clear()
         return value?.let { valueSerializer.deserialize(it).first }
+    }
+
+    fun search(
+        key: K,
+        direction: ScanDirection,
+    ): Cursor<K, V>? {
+        if (rootPageId == INVALID_PAGE_ID) return null
+        val traceNode: Stack<Triple<Long, Int, PageLock>> = Stack<Triple<Long, Int, PageLock>>()
+        val lockManager = LockManager(LockMode.READ)
+        val searchPosition = findSearchPosition(key, lockManager, traceNode, direction) ?: return null
+        return Cursor(lockManager, searchPosition, direction, storageManager, indexConfig, keySerializer, valueSerializer)
+    }
+
+    private fun findSearchPosition(
+        key: K,
+        lockManager: LockManager,
+        traceNode: Stack<Triple<Long, Int, PageLock>>,
+        direction: ScanDirection,
+    ): SearchPosition? {
+        val serializedKey =
+            when (direction) {
+                ScanDirection.FORWARD -> {
+                    keySerializer.serialize(key)
+                }
+
+                else -> {
+                    keySerializer.serializeUpper(key)
+                }
+            }
+
+        return if (serializedKey == null) {
+            val rightMostChildPageId = findRightMostLeafPageId(lockManager) ?: return null
+            SearchPosition(rightMostChildPageId, null)
+        } else {
+            val (leafNodePageId, keyIdx, isExist) =
+                searchLeafNode(serializedKey, null, traceNode, lockManager, BTreeOptMode.SELECT)
+            SearchPosition(leafNodePageId, if (direction == ScanDirection.FORWARD) keyIdx + 1 else keyIdx - 1)
+        }
     }
 
     /**

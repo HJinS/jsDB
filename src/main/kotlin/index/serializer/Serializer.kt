@@ -4,6 +4,7 @@ interface KeySerializer<K> {
     fun serialize(key: K): ByteArray
     fun deserialize(bytes: ByteArray): K
     fun format(key: K): String
+    fun serializeUpper(key: K): ByteArray?
 }
 
 interface ValueSerializer<V> {
