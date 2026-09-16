@@ -20,7 +20,7 @@ import util.PageType
 import java.util.Arrays
 import java.util.EmptyStackException
 import java.util.Stack
-import kotlin.collections.plusAssign
+import kotlin.collections.ArrayDeque
 
 val logger = KotlinLogging.logger {}
 
@@ -82,7 +82,7 @@ class BTree<K, V>(
             lockManager.push(writeLock)
             writeLock.asWriteView { buffer ->
                 val page = SlottedPage(indexConfig, leafNodePageId, buffer)
-                val node = Node.from(indexConfig, page, keySerializer)
+                val node = Node.from(indexConfig, page)
                 checkOverflowAndSplitFirst(node, page, serializedKey, serializedValue, lockManager, traceNode)
             }
             traceNode.clear()
@@ -93,7 +93,7 @@ class BTree<K, V>(
 
             writeLock.asWriteView { buffer ->
                 val newPage = SlottedPage(indexConfig, rootPageId, buffer)
-                val newNode = LeafNode(indexConfig, newPage, keySerializer)
+                val newNode = LeafNode(indexConfig, newPage)
                 newNode.insertAt(0, serializedKey, serializedValue)
             }
         }
@@ -138,7 +138,7 @@ class BTree<K, V>(
             }
             leafLock.asWriteView { buffer ->
                 val page = SlottedPage(indexConfig, leafNodePageId, buffer)
-                val node = Node.from(indexConfig, page, keySerializer)
+                val node = Node.from(indexConfig, page)
                 node.deleteAt(keyIdx)
                 isUnderflow = checkUnderflow(node, leafNodePageId)
                 // When the first key of a leaf is deleted, the ancestor separator that points
@@ -198,7 +198,7 @@ class BTree<K, V>(
             }
             leafLock.asWriteView { buffer ->
                 val page = SlottedPage(indexConfig, leafNodePageId, buffer)
-                val node = Node.from(indexConfig, page, keySerializer)
+                val node = Node.from(indexConfig, page)
                 page.deleteData(keyIdx)
                 if (isSameKey) {
                     checkOverflowAndSplitFirst(node, page, serializedNewKey, serializedNewValue, lockManager, traceNode)
@@ -247,7 +247,7 @@ class BTree<K, V>(
         val value: ByteArray? =
             lock.asReadView { buffer ->
                 val currentPage = SlottedPage(indexConfig, leafNodePageId, buffer)
-                val node = Node.from(indexConfig, currentPage, keySerializer)
+                val node = Node.from(indexConfig, currentPage)
                 if (node.isSafeNode(BTreeOptMode.SELECT)) lockManager.releaseAncestor(lock)
                 if (isExist) currentPage.getData(keyIdx).second else null
             }
@@ -273,7 +273,7 @@ class BTree<K, V>(
             val nextLeafNodePageId =
                 currentLock.asReadView { buffer ->
                     val page = SlottedPage(indexConfig, leafNodePageIdCursor!!, buffer)
-                    val currentNode = Node.from(indexConfig, page, keySerializer)
+                    val currentNode = Node.from(indexConfig, page)
                     isSafeToUnlockAncestor = currentNode.isSafeNode(BTreeOptMode.SELECT)
                     val keys = currentNode.keyView
                     val values = currentNode.valueView
@@ -296,7 +296,7 @@ class BTree<K, V>(
     }
 
     private fun checkOverflowAndSplitFirst(
-        node: Node<K>,
+        node: Node,
         page: SlottedPage,
         key: ByteArray,
         value: ByteArray,
@@ -312,7 +312,7 @@ class BTree<K, V>(
                     val rightLeafPageLock = lockManager.at(currentLockSize)
                     rightLeafPageLock.asWriteView { rightLeafBuffer ->
                         val rightPage = SlottedPage(indexConfig, rightLeafPageLock.pageId, rightLeafBuffer)
-                        val rightNode = Node.from(indexConfig, rightPage, keySerializer) as LeafNode
+                        val rightNode = Node.from(indexConfig, rightPage) as LeafNode
                         rightNode.insert(key, value)
                     }
                 } else {
@@ -328,7 +328,7 @@ class BTree<K, V>(
     }
 
     private fun checkUnderflow(
-        node: Node<K>,
+        node: Node,
         leafNodePageId: Long,
     ): Boolean = node.isUnderflow && (leafNodePageId != rootPageId || node.keyCount == 0)
 
@@ -358,7 +358,7 @@ class BTree<K, V>(
                     }
                 lock.asWriteView { parentBuffer ->
                     val parentPage = SlottedPage(indexConfig, parentTrace.first, parentBuffer)
-                    val parentNode = Node.from(indexConfig, parentPage, keySerializer) as InternalNode<K>
+                    val parentNode = Node.from(indexConfig, parentPage) as InternalNode
                     parentNode.updateKey(childIdx - 1, newFirstKey)
                 }
                 return
@@ -409,13 +409,13 @@ class BTree<K, V>(
 
             currentLock.asWriteView { currentBuffer ->
                 val currentPage = SlottedPage(indexConfig, currentPageId, currentBuffer)
-                val currentNode = Node.from(indexConfig, currentPage, keySerializer)
+                val currentNode = Node.from(indexConfig, currentPage)
                 isUnderflow = currentNode.isUnderflow
 
                 if (isUnderflow) {
                     parentLock.asWriteView { parentBuffer ->
                         val parentPage = SlottedPage(indexConfig, nextTrace.first, parentBuffer)
-                        val parentNode = Node.from(indexConfig, parentPage, keySerializer) as InternalNode
+                        val parentNode = Node.from(indexConfig, parentPage) as InternalNode
                         val leftSiblingPageId =
                             try {
                                 parentNode.childPageId(keyIdx - 1)
@@ -437,7 +437,7 @@ class BTree<K, V>(
                                 siblingLocks.add(siblingLock)
                                 siblingLock.asWriteView { siblingBuffer ->
                                     val siblingPage = SlottedPage(indexConfig, siblingId, siblingBuffer)
-                                    val siblingNode = Node.from(indexConfig, siblingPage, keySerializer)
+                                    val siblingNode = Node.from(indexConfig, siblingPage)
                                     if (siblingNode.hasSurplusKey) {
                                         currentNode.redistribute(siblingNode, parentNode, keyIdx)
                                         isDone = true
@@ -455,7 +455,7 @@ class BTree<K, V>(
                                 if (!isMerged) {
                                     siblingLock.asWriteView { siblingBuffer ->
                                         val siblingPage = SlottedPage(indexConfig, siblingLock.pageId, siblingBuffer)
-                                        val siblingNode = Node.from(indexConfig, siblingPage, keySerializer)
+                                        val siblingNode = Node.from(indexConfig, siblingPage)
                                         val (_, rightPageId) = currentNode.merge(siblingNode, parentNode, keyIdx)
                                         isMerged = true
                                         val victimPageLock: PageLock =
@@ -482,7 +482,7 @@ class BTree<K, V>(
             var newRootId: Long? = null
             currentLock.asReadView { buffer ->
                 val page = SlottedPage(indexConfig, currentPageId, buffer)
-                val node = Node.from(indexConfig, page, keySerializer)
+                val node = Node.from(indexConfig, page)
                 when {
                     node is InternalNode && node.keyCount == 0 -> {
                         newRootId = node.childPageId(0)
@@ -544,7 +544,7 @@ class BTree<K, V>(
 
             currentPageLock.asWriteView { buffer ->
                 val page = SlottedPage(indexConfig, currentPageId, buffer)
-                val node = Node.from(indexConfig, page, keySerializer)
+                val node = Node.from(indexConfig, page)
 
                 // InternalNode: only split if it actually overflowed after receiving the promotion key
                 if (node is InternalNode && !node.isOverflow) {
@@ -561,7 +561,7 @@ class BTree<K, V>(
                             newLock.asWriteView { newBuffer ->
                                 newPageId = newLock.pageId
                                 val newPage = SlottedPage(indexConfig, newPageId, newBuffer)
-                                val newNode = Node.from(indexConfig, newPage, keySerializer) as LeafNode
+                                val newNode = Node.from(indexConfig, newPage) as LeafNode
                                 newNode.appendAllData(nodeSplitData.splitKeys, nodeSplitData.splitValues)
                                 node.linkNewSiblingNode(newNode)
                                 nodeSplitData
@@ -575,7 +575,7 @@ class BTree<K, V>(
                             newLock.asWriteView { newBuffer ->
                                 newPageId = newLock.pageId
                                 val newPage = SlottedPage(indexConfig, newPageId, newBuffer)
-                                val newNode = Node.from(indexConfig, newPage, keySerializer) as InternalNode
+                                val newNode = Node.from(indexConfig, newPage) as InternalNode
                                 newPage.leftMostChildPageId = nodeSplitData.leftMostChildPageId
                                 newNode.appendAllData(nodeSplitData.splitKeys, nodeSplitData.splitValues)
                                 nodeSplitData
@@ -597,7 +597,7 @@ class BTree<K, V>(
                     newLock.asWriteView { newBuffer ->
                         val newRootPageId = newLock.pageId
                         val newRootPage = SlottedPage(indexConfig, newRootPageId, newBuffer)
-                        val newRootNode = Node.from(indexConfig, newRootPage, keySerializer) as InternalNode
+                        val newRootNode = Node.from(indexConfig, newRootPage) as InternalNode
                         newRootPage.leftMostChildPageId = currentPageId
                         newRootNode.insert(nodeSplitData.promotionKey, pageIDSerializer.serialize(newPageId))
                         changeRootPageId(newRootPageId)
@@ -607,7 +607,7 @@ class BTree<K, V>(
                     val rootPageLock = traceNode.peek().third
                     rootPageLock.asWriteView { rootBuffer ->
                         val parentPage = SlottedPage(indexConfig, parentPageId, rootBuffer)
-                        val parentNode = Node.from(indexConfig, parentPage, keySerializer) as InternalNode
+                        val parentNode = Node.from(indexConfig, parentPage) as InternalNode
                         parentNode.insertAt(
                             currentSlotIdx,
                             nodeSplitData.promotionKey,
@@ -670,7 +670,7 @@ class BTree<K, V>(
             var isSafeToUnlockAncestor = false
             currentLock.asReadView { buffer ->
                 val currentPage = SlottedPage(indexConfig, pageIdCursor, buffer)
-                val currentNode = Node.from(indexConfig, currentPage, keySerializer)
+                val currentNode = Node.from(indexConfig, currentPage)
                 if (currentNode.isSafeNode(operationMode, key, value)) isSafeToUnlockAncestor = true
 
                 val result = currentNode.search(key)
@@ -714,7 +714,7 @@ class BTree<K, V>(
      * */
     private fun findExtremeLeafPageId(
         lockManager: LockManager,
-        selectChild: (InternalNode<K>) -> Long,
+        selectChild: (InternalNode) -> Long,
     ): Long? {
         var pageIdCursor = if (rootPageId != INVALID_PAGE_ID) rootPageId else return null
         var isLeaf = false
@@ -725,7 +725,7 @@ class BTree<K, V>(
             val nextPageId =
                 currentPageLock.asReadView { buffer ->
                     val currentPage = SlottedPage(indexConfig, pageIdCursor, buffer)
-                    val currentNode = Node.from(indexConfig, currentPage, keySerializer)
+                    val currentNode = Node.from(indexConfig, currentPage)
                     isSafeToUnlockAncestor = currentNode.isSafeNode(BTreeOptMode.SELECT)
                     if (currentNode.isLeaf) {
                         isLeaf = true
@@ -768,7 +768,7 @@ class BTree<K, V>(
         val startNodeIsLeaf =
             startLock.asReadView { buffer ->
                 val page = SlottedPage(indexConfig, startPageId, buffer)
-                val node = Node.from(indexConfig, page, keySerializer)
+                val node = Node.from(indexConfig, page)
                 node.isLeaf
             }
         queue.addLast(QueueItem(startPageId, 0, startNodeIsLeaf, 0, startLock))
@@ -783,7 +783,7 @@ class BTree<K, V>(
 
             currentLock.asReadView { buffer ->
                 val currentPage = SlottedPage(indexConfig, currentPageId, buffer)
-                var currentNode = Node.from(indexConfig, currentPage, keySerializer)
+                var currentNode = Node.from(indexConfig, currentPage)
                 printNode(viewBuilder, currentNode, idx)
                 if (!isLeaf) {
                     currentNode = currentNode as InternalNode
@@ -794,7 +794,7 @@ class BTree<K, V>(
                         val childIsLeaf =
                             childPageLock.asReadView { childBuffer ->
                                 val childPage = SlottedPage(indexConfig, childNodePageId, childBuffer)
-                                val childNode = Node.from(indexConfig, childPage, keySerializer)
+                                val childNode = Node.from(indexConfig, childPage)
                                 childNode.isLeaf
                             }
                         queue.addLast(QueueItem(childNodePageId, level + 1, childIsLeaf, i, childPageLock))
@@ -813,7 +813,7 @@ class BTree<K, V>(
      * */
     private fun printNode(
         viewBuilder: StringBuilder,
-        node: Node<K>,
+        node: Node,
         idx: Int,
     ) {
         val keys = node.keyView
