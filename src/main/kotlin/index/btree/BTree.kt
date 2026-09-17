@@ -26,12 +26,8 @@ val logger = KotlinLogging.logger {}
 /**
  * B+tree implementation.
  *
- * @param K Type of key.
- * @param V Type of value.
  * @property name Name of BTree.
  * @property targetTable Table to apply.
- * @property keySerializer Serializer to serialize keys to ByteArray, comparable format.
- * @property valueSerializer Serializer to serialize values to ByteArray. IT's different form
  *   serializing keys.
  * @property indexConfig Index configuration.
  * @constructor Create empty B tree.
