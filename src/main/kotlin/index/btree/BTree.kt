@@ -7,10 +7,12 @@ import index.btree.node.InternalNode
 import index.btree.node.LeafNode
 import index.btree.node.Node
 import index.data.SearchPosition
-import index.serializer.KeySerializer
 import index.serializer.PageIDSerializer
-import index.serializer.ValueSerializer
 import io.github.oshai.kotlinlogging.KotlinLogging
+import java.util.Arrays
+import java.util.EmptyStackException
+import java.util.Stack
+import kotlin.collections.ArrayDeque
 import storageEngine.StorageManager
 import storageEngine.page.PageLock
 import storageEngine.page.SlottedPage
@@ -18,10 +20,6 @@ import util.EngineErrorDetail
 import util.INVALID_PAGE_ID
 import util.LockMode
 import util.PageType
-import java.util.Arrays
-import java.util.EmptyStackException
-import java.util.Stack
-import kotlin.collections.ArrayDeque
 
 val logger = KotlinLogging.logger {}
 
@@ -33,7 +31,8 @@ val logger = KotlinLogging.logger {}
  * @property name Name of BTree.
  * @property targetTable Table to apply.
  * @property keySerializer Serializer to serialize keys to ByteArray, comparable format.
- * @property valueSerializer Serializer to serialize values to ByteArray. IT's different form serializing keys.
+ * @property valueSerializer Serializer to serialize values to ByteArray. IT's different form
+ *   serializing keys.
  * @property indexConfig Index configuration.
  * @constructor Create empty B tree.
  */
@@ -109,7 +108,7 @@ class BTree(
      * @param key key to delete from B+tree of type [K].
      * @see handleUnderflow
      * @see Node.isUnderflow
-     * */
+     */
     fun delete(key: ByteArray) {
         val traceNode: Stack<Triple<Long, Int, PageLock>> = Stack<Triple<Long, Int, PageLock>>()
         val lockManager = LockManager(LockMode.WRITE)
@@ -128,8 +127,9 @@ class BTree(
                 throw IndexException.InvalidTraceObject(
                     EngineErrorDetail(
                         pageId = leafNodePageId,
-                        reason = "The provided trace object does not match the most recently pushed lock in the latch queue.",
-                    ),
+                        reason =
+                            "The provided trace object does not match the most recently pushed lock in the latch queue.",
+                    )
                 )
             }
             leafLock.asWriteView { buffer ->
@@ -185,8 +185,9 @@ class BTree(
                 throw IndexException.InvalidTraceObject(
                     EngineErrorDetail(
                         pageId = leafNodePageId,
-                        reason = "The provided trace object does not match the most recently pushed lock in the latch queue.",
-                    ),
+                        reason =
+                            "The provided trace object does not match the most recently pushed lock in the latch queue.",
+                    )
                 )
             }
             leafLock.asWriteView { buffer ->
@@ -236,13 +237,12 @@ class BTree(
             searchLeafNode(key, null, traceNode, lockManager, BTreeOptMode.SELECT)
         val lock = storageManager.fetchPage(leafNodePageId, lockManager.lockMode)
         lockManager.push(lock)
-        val value: ByteArray? =
-            lock.asReadView { buffer ->
-                val currentPage = SlottedPage(indexConfig, leafNodePageId, buffer)
-                val node = Node.from(indexConfig, currentPage)
-                if (node.isSafeNode(BTreeOptMode.SELECT)) lockManager.releaseAncestor(lock)
-                if (isExist) currentPage.getData(keyIdx).second else null
-            }
+        val value: ByteArray? = lock.asReadView { buffer ->
+            val currentPage = SlottedPage(indexConfig, leafNodePageId, buffer)
+            val node = Node.from(indexConfig, currentPage)
+            if (node.isSafeNode(BTreeOptMode.SELECT)) lockManager.releaseAncestor(lock)
+            if (isExist) currentPage.getData(keyIdx).second else null
+        }
         lockManager.close()
         traceNode.clear()
         return value
@@ -251,44 +251,71 @@ class BTree(
     fun search(
         key: ByteArray,
         direction: ScanDirection,
+        boundGiven: Boolean,
     ): Cursor? {
         if (rootPageId == INVALID_PAGE_ID) return null
         val traceNode: Stack<Triple<Long, Int, PageLock>> = Stack<Triple<Long, Int, PageLock>>()
         val lockManager = LockManager(LockMode.READ)
-        val searchPosition = findSearchPosition(key, lockManager, traceNode, direction) ?: return null
+        val searchPosition =
+            findSearchPosition(key, boundGiven, direction, lockManager, traceNode) ?: return null
         return Cursor(lockManager, searchPosition, direction, storageManager, indexConfig)
     }
 
+    /**
+     * Computes the [SearchPosition] that the first [Cursor.step] will read, seeking off of
+     * whichever bound this scan direction starts from (the lower bound for FORWARD, the upper
+     * bound for BACKWARD).
+     *
+     * [key] is boundary bytes the caller (Table) has already built after resolving open vs.
+     * closed on its own - inclusive calls `serialize`, exclusive calls `serializeUpper` - so this
+     * function never knows which one produced it. There are three cases:
+     *
+     * - [boundGiven] is false: there's no condition at all on this direction's seek side (e.g. no
+     *   WHERE clause on that column). With nothing to compare against, descend straight to the
+     *   leftmost/rightmost leaf via [findExtremeLeafPageId].
+     * - [key] is null: a condition existed, but `serializeUpper` couldn't produce a successor —
+     *   the value's last column is DESC and exactly NULL, so that group already sits at the
+     *   tree's physical right edge. For BACKWARD, that edge group *is* the seek target, so land
+     *   on the rightmost leaf. For FORWARD, we were asked for something greater than the very
+     *   end of the tree, which can't exist, so there's no result at all (null).
+     * - Otherwise: [searchLeafNode] finds the first slot with key >= the given bytes (a plain
+     *   lower-bound search). Because each direction's boundary bytes are already built to point
+     *   at the right spot, FORWARD's result is the answer as-is, while BACKWARD's result points
+     *   one slot past the last item we actually want - hence the `- 1`.
+     */
     private fun findSearchPosition(
-        key: ByteArray,
+        key: ByteArray?,
+        boundGiven: Boolean,
+        direction: ScanDirection,
         lockManager: LockManager,
         traceNode: Stack<Triple<Long, Int, PageLock>>,
-        direction: ScanDirection,
     ): SearchPosition? {
-        // 이 부분은 수정 필요(기준이 다름), 임시로 코드 채움(완전히 바꿔야함)
-        // val serializedKey =
-        //     when (direction) {
-        //         ScanDirection.FORWARD -> {
-        //             keySerializer.serialize(key)
-        //         }
-        //
-        //         else -> {
-        //             keySerializer.serializeUpper(key)
-        //         }
-        //     }
-        //
-        // return if (serializedKey == null) {
-        //     val rightMostChildPageId = findRightMostLeafPageId(lockManager) ?: return null
-        //     SearchPosition(rightMostChildPageId, null)
-        // } else {
-        //     val (leafNodePageId, keyIdx, isExist) =
-        //         searchLeafNode(serializedKey, null, traceNode, lockManager, BTreeOptMode.SELECT)
-        //     SearchPosition(leafNodePageId, if (direction == ScanDirection.FORWARD) keyIdx + 1 else keyIdx - 1)
-        // }
-
-        val (leafNodePageId, keyIdx, isExist) =
+        if (!boundGiven) {
+            // No condition on this direction's seek side — skip key comparison, go straight to
+            // the tree's edge (leftmost/rightmost).
+            val pageId =
+                if (direction == ScanDirection.FORWARD) findLeftMostLeafPageId(lockManager)
+                else findRightMostLeafPageId(lockManager)
+            return pageId?.let { SearchPosition(it, null) }
+        }
+        if (key == null) {
+            // serializeUpper couldn't produce a successor — that group is already the tree's
+            // rightmost edge.
+            if (direction == ScanDirection.BACKWARD) {
+                // Upper-bound seek: the edge group itself is the seek target.
+                val pageId = findRightMostLeafPageId(lockManager)
+                return pageId?.let { SearchPosition(pageId, null) }
+            } else {
+                // Lower-bound seek (exclusive): nothing sorts past the tree's end, so no result.
+                return null
+            }
+        }
+        // First slot with key >= boundary (lower-bound). FORWARD's result is already the answer;
+        // BACKWARD's result points one slot past it, hence the -1.
+        val (pageId, keyIdx, isExist) =
             searchLeafNode(key, null, traceNode, lockManager, BTreeOptMode.SELECT)
-        return SearchPosition(leafNodePageId, if (direction == ScanDirection.FORWARD) keyIdx + 1 else keyIdx - 1)
+        val idx = if (direction == ScanDirection.FORWARD) keyIdx else keyIdx - 1
+        return SearchPosition(pageId, idx)
     }
 
     /**
@@ -296,7 +323,7 @@ class BTree(
      *
      * @return Key, Value of the leaf node.
      * @see findLeftMostLeafPageId
-     * */
+     */
     fun traverse(): List<Pair<ByteArray, ByteArray>> {
         val result = mutableListOf<Pair<ByteArray, ByteArray>>()
         val lockManager = LockManager(LockMode.READ)
@@ -305,20 +332,19 @@ class BTree(
         while (true) {
             val currentLock = lockManager.last
             var isSafeToUnlockAncestor = false
-            val nextLeafNodePageId =
-                currentLock.asReadView { buffer ->
-                    val page = SlottedPage(indexConfig, leafNodePageIdCursor!!, buffer)
-                    val currentNode = Node.from(indexConfig, page)
-                    isSafeToUnlockAncestor = currentNode.isSafeNode(BTreeOptMode.SELECT)
-                    val keys = currentNode.keyView
-                    val values = currentNode.valueView
-                    for (idx in keys.indices) {
-                        val key = keys[idx]
-                        val value = values[idx]
-                        result += key to value
-                    }
-                    page.rightSiblingPageId
+            val nextLeafNodePageId = currentLock.asReadView { buffer ->
+                val page = SlottedPage(indexConfig, leafNodePageIdCursor!!, buffer)
+                val currentNode = Node.from(indexConfig, page)
+                isSafeToUnlockAncestor = currentNode.isSafeNode(BTreeOptMode.SELECT)
+                val keys = currentNode.keyView
+                val values = currentNode.valueView
+                for (idx in keys.indices) {
+                    val key = keys[idx]
+                    val value = values[idx]
+                    result += key to value
                 }
+                page.rightSiblingPageId
+            }
             if (isSafeToUnlockAncestor) lockManager.releaseAncestor(currentLock)
             currentLock.close()
             if (nextLeafNodePageId == INVALID_PAGE_ID) break
@@ -346,7 +372,8 @@ class BTree(
                 if (Arrays.compareUnsigned(key, separatorKey) >= 0) {
                     val rightLeafPageLock = lockManager.at(currentLockSize)
                     rightLeafPageLock.asWriteView { rightLeafBuffer ->
-                        val rightPage = SlottedPage(indexConfig, rightLeafPageLock.pageId, rightLeafBuffer)
+                        val rightPage =
+                            SlottedPage(indexConfig, rightLeafPageLock.pageId, rightLeafBuffer)
                         val rightNode = Node.from(indexConfig, rightPage) as LeafNode
                         rightNode.insert(key, value)
                     }
@@ -368,10 +395,9 @@ class BTree(
     ): Boolean = node.isUnderflow && (leafNodePageId != rootPageId || node.keyCount == 0)
 
     /**
-     * After deleting the first key of a leaf (no underflow), walk up the traceNode stack
-     * and update the first ancestor separator that points to the leaf's subtree as a
-     * non-leftmost child. This keeps the strict B+tree separator invariant:
-     * `sep.at(i) == leftmostLeafFirstKey(child[i+1])`
+     * After deleting the first key of a leaf (no underflow), walk up the traceNode stack and update
+     * the first ancestor separator that points to the leaf's subtree as a non-leftmost child. This
+     * keeps the strict B+tree separator invariant: `sep.at(i) == leftmostLeafFirstKey(child[i+1])`
      */
     private fun propagateSeparatorUpdate(
         traceNode: Stack<Triple<Long, Int, PageLock>>,
@@ -387,7 +413,8 @@ class BTree(
                     if (parentTrace.third.isWriteLocked) {
                         parentTrace.third
                     } else {
-                        val refetchedLock = storageManager.fetchPage(parentTrace.first, LockMode.WRITE)
+                        val refetchedLock =
+                            storageManager.fetchPage(parentTrace.first, LockMode.WRITE)
                         lockManager.push(refetchedLock)
                         refetchedLock
                     }
@@ -408,16 +435,16 @@ class BTree(
      *
      * @see LeafNode.redistribute
      * @see InternalNode.redistribute
-     *  - The minimum key of the right node became a new separate key.
+     *     - The minimum key of the right node became a new separate key.
      *
      * Merge
      *
      * @see LeafNode.merge
      * @see InternalNode.merge
-     *  - The right node will be merged into the left node.
+     *     - The right node will be merged into the left node.
      *
      * Should rebalance continuously to the root node.
-     * */
+     */
     private fun handleUnderflow(
         traceNode: Stack<Triple<Long, Int, PageLock>>,
         lockManager: LockManager,
@@ -467,11 +494,13 @@ class BTree(
                         val siblingLocks = mutableListOf<PageLock>()
                         for (siblingId in siblingPageIds) {
                             if (siblingId != null && !isDone) {
-                                val siblingLock = storageManager.fetchPage(siblingId, lockManager.lockMode)
+                                val siblingLock =
+                                    storageManager.fetchPage(siblingId, lockManager.lockMode)
                                 lockManager.push(siblingLock)
                                 siblingLocks.add(siblingLock)
                                 siblingLock.asWriteView { siblingBuffer ->
-                                    val siblingPage = SlottedPage(indexConfig, siblingId, siblingBuffer)
+                                    val siblingPage =
+                                        SlottedPage(indexConfig, siblingId, siblingBuffer)
                                     val siblingNode = Node.from(indexConfig, siblingPage)
                                     if (siblingNode.hasSurplusKey) {
                                         currentNode.redistribute(siblingNode, parentNode, keyIdx)
@@ -489,12 +518,19 @@ class BTree(
                             for (siblingLock in siblingLocks) {
                                 if (!isMerged) {
                                     siblingLock.asWriteView { siblingBuffer ->
-                                        val siblingPage = SlottedPage(indexConfig, siblingLock.pageId, siblingBuffer)
+                                        val siblingPage =
+                                            SlottedPage(
+                                                indexConfig,
+                                                siblingLock.pageId,
+                                                siblingBuffer,
+                                            )
                                         val siblingNode = Node.from(indexConfig, siblingPage)
-                                        val (_, rightPageId) = currentNode.merge(siblingNode, parentNode, keyIdx)
+                                        val (_, rightPageId) =
+                                            currentNode.merge(siblingNode, parentNode, keyIdx)
                                         isMerged = true
                                         val victimPageLock: PageLock =
-                                            if (rightPageId == currentLock.pageId) currentLock else siblingLock
+                                            if (rightPageId == currentLock.pageId) currentLock
+                                            else siblingLock
                                         lockManager.closeAndRemoveLock(victimPageLock)
                                         storageManager.deletePage(rightPageId)
                                     }
@@ -549,7 +585,7 @@ class BTree(
      *
      * @see LeafNode.split
      * @see InternalNode.split
-     * */
+     */
     private fun split(
         traceNode: Stack<Triple<Long, Int, PageLock>>,
         lockManager: LockManager,
@@ -562,7 +598,8 @@ class BTree(
                 } catch (e: EmptyStackException) {
                     throw IndexException.InvalidTraceStack(
                         EngineErrorDetail(
-                            reason = "Unexpected node trace data invalid. IndexName: $name TargetTableName: $targetTable",
+                            reason =
+                                "Unexpected node trace data invalid. IndexName: $name TargetTableName: $targetTable"
                         ),
                         e,
                     )
@@ -572,8 +609,9 @@ class BTree(
                 throw IndexException.InvalidTraceObject(
                     EngineErrorDetail(
                         pageId = currentPageId,
-                        reason = "The provided trace object does not match the most recently pushed lock in the latch queue.",
-                    ),
+                        reason =
+                            "The provided trace object does not match the most recently pushed lock in the latch queue.",
+                    )
                 )
             }
 
@@ -581,7 +619,8 @@ class BTree(
                 val page = SlottedPage(indexConfig, currentPageId, buffer)
                 val node = Node.from(indexConfig, page)
 
-                // InternalNode: only split if it actually overflowed after receiving the promotion key
+                // InternalNode: only split if it actually overflowed after receiving the promotion
+                // key
                 if (node is InternalNode && !node.isOverflow) {
                     continueLoop = false
                     return@asWriteView
@@ -591,13 +630,17 @@ class BTree(
                     when (node) {
                         is LeafNode -> {
                             val nodeSplitData = node.split()
-                            val newLock = storageManager.newPage(PageType.LEAF_NODE, lockManager.lockMode)
+                            val newLock =
+                                storageManager.newPage(PageType.LEAF_NODE, lockManager.lockMode)
                             lockManager.push(newLock)
                             newLock.asWriteView { newBuffer ->
                                 newPageId = newLock.pageId
                                 val newPage = SlottedPage(indexConfig, newPageId, newBuffer)
                                 val newNode = Node.from(indexConfig, newPage) as LeafNode
-                                newNode.appendAllData(nodeSplitData.splitKeys, nodeSplitData.splitValues)
+                                newNode.appendAllData(
+                                    nodeSplitData.splitKeys,
+                                    nodeSplitData.splitValues,
+                                )
                                 node.linkNewSiblingNode(newNode)
                                 nodeSplitData
                             }
@@ -605,14 +648,18 @@ class BTree(
 
                         is InternalNode -> {
                             val nodeSplitData = node.split()
-                            val newLock = storageManager.newPage(PageType.INTERNAL_NODE, lockManager.lockMode)
+                            val newLock =
+                                storageManager.newPage(PageType.INTERNAL_NODE, lockManager.lockMode)
                             lockManager.push(newLock)
                             newLock.asWriteView { newBuffer ->
                                 newPageId = newLock.pageId
                                 val newPage = SlottedPage(indexConfig, newPageId, newBuffer)
                                 val newNode = Node.from(indexConfig, newPage) as InternalNode
                                 newPage.leftMostChildPageId = nodeSplitData.leftMostChildPageId
-                                newNode.appendAllData(nodeSplitData.splitKeys, nodeSplitData.splitValues)
+                                newNode.appendAllData(
+                                    nodeSplitData.splitKeys,
+                                    nodeSplitData.splitValues,
+                                )
                                 nodeSplitData
                             }
                         }
@@ -622,7 +669,7 @@ class BTree(
                                 EngineErrorDetail(
                                     pageType = node.page.type,
                                     reason = "Invalid node type",
-                                ),
+                                )
                             )
                         }
                     }
@@ -634,7 +681,10 @@ class BTree(
                         val newRootPage = SlottedPage(indexConfig, newRootPageId, newBuffer)
                         val newRootNode = Node.from(indexConfig, newRootPage) as InternalNode
                         newRootPage.leftMostChildPageId = currentPageId
-                        newRootNode.insert(nodeSplitData.promotionKey, pageIDSerializer.serialize(newPageId))
+                        newRootNode.insert(
+                            nodeSplitData.promotionKey,
+                            pageIDSerializer.serialize(newPageId),
+                        )
                         changeRootPageId(newRootPageId)
                     }
                 } else {
@@ -662,7 +712,8 @@ class BTree(
      *
      * - ParentKey < All keys from the left subtree.
      * - ParentKey <= All keys from the right subtree.
-     * - Find the key which is greater than provided key within key 1-3 and go down to left subtree of that key.
+     * - Find the key which is greater than provided key within key 1-3 and go down to left subtree
+     *   of that key.
      * - Save the search path for future use.
      * - P1 < Key1
      * - Key1 <= P2 < Key2
@@ -680,7 +731,7 @@ class BTree(
      * @param key Key to find leaf node
      * @see Node.search
      * @see Node.search
-     **/
+     */
     private fun searchLeafNode(
         key: ByteArray,
         value: ByteArray?,
@@ -691,8 +742,9 @@ class BTree(
         if (rootPageId == INVALID_PAGE_ID) {
             throw IndexException.EmptyTree(
                 EngineErrorDetail(
-                    reason = "Search function should be called when the tree is not empty. IndexName: $name TargetTableName: $targetTable",
-                ),
+                    reason =
+                        "Search function should be called when the tree is not empty. IndexName: $name TargetTableName: $targetTable"
+                )
             )
         }
 
@@ -729,24 +781,26 @@ class BTree(
      * Find the left most leaf of the B+tree.
      *
      * @return The left most child of B+tree.
-     * */
-    private fun findLeftMostLeafPageId(lockManager: LockManager): Long? = findExtremeLeafPageId(lockManager) { it.childPageId(0) }
+     */
+    private fun findLeftMostLeafPageId(lockManager: LockManager): Long? =
+        findExtremeLeafPageId(lockManager) { it.childPageId(0) }
 
     /**
      * Find the right most leaf of the B+tree.
      *
      * @return The right most child of B+tree.
-     * */
-    private fun findRightMostLeafPageId(lockManager: LockManager): Long? = findExtremeLeafPageId(lockManager) { it.rightMostChildPageId }
+     */
+    private fun findRightMostLeafPageId(lockManager: LockManager): Long? =
+        findExtremeLeafPageId(lockManager) { it.rightMostChildPageId }
 
     /**
-     * Descend from the root to a leaf without comparing against any key, always following the
-     * child that [selectChild] picks at each internal node — e.g. the left-most or right-most one.
-     * Used when there's no key to seek by (e.g. no lower/upper bound), so [searchLeafNode]'s
+     * Descend from the root to a leaf without comparing against any key, always following the child
+     * that [selectChild] picks at each internal node — e.g. the left-most or right-most one. Used
+     * when there's no key to seek by (e.g. no lower/upper bound), so [searchLeafNode]'s
      * comparison-based descent doesn't apply.
      *
      * @return The left/right-most leaf page id, or null if the tree is empty.
-     * */
+     */
     private fun findExtremeLeafPageId(
         lockManager: LockManager,
         selectChild: (InternalNode) -> Long,
@@ -757,18 +811,17 @@ class BTree(
         while (true) {
             val currentPageLock = lockManager.last
             var isSafeToUnlockAncestor = false
-            val nextPageId =
-                currentPageLock.asReadView { buffer ->
-                    val currentPage = SlottedPage(indexConfig, pageIdCursor, buffer)
-                    val currentNode = Node.from(indexConfig, currentPage)
-                    isSafeToUnlockAncestor = currentNode.isSafeNode(BTreeOptMode.SELECT)
-                    if (currentNode.isLeaf) {
-                        isLeaf = true
-                        pageIdCursor
-                    } else {
-                        selectChild(currentNode as InternalNode)
-                    }
+            val nextPageId = currentPageLock.asReadView { buffer ->
+                val currentPage = SlottedPage(indexConfig, pageIdCursor, buffer)
+                val currentNode = Node.from(indexConfig, currentPage)
+                isSafeToUnlockAncestor = currentNode.isSafeNode(BTreeOptMode.SELECT)
+                if (currentNode.isLeaf) {
+                    isLeaf = true
+                    pageIdCursor
+                } else {
+                    selectChild(currentNode as InternalNode)
                 }
+            }
             val nextLock = storageManager.fetchPage(nextPageId, lockManager.lockMode)
             if (isSafeToUnlockAncestor) lockManager.releaseAncestor(currentPageLock)
             lockManager.push(nextLock)
@@ -783,9 +836,7 @@ class BTree(
         onRootChanged?.invoke(newRootPageId)
     }
 
-    /**
-     * Print the tree with logger. Only for test.
-     * */
+    /** Print the tree with logger. Only for test. */
     fun printTree(format: (ByteArray) -> String) {
         data class QueueItem(
             val pageId: Long,
@@ -800,12 +851,11 @@ class BTree(
         val lockManager = LockManager(LockMode.READ)
         val startLock = storageManager.fetchPage(startPageId, lockManager.lockMode)
         lockManager.push(startLock)
-        val startNodeIsLeaf =
-            startLock.asReadView { buffer ->
-                val page = SlottedPage(indexConfig, startPageId, buffer)
-                val node = Node.from(indexConfig, page)
-                node.isLeaf
-            }
+        val startNodeIsLeaf = startLock.asReadView { buffer ->
+            val page = SlottedPage(indexConfig, startPageId, buffer)
+            val node = Node.from(indexConfig, page)
+            node.isLeaf
+        }
         queue.addLast(QueueItem(startPageId, 0, startNodeIsLeaf, 0, startLock))
         var prevLevel = 0
         val viewBuilder = StringBuilder()
@@ -824,15 +874,17 @@ class BTree(
                     currentNode = currentNode as InternalNode
                     for (i in 0..<currentNode.keyCount + 1) {
                         val childNodePageId = currentNode.childPageId(i)
-                        val childPageLock = storageManager.fetchPage(childNodePageId, lockManager.lockMode)
+                        val childPageLock =
+                            storageManager.fetchPage(childNodePageId, lockManager.lockMode)
                         lockManager.push(childPageLock)
-                        val childIsLeaf =
-                            childPageLock.asReadView { childBuffer ->
-                                val childPage = SlottedPage(indexConfig, childNodePageId, childBuffer)
-                                val childNode = Node.from(indexConfig, childPage)
-                                childNode.isLeaf
-                            }
-                        queue.addLast(QueueItem(childNodePageId, level + 1, childIsLeaf, i, childPageLock))
+                        val childIsLeaf = childPageLock.asReadView { childBuffer ->
+                            val childPage = SlottedPage(indexConfig, childNodePageId, childBuffer)
+                            val childNode = Node.from(indexConfig, childPage)
+                            childNode.isLeaf
+                        }
+                        queue.addLast(
+                            QueueItem(childNodePageId, level + 1, childIsLeaf, i, childPageLock)
+                        )
                     }
                 }
             }
@@ -843,9 +895,7 @@ class BTree(
         logger.info { "\n\n$viewBuilder\n\n" }
     }
 
-    /**
-     * Print a single node.
-     * */
+    /** Print a single node. */
     private fun printNode(
         viewBuilder: StringBuilder,
         node: Node,
