@@ -3,21 +3,17 @@ package index.btree
 import config.IndexConfig
 import index.btree.node.Node
 import index.data.SearchPosition
-import index.serializer.KeySerializer
-import index.serializer.ValueSerializer
 import storageEngine.StorageManager
 import storageEngine.page.SlottedPage
 import util.INVALID_PAGE_ID
 import util.LockMode
 
-class Cursor<K, V>(
+class Cursor(
     private val lockManager: LockManager,
     private var currentPosition: SearchPosition,
     private val direction: ScanDirection,
     private val storageManager: StorageManager,
     private val indexConfig: IndexConfig,
-    private val keySerializer: KeySerializer<K>,
-    private val valueSerializer: ValueSerializer<V>,
 ) : AutoCloseable {
     /**
      * Advances the cursor by one entry in [direction], or returns null once there's nothing left.
@@ -38,7 +34,7 @@ class Cursor<K, V>(
      * case leaves the page *and* returns a value, while the empty-page case leaves the page but
      * has nothing to return.
      */
-    fun step(): Pair<K, V>? {
+    fun step(): Pair<ByteArray, ByteArray>? {
         while (true) {
             val currentPageId = currentPosition.pageId
             var currentLock = lockManager.last
@@ -97,12 +93,7 @@ class Cursor<K, V>(
 
             if (leavingPage) lockManager.closeAndRemoveLock(currentLock)
 
-            if (entry != null) {
-                val (keySerialized, valueSerialized) = entry
-                val key = keySerializer.deserialize(keySerialized)
-                val value = valueSerializer.deserialize(valueSerialized).first
-                return key to value
-            }
+            if (entry != null) return entry
             if (reachedEnd) return null
         }
     }

@@ -37,12 +37,10 @@ val logger = KotlinLogging.logger {}
  * @property indexConfig Index configuration.
  * @constructor Create empty B tree.
  */
-class BTree<K, V>(
+class BTree(
     val name: String,
     val targetTable: String,
     private val storageManager: StorageManager,
-    private val keySerializer: KeySerializer<K>,
-    private val valueSerializer: ValueSerializer<V>,
     private val indexConfig: IndexConfig,
     private var rootPageId: Long,
     private val onRootChanged: ((Long) -> Unit)? = null,
@@ -62,19 +60,17 @@ class BTree<K, V>(
      * @see split
      */
     fun insert(
-        key: K,
-        value: V,
+        key: ByteArray,
+        value: ByteArray,
     ) {
-        val serializedValue = valueSerializer.serialize(value)
-        val serializedKey = keySerializer.serialize(key)
         val traceNode: Stack<Triple<Long, Int, PageLock>> = Stack<Triple<Long, Int, PageLock>>()
         val lockManager = LockManager(LockMode.WRITE)
 
         if (rootPageId != INVALID_PAGE_ID) {
             val (leafNodePageId, _, _) =
                 searchLeafNode(
-                    serializedKey,
-                    serializedValue,
+                    key,
+                    value,
                     traceNode,
                     lockManager,
                     BTreeOptMode.INSERT,
@@ -84,7 +80,7 @@ class BTree<K, V>(
             writeLock.asWriteView { buffer ->
                 val page = SlottedPage(indexConfig, leafNodePageId, buffer)
                 val node = Node.from(indexConfig, page)
-                checkOverflowAndSplitFirst(node, page, serializedKey, serializedValue, lockManager, traceNode)
+                checkOverflowAndSplitFirst(node, page, key, value, lockManager, traceNode)
             }
             traceNode.clear()
         } else {
@@ -95,7 +91,7 @@ class BTree<K, V>(
             writeLock.asWriteView { buffer ->
                 val newPage = SlottedPage(indexConfig, rootPageId, buffer)
                 val newNode = LeafNode(indexConfig, newPage)
-                newNode.insertAt(0, serializedKey, serializedValue)
+                newNode.insertAt(0, key, value)
             }
         }
         lockManager.close()
@@ -114,13 +110,12 @@ class BTree<K, V>(
      * @see handleUnderflow
      * @see Node.isUnderflow
      * */
-    fun delete(key: K) {
-        val serializedKey = keySerializer.serialize(key)
+    fun delete(key: ByteArray) {
         val traceNode: Stack<Triple<Long, Int, PageLock>> = Stack<Triple<Long, Int, PageLock>>()
         val lockManager = LockManager(LockMode.WRITE)
         val (leafNodePageId, keyIdx, isExist) =
             searchLeafNode(
-                serializedKey,
+                key,
                 null,
                 traceNode,
                 lockManager,
@@ -167,24 +162,21 @@ class BTree<K, V>(
      * @param newValue new value to update of type [V].
      */
     fun update(
-        key: K,
-        newKey: K,
-        newValue: V,
+        key: ByteArray,
+        newKey: ByteArray,
+        newValue: ByteArray,
     ) {
-        val serializedKey = keySerializer.serialize(key)
-        val serializedNewKey = keySerializer.serialize(newKey)
-        val serializedNewValue = valueSerializer.serialize(newValue)
         val traceNode: Stack<Triple<Long, Int, PageLock>> = Stack()
         val lockManager = LockManager(LockMode.WRITE)
         val (leafNodePageId, keyIdx, isExist) =
             searchLeafNode(
-                serializedKey,
+                key,
                 null,
                 traceNode,
                 lockManager,
                 BTreeOptMode.UPDATE,
             )
-        val isSameKey = serializedKey.contentEquals(serializedNewKey)
+        val isSameKey = key.contentEquals(newKey)
         var searchAnotherPage = false
         var isUnderflow = false
         if (isExist) {
@@ -202,19 +194,19 @@ class BTree<K, V>(
                 val node = Node.from(indexConfig, page)
                 page.deleteData(keyIdx)
                 if (isSameKey) {
-                    checkOverflowAndSplitFirst(node, page, serializedNewKey, serializedNewValue, lockManager, traceNode)
+                    checkOverflowAndSplitFirst(node, page, newKey, newValue, lockManager, traceNode)
                 } else {
                     if (keyIdx == 0 && node.keyCount > 0) {
                         val newFirstKey = page.getData(0).first
                         propagateSeparatorUpdate(traceNode, newFirstKey, lockManager)
                     }
-                    val insertSlot = node.search(serializedNewKey).first
+                    val insertSlot = node.search(newKey).first
                     if (0 < insertSlot && insertSlot < node.keyCount - 1) {
                         checkOverflowAndSplitFirst(
                             node,
                             page,
-                            serializedNewKey,
-                            serializedNewValue,
+                            newKey,
+                            newValue,
                             lockManager,
                             traceNode,
                         )
@@ -236,13 +228,12 @@ class BTree<K, V>(
         lockManager.close()
     }
 
-    fun search(key: K): V? {
+    fun search(key: ByteArray): ByteArray? {
         if (rootPageId == INVALID_PAGE_ID) return null
-        val serializedKey = keySerializer.serialize(key)
         val traceNode: Stack<Triple<Long, Int, PageLock>> = Stack<Triple<Long, Int, PageLock>>()
         val lockManager = LockManager(LockMode.READ)
         val (leafNodePageId, keyIdx, isExist) =
-            searchLeafNode(serializedKey, null, traceNode, lockManager, BTreeOptMode.SELECT)
+            searchLeafNode(key, null, traceNode, lockManager, BTreeOptMode.SELECT)
         val lock = storageManager.fetchPage(leafNodePageId, lockManager.lockMode)
         lockManager.push(lock)
         val value: ByteArray? =
@@ -254,45 +245,50 @@ class BTree<K, V>(
             }
         lockManager.close()
         traceNode.clear()
-        return value?.let { valueSerializer.deserialize(it).first }
+        return value
     }
 
     fun search(
-        key: K,
+        key: ByteArray,
         direction: ScanDirection,
-    ): Cursor<K, V>? {
+    ): Cursor? {
         if (rootPageId == INVALID_PAGE_ID) return null
         val traceNode: Stack<Triple<Long, Int, PageLock>> = Stack<Triple<Long, Int, PageLock>>()
         val lockManager = LockManager(LockMode.READ)
         val searchPosition = findSearchPosition(key, lockManager, traceNode, direction) ?: return null
-        return Cursor(lockManager, searchPosition, direction, storageManager, indexConfig, keySerializer, valueSerializer)
+        return Cursor(lockManager, searchPosition, direction, storageManager, indexConfig)
     }
 
     private fun findSearchPosition(
-        key: K,
+        key: ByteArray,
         lockManager: LockManager,
         traceNode: Stack<Triple<Long, Int, PageLock>>,
         direction: ScanDirection,
     ): SearchPosition? {
-        val serializedKey =
-            when (direction) {
-                ScanDirection.FORWARD -> {
-                    keySerializer.serialize(key)
-                }
+        // 이 부분은 수정 필요(기준이 다름), 임시로 코드 채움(완전히 바꿔야함)
+        // val serializedKey =
+        //     when (direction) {
+        //         ScanDirection.FORWARD -> {
+        //             keySerializer.serialize(key)
+        //         }
+        //
+        //         else -> {
+        //             keySerializer.serializeUpper(key)
+        //         }
+        //     }
+        //
+        // return if (serializedKey == null) {
+        //     val rightMostChildPageId = findRightMostLeafPageId(lockManager) ?: return null
+        //     SearchPosition(rightMostChildPageId, null)
+        // } else {
+        //     val (leafNodePageId, keyIdx, isExist) =
+        //         searchLeafNode(serializedKey, null, traceNode, lockManager, BTreeOptMode.SELECT)
+        //     SearchPosition(leafNodePageId, if (direction == ScanDirection.FORWARD) keyIdx + 1 else keyIdx - 1)
+        // }
 
-                else -> {
-                    keySerializer.serializeUpper(key)
-                }
-            }
-
-        return if (serializedKey == null) {
-            val rightMostChildPageId = findRightMostLeafPageId(lockManager) ?: return null
-            SearchPosition(rightMostChildPageId, null)
-        } else {
-            val (leafNodePageId, keyIdx, isExist) =
-                searchLeafNode(serializedKey, null, traceNode, lockManager, BTreeOptMode.SELECT)
-            SearchPosition(leafNodePageId, if (direction == ScanDirection.FORWARD) keyIdx + 1 else keyIdx - 1)
-        }
+        val (leafNodePageId, keyIdx, isExist) =
+            searchLeafNode(key, null, traceNode, lockManager, BTreeOptMode.SELECT)
+        return SearchPosition(leafNodePageId, if (direction == ScanDirection.FORWARD) keyIdx + 1 else keyIdx - 1)
     }
 
     /**
@@ -301,8 +297,8 @@ class BTree<K, V>(
      * @return Key, Value of the leaf node.
      * @see findLeftMostLeafPageId
      * */
-    fun traverse(): List<Pair<K, V>> {
-        val result = mutableListOf<Pair<K, V>>()
+    fun traverse(): List<Pair<ByteArray, ByteArray>> {
+        val result = mutableListOf<Pair<ByteArray, ByteArray>>()
         val lockManager = LockManager(LockMode.READ)
         var leafNodePageIdCursor: Long? = findLeftMostLeafPageId(lockManager) ?: return emptyList()
         lockManager.push(storageManager.fetchPage(leafNodePageIdCursor!!, LockMode.READ))
@@ -317,8 +313,8 @@ class BTree<K, V>(
                     val keys = currentNode.keyView
                     val values = currentNode.valueView
                     for (idx in keys.indices) {
-                        val key: K = keySerializer.deserialize(keys[idx])
-                        val value: V = valueSerializer.deserialize(values[idx]).first
+                        val key = keys[idx]
+                        val value = values[idx]
                         result += key to value
                     }
                     page.rightSiblingPageId
@@ -790,7 +786,7 @@ class BTree<K, V>(
     /**
      * Print the tree with logger. Only for test.
      * */
-    fun printTree() {
+    fun printTree(format: (ByteArray) -> String) {
         data class QueueItem(
             val pageId: Long,
             val level: Int,
@@ -823,7 +819,7 @@ class BTree<K, V>(
             currentLock.asReadView { buffer ->
                 val currentPage = SlottedPage(indexConfig, currentPageId, buffer)
                 var currentNode = Node.from(indexConfig, currentPage)
-                printNode(viewBuilder, currentNode, idx)
+                printNode(viewBuilder, currentNode, idx, format)
                 if (!isLeaf) {
                     currentNode = currentNode as InternalNode
                     for (i in 0..<currentNode.keyCount + 1) {
@@ -854,13 +850,14 @@ class BTree<K, V>(
         viewBuilder: StringBuilder,
         node: Node,
         idx: Int,
+        format: (ByteArray) -> String,
     ) {
         val keys = node.keyView
         viewBuilder.append("   [${node.hashCode()}][$idx] ")
 
         for (i in keys.indices) {
-            val key: K = keySerializer.deserialize(keys[i])
-            viewBuilder.append(keySerializer.format(key))
+            val key = keys[i]
+            viewBuilder.append(format(key))
             viewBuilder.append(" ")
         }
     }

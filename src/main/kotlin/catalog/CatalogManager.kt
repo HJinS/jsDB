@@ -27,12 +27,21 @@ class CatalogManager(
     onIndexCatalogRootChanged: (Long) -> Unit,
     onColumnCatalogRootChanged: (Long) -> Unit,
 ) {
+    private val tableCatalogKeySerializer = MultiColumnKeySerializer(CatalogBoot.TABLE_CATALOG_KEY)
+    private val tableCatalogValueSerializer = BinaryRowSerializer(CatalogBoot.TABLE_CATALOG_ROW)
+
+    private val indexCatalogKeySerializer = MultiColumnKeySerializer(CatalogBoot.INDEX_CATALOG_KEY)
+    private val indexCatalogValueSerializer = BinaryRowSerializer(CatalogBoot.INDEX_CATALOG_ROW)
+
+    private val columnCatalogKeySerializer = MultiColumnKeySerializer(CatalogBoot.COLUMN_CATALOG_KEY)
+    private val columnCatalogValueSerializer = BinaryRowSerializer(CatalogBoot.COLUMN_CATALOG_ROW)
+
+
+
     private var tableCatalog = BTree(
         name = CatalogBoot.TABLE_CATALOG_INDEX_NAME,
         targetTable = CatalogBoot.TABLE_CATALOG_NAME,
         storageManager = storageManager,
-        keySerializer = MultiColumnKeySerializer(CatalogBoot.TABLE_CATALOG_KEY),
-        valueSerializer = BinaryRowSerializer(CatalogBoot.TABLE_CATALOG_ROW),
         indexConfig = indexConfig,
         rootPageId = metaPageData.tableCatalogRootPageId,
         onRootChanged = onTableCatalogRootChanged
@@ -41,8 +50,6 @@ class CatalogManager(
         name = CatalogBoot.INDEX_CATALOG_INDEX_NAME,
         targetTable = CatalogBoot.INDEX_CATALOG_NAME,
         storageManager = storageManager,
-        keySerializer = MultiColumnKeySerializer(CatalogBoot.INDEX_CATALOG_KEY),
-        valueSerializer = BinaryRowSerializer(CatalogBoot.INDEX_CATALOG_ROW),
         indexConfig = indexConfig,
         rootPageId = metaPageData.indexCatalogRootPageId,
         onRootChanged = onIndexCatalogRootChanged
@@ -51,26 +58,30 @@ class CatalogManager(
         name = CatalogBoot.COLUMN_CATALOG_INDEX_NAME,
         targetTable = CatalogBoot.COLUMN_CATALOG_NAME,
         storageManager = storageManager,
-        keySerializer = MultiColumnKeySerializer(CatalogBoot.COLUMN_CATALOG_KEY),
-        valueSerializer = BinaryRowSerializer(CatalogBoot.COLUMN_CATALOG_ROW),
         indexConfig = indexConfig,
         rootPageId = metaPageData.columnCatalogRootPageId,
         onRootChanged = onColumnCatalogRootChanged
     )
 
     fun resolveIndex(name: String): IndexRow?{
-        val data = indexCatalog.search(listOf(name)) ?: return null
-        return IndexRaw(data).toRow()
+        val serialized = indexCatalogKeySerializer.serialize(listOf(name))
+        val data = indexCatalog.search(serialized) ?: return null
+        val deserialized = indexCatalogValueSerializer.deserialize(data).first
+        return IndexRaw(deserialized).toRow()
     }
 
     fun resolveColumn(tableId: Long, ordinal: Int): ColumnRow?{
-        val data = columnCatalog.search(listOf(tableId, ordinal)) ?: return null
-        return ColumnRaw(data).toRow()
+        val serialized = columnCatalogKeySerializer.serialize(listOf(tableId, ordinal))
+        val data = columnCatalog.search(serialized) ?: return null
+        val deserialized = columnCatalogValueSerializer.deserialize(data).first
+        return ColumnRaw(deserialized).toRow()
     }
 
     fun resolveTable(name: String): TableRow?{
-        val data = tableCatalog.search(listOf(name)) ?: return null
-        return TableRaw(data).toRow()
+        val serialized = tableCatalogKeySerializer.serialize(listOf(name))
+        val data = tableCatalog.search(serialized) ?: return null
+        val deserialized = tableCatalogValueSerializer.deserialize(data).first
+        return TableRaw(deserialized).toRow()
     }
 
     fun registerNewColumn(tableId: Long, ordinal: Int, name: String, type: String, nullable: Boolean): ColumnRow{
@@ -85,18 +96,16 @@ class CatalogManager(
                 e
             )
         }
-        columnCatalog.insert(
-            listOf(tableId, ordinal),
-            listOf(tableId, ordinal, name, type, nullable)
-        )
+        val keySerialized = columnCatalogKeySerializer.serialize(listOf(tableId, ordinal))
+        val valueSerialized = columnCatalogValueSerializer.serialize(listOf(tableId, ordinal, name, type, nullable))
+        columnCatalog.insert(keySerialized, valueSerialized)
         return ColumnRow(tableId, ordinal, name, columnType, nullable)
     }
 
     fun registerNewTable(tableId: Long, tableName: String, primaryIndexName: String?): TableRow{
-        tableCatalog.insert(
-            listOf(tableName),
-            listOf(tableId, tableName, primaryIndexName)
-        )
+        val keySerialized = tableCatalogKeySerializer.serialize(listOf(tableName))
+        val valueSerialized = tableCatalogValueSerializer.serialize(listOf(tableId, tableName, primaryIndexName))
+        tableCatalog.insert(keySerialized, valueSerialized)
         return TableRow(tableId, tableName, primaryIndexName)
     }
 
@@ -109,61 +118,67 @@ class CatalogManager(
         isUnique: Boolean,
         keyColumns: List<IndexColumn>
     ): IndexRow{
-        indexCatalog.insert(
-            listOf(indexName),
-            listOf(indexId, indexName, tableName, rootPageId, isPrimary, isUnique, keyColumns.encodeKeyColumns())
-        )
+        val keySerialized = indexCatalogKeySerializer.serialize(listOf(indexName))
+        val valueSerialized = indexCatalogValueSerializer.serialize(listOf(indexId, indexName, tableName, rootPageId, isPrimary, isUnique, keyColumns.encodeKeyColumns()))
+        indexCatalog.insert(keySerialized, valueSerialized)
         return IndexRow(indexId, indexName, tableName, rootPageId, isPrimary, isUnique, keyColumns)
     }
 
     fun updatePrimaryIndexName(tableName: String, primaryIndexName: String){
-        val value = tableCatalog.search(listOf(tableName))
+        val searchkey = tableCatalogKeySerializer.serialize(listOf(tableName))
+        val value = tableCatalog.search(searchkey)
             ?: throw CatalogException.UndefinedTable(
                 SQLErrorDetail(
                     entityType = EntityType.TABLE,
                     entityName = tableName
                 )
             )
-        val tableRow = TableRaw(value).toRow()
+        val valueDeserialized = tableCatalogValueSerializer.deserialize(value).first
+        val tableRow = TableRaw(valueDeserialized).toRow()
         val newTableRow = tableRow.copy(primaryIndexName = primaryIndexName)
-        tableCatalog.update(
-            listOf(tableName),
-            listOf(tableName),
-            newTableRow.toList()
-        )
+        val newKeySerialized = tableCatalogKeySerializer.serialize(listOf(tableName))
+        val newValueSerialized = tableCatalogValueSerializer.serialize(newTableRow.toList())
+        tableCatalog.update(newKeySerialized, newKeySerialized , newValueSerialized)
     }
 
     fun updateIndexRootPageId(indexName: String, rootPageId: Long){
-        val value = indexCatalog.search(listOf(indexName))
+        val keySerialized = indexCatalogKeySerializer.serialize(listOf(indexName))
+
+        val value = indexCatalog.search(keySerialized)
         requireOrThrow(value != null){ CatalogException.UndefinedObject(
             SQLErrorDetail(
                 entityType = EntityType.INDEX,
                 entityName = indexName
             )
         ) }
-        val indexRow = IndexRaw(value).toRow()
+
+        val searchedValue = indexCatalogValueSerializer.deserialize(value).first
+        val indexRow = IndexRaw(searchedValue).toRow()
         val newRow = indexRow.copy(rootPageId = rootPageId)
         val rowList = newRow.toList()
-        indexCatalog.update(
-            listOf(indexName),
-            listOf(indexName),
-            rowList
-        )
+        val newKeySerialized = indexCatalogKeySerializer.serialize(listOf(indexName))
+        val newValueSerialized = indexCatalogValueSerializer.serialize(rowList)
+
+        indexCatalog.update(newKeySerialized, newKeySerialized, newValueSerialized)
     }
 
     fun getColumns(tableId: Long): List<ColumnRow>{
         return columnCatalog.traverse().filter {
-            it.first[0] == tableId
+            columnCatalogKeySerializer.deserialize(it.first)[0] == tableId
         }.map {
-            ColumnRaw(it.second).toRow()
+            val deserialized = columnCatalogValueSerializer.deserialize(it.second).first
+            ColumnRaw(deserialized).toRow()
         }
     }
 
     fun getIndexes(tableName: String): List<IndexRow>{
         return indexCatalog.traverse().filter {
-            it.second[2] == tableName
+            val deserialized = indexCatalogValueSerializer.deserialize(it.second).first
+            val row = IndexRaw(deserialized).toRow()
+            row.tableName == tableName
         }.map {
-            IndexRaw(it.second).toRow()
+            val deserialized = indexCatalogValueSerializer.deserialize(it.second).first
+            IndexRaw(deserialized).toRow()
         }
     }
 }

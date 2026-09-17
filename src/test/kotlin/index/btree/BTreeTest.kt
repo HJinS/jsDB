@@ -4,7 +4,9 @@ import config.SimpleConfig
 import config.StorageConfig
 import helper.serializer.LocalDateSerializerHelper
 import helper.serializer.RowDataSerializerHelper
+import index.serializer.KeySerializer
 import index.serializer.MultiColumnKeySerializer
+import index.serializer.ValueSerializer
 import schema.IndexColumn
 import schema.ColumnType
 import schema.IndexKeySchema
@@ -21,6 +23,38 @@ import storageEngine.lru.FrameNodePolicy
 import util.INVALID_PAGE_ID
 import java.io.File
 import java.time.LocalDate
+
+/**
+ * Test-only wrapper pairing a byte-only [BTree] with the key/value serializers,
+ * so existing test bodies can keep using domain-typed keys/values.
+ */
+class TypedBTree<T : Any>(
+    val btree: BTree,
+    private val keySerializer: KeySerializer<List<Any?>>,
+    private val valueSerializer: ValueSerializer<T>,
+) {
+    fun insert(key: List<Any?>, value: T) {
+        btree.insert(keySerializer.serialize(key), valueSerializer.serialize(value))
+    }
+
+    fun delete(key: List<Any?>) {
+        btree.delete(keySerializer.serialize(key))
+    }
+
+    fun update(key: List<Any?>, newKey: List<Any?>, newValue: T) {
+        btree.update(keySerializer.serialize(key), keySerializer.serialize(newKey), valueSerializer.serialize(newValue))
+    }
+
+    fun search(key: List<Any?>): T? =
+        btree.search(keySerializer.serialize(key))?.let { valueSerializer.deserialize(it).first }
+
+    fun traverse(): List<Pair<List<Any?>, T>> =
+        btree.traverse().map { (k, v) -> keySerializer.deserialize(k) to valueSerializer.deserialize(v).first }
+
+    fun printTree() {
+        btree.printTree { bytes -> keySerializer.format(keySerializer.deserialize(bytes)) }
+    }
+}
 
 class BTreeTest: BehaviorSpec({
     timeout = 5 * 60 * 1000L  // 5 minutes — deadlock / infinite loop guard
@@ -768,20 +802,19 @@ class BTreeTest: BehaviorSpec({
         var metaInitialized = false
 
 
-        inline fun <reified T: Any> initData(schema: IndexKeySchema): BTree<List<Any?>, T>{
+        inline fun <reified T: Any> initData(schema: IndexKeySchema): TypedBTree<T>{
             if (!metaInitialized) {
                 metaPageManager.initialize()
                 metaInitialized = true
             }
-            return BTree(
+            val btree = BTree(
                 "test",
                 "test table",
                 storageManager,
-                MultiColumnKeySerializer(schema),
-                RowDataSerializerHelper(serializer<T>()),
                 config.indexConfig,
                 INVALID_PAGE_ID,
             )
+            return TypedBTree(btree, MultiColumnKeySerializer(schema), RowDataSerializerHelper(serializer<T>()))
         }
     }
 }
