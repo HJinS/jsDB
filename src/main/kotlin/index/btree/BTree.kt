@@ -245,7 +245,7 @@ class BTree(
     }
 
     fun search(
-        key: ByteArray,
+        key: ByteArray?,
         direction: ScanDirection,
         boundGiven: Boolean,
     ): Cursor? {
