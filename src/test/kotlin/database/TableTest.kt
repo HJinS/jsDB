@@ -8,6 +8,7 @@ import index.serializer.BinaryRowSerializer
 import index.serializer.MultiColumnKeySerializer
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.mockk.MockKMatcherScope
@@ -520,7 +521,13 @@ class TableTest :
             val entry =
                 primaryKeySerializer.serialize(listOf(2L)) to
                     primaryValueSerializer.serialize(listOf(2L, "b@x.com"))
-            every { cursor.step() } returnsMany listOf(entry, null)
+            // A row past the upper bound sits right after it in the mocked sequence, so the test
+            // can tell "the stop condition actually excluded id = 6" apart from "the cursor just
+            // happened to run out of scripted entries on its own".
+            val outOfBoundEntry =
+                primaryKeySerializer.serialize(listOf(6L)) to
+                    primaryValueSerializer.serialize(listOf(6L, "f@x.com"))
+            every { cursor.step() } returnsMany listOf(entry, outOfBoundEntry, null)
             every { cursor.close() } just Runs
             every { primaryBtree.search(null, ScanDirection.FORWARD, false) } returns cursor
 
@@ -536,7 +543,7 @@ class TableTest :
                 then("the seek is issued with boundGiven = false and no key") {
                     verify { primaryBtree.search(null, ScanDirection.FORWARD, false) }
                 }
-                then("rows up to the upper bound are still returned") {
+                then("rows up to the upper bound are returned, and the row past it is excluded") {
                     result.map { it["id"] } shouldBe listOf(2L)
                 }
             }
@@ -548,7 +555,7 @@ class TableTest :
             val table = Table(rowSchema, primaryHandle(primaryBtree), emptyMap())
 
             val entries =
-                listOf(0L, 1L, 2L).map {
+                listOf(1L, 2L).map {
                     primaryKeySerializer.serialize(listOf(it)) to
                         primaryValueSerializer.serialize(listOf(it, "$it@x.com"))
                 }
@@ -803,6 +810,82 @@ class TableTest :
                             Bound(listOf(1L, 10L), isInclusive = true),
                             Bound(listOf(5L, 20L), isInclusive = true),
                             listOf(ColumnOrder("col2", descending = true)),
+                        )
+                    }
+                }
+            }
+        }
+
+        given("a prefix search that matches several rows with varied trailing column and row data") {
+            val primaryBtree = mockk<BTree>()
+            val compositeBtree = mockk<BTree>()
+            val cursor = mockk<Cursor>()
+            val table =
+                Table(
+                    rowSchema,
+                    primaryHandle(primaryBtree),
+                    mapOf("composite_idx" to compositeHandle(compositeBtree)),
+                )
+
+            // col1 = 1 fixed (the prefix), col2 varies — and each hit resolves to a different
+            // primary row, including a row whose nullable email column is actually null, so the
+            // whole extractData -> Row path is exercised with more than one hand-picked value.
+            val hits =
+                listOf(
+                    Triple(30L, 101L, "a@x.com"),
+                    Triple(20L, 102L, "b@x.com"),
+                    Triple(10L, 103L, null),
+                )
+            val entries =
+                hits.map { (col2, id, _) ->
+                    compositeKeySerializer.serialize(listOf(1L, col2)) to
+                        compositeValueSerializer.serialize(listOf(id))
+                }
+            // The btree isn't only holding col1 = 1 data — a col1 = 2 row sits right after it in
+            // byte order, standing in for "whatever comes next in the real tree". Without this,
+            // the test can't tell a real stop-condition break from the cursor simply running out
+            // of scripted entries on its own.
+            val outOfPrefixId = 999L
+            val outOfPrefixEntry =
+                compositeKeySerializer.serialize(listOf(2L, 50L)) to
+                    compositeValueSerializer.serialize(listOf(outOfPrefixId))
+            every { cursor.step() } returnsMany (entries + outOfPrefixEntry + null)
+            every { cursor.close() } just Runs
+            every {
+                compositeBtree.search(
+                    eqBytes(compositeKeySerializer.serialize(listOf(1L))),
+                    ScanDirection.FORWARD,
+                    true,
+                )
+            } returns cursor
+            for ((_, id, email) in hits) {
+                every {
+                    primaryBtree.search(eqBytes(primaryKeySerializer.serialize(listOf(id))))
+                } returns primaryValueSerializer.serialize(listOf(id, email))
+            }
+            every {
+                primaryBtree.search(eqBytes(primaryKeySerializer.serialize(listOf(outOfPrefixId))))
+            } returns primaryValueSerializer.serialize(listOf(outOfPrefixId, "outside@x.com"))
+
+            `when`("selecting by the col1 = 1 prefix"){
+                val result = table.selectByPrefix("composite_idx", listOf(1L), emptyList())
+
+                then("every row sharing the prefix comes back, each resolved through the primary index"){
+                    result.map { it["id"] to it["email"] } shouldBe
+                        listOf(101L to "a@x.com", 102L to "b@x.com", 103L to null)
+                }
+                then("the col1 = 2 row that follows the prefix in the tree is excluded"){
+                    result.map { it["id"] } shouldNotContain outOfPrefixId
+                    verify(exactly = 0) {
+                        primaryBtree.search(eqBytes(primaryKeySerializer.serialize(listOf(outOfPrefixId))))
+                    }
+                }
+                then("both bounds are seeked/stopped as the same inclusive col1 = 1 value"){
+                    verify {
+                        compositeBtree.search(
+                            eqBytes(compositeKeySerializer.serialize(listOf(1L))),
+                            ScanDirection.FORWARD,
+                            true,
                         )
                     }
                 }
