@@ -37,6 +37,7 @@ class Cursor(
     fun step(): Pair<ByteArray, ByteArray>? {
         while (true) {
             val currentPageId = currentPosition.pageId
+            if (currentPosition.pageId == INVALID_PAGE_ID) return null
             var currentLock = lockManager.last
             if (!(currentLock.isReadLocked || currentLock.isWriteLocked)) {
                 currentLock = storageManager.fetchPage(currentPageId, LockMode.READ)
@@ -68,6 +69,7 @@ class Cursor(
                             }
                         if (neighborPageId == INVALID_PAGE_ID) {
                             reachedEnd = true
+                            currentPosition = SearchPosition(neighborPageId, null)
                         } else {
                             val nextPosition =
                                 when (direction) {

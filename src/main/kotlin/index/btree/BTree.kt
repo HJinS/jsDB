@@ -818,11 +818,11 @@ class BTree(
                     selectChild(currentNode as InternalNode)
                 }
             }
-            val nextLock = storageManager.fetchPage(nextPageId, lockManager.lockMode)
             if (isSafeToUnlockAncestor) lockManager.releaseAncestor(currentPageLock)
+            if (isLeaf) break
+            val nextLock = storageManager.fetchPage(nextPageId, lockManager.lockMode)
             lockManager.push(nextLock)
             pageIdCursor = nextPageId
-            if (isLeaf) break
         }
         return pageIdCursor
     }
