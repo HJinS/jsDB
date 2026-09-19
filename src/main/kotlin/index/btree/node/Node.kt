@@ -10,21 +10,19 @@ import storageEngine.page.SlottedPage
 import util.PageType
 import kotlin.math.floor
 
-abstract class Node<K>(
+abstract class Node(
     val indexConfig: IndexConfig,
     val page: SlottedPage,
-    protected val keySerializer: KeySerializer<K>
 ){
 
     companion object {
-        fun <K> from(
+        fun from(
             indexConfig: IndexConfig,
-            page: SlottedPage,
-            keySerializer: KeySerializer<K>
-        ): Node<K>{
+            page: SlottedPage
+        ): Node{
             return when(page.type){
-                PageType.LEAF_NODE -> LeafNode(indexConfig, page, keySerializer)
-                PageType.INTERNAL_NODE -> InternalNode(indexConfig, page, keySerializer)
+                PageType.LEAF_NODE -> LeafNode(indexConfig, page)
+                PageType.INTERNAL_NODE -> InternalNode(indexConfig, page)
                 else -> throw IndexException.InvalidNodeType(
                     EngineErrorDetail(
                         pageType = page.type,
@@ -93,7 +91,7 @@ abstract class Node<K>(
         return if(idx >= 0) {if(exactIndex) idx to true else idx+1 to true} else -(idx + 1) to false
     }
 
-    fun isLeft(targetPageId: Long, parentNode: InternalNode<K>, keyIdx: Int): Boolean{
+    fun isLeft(targetPageId: Long, parentNode: InternalNode, keyIdx: Int): Boolean{
         return try {
             val rightChildId = parentNode.childPageId(keyIdx + 1)
             targetPageId == rightChildId
@@ -118,7 +116,7 @@ abstract class Node<K>(
         page.deleteData(slotId)
     }
 
-    abstract fun redistribute(targetNode: Node<K>, parentNode: InternalNode<K>, keyIdx: Int)
+    abstract fun redistribute(targetNode: Node, parentNode: InternalNode, keyIdx: Int)
 
     /**
      * Merge the right node into the left node.
@@ -138,7 +136,7 @@ abstract class Node<K>(
      * @param keyIdx Index which I used to get to the leaf node.
      * @return Page ID pair of left, right node.
      * */
-    abstract fun merge(targetNode: Node<K>, parentNode: InternalNode<K>, keyIdx: Int): Pair<Long, Long>
+    abstract fun merge(targetNode: Node, parentNode: InternalNode, keyIdx: Int): Pair<Long, Long>
 
     abstract fun deleteAllData(): Pair<List<ByteArray>, List<ByteArray>>
 
@@ -156,10 +154,10 @@ abstract class Node<K>(
      * @return Triple<separationKey, leftNode, rightNode>
      * */
     internal fun orderNode(
-        targetNode: Node<K>,
-        parentNode: InternalNode<K>,
+        targetNode: Node,
+        parentNode: InternalNode,
         keyIdx: Int
-    ): Triple<Int, Node<K>, Node<K>> = if(isLeft(targetNode.page.pageId, parentNode, keyIdx)) {
+    ): Triple<Int, Node, Node> = if(isLeft(targetNode.page.pageId, parentNode, keyIdx)) {
         Triple(keyIdx, this, targetNode)
     } else {
         Triple(keyIdx-1, targetNode, this)

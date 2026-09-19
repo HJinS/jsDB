@@ -4,10 +4,6 @@ import config.MidpointLruConfig
 import config.SimpleConfig
 import config.StorageConfig
 import index.btree.node.Node
-import index.serializer.MultiColumnKeySerializer
-import schema.IndexColumn
-import schema.ColumnType
-import schema.IndexKeySchema
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -41,7 +37,7 @@ class StorageManagerTest: BehaviorSpec({
             then("the page type should be ${PageType.LEAF_NODE}") {
                 newPageLock.asReadView { buffer ->
                     val newPage = SlottedPage(indexConfig, newPageLock.pageId, buffer)
-                    val newNode = Node.from(indexConfig, newPage, keySerializer)
+                    val newNode = Node.from(indexConfig, newPage)
                     newNode.page.type shouldBe PageType.LEAF_NODE
                 }
                 newPageLock.close()
@@ -58,7 +54,7 @@ class StorageManagerTest: BehaviorSpec({
             then("should should return the correct pageLock"){
                 pageLock.asReadView { buffer ->
                     val page = SlottedPage(indexConfig, pageLock.pageId, buffer)
-                    val node = Node.from(indexConfig, page, keySerializer)
+                    val node = Node.from(indexConfig, page)
                     node.page.type shouldBe PageType.LEAF_NODE
                     node.page.pageId shouldBe 1L
                 }
@@ -86,7 +82,7 @@ class StorageManagerTest: BehaviorSpec({
             then("the page type should be ${PageType.LEAF_NODE}") {
                 newPageLock.asReadView { buffer ->
                     val newPage = SlottedPage(indexConfig, newPageLock.pageId, buffer)
-                    val newNode = Node.from(indexConfig, newPage, keySerializer)
+                    val newNode = Node.from(indexConfig, newPage)
                     newNode.page.type shouldBe PageType.LEAF_NODE
                 }
                 newPageLock.close()
@@ -103,14 +99,6 @@ class StorageManagerTest: BehaviorSpec({
             )
         )
         val indexConfig = config.indexConfig
-        val testSchema = IndexKeySchema(
-            listOf(
-                IndexColumn("id", ColumnType.INT, descending = false),
-                IndexColumn("name", ColumnType.STRING, descending = false),
-                IndexColumn("birth", ColumnType.LOCAL_DATE, descending = false)
-            )
-        )
-        private val keySerializer = MultiColumnKeySerializer(testSchema)
         private val diskManager = DiskManager(config.storageConfig, config.indexConfig)
         private val replacer = FrameNodePolicy(config.storageConfig.midPointLruConfig)
         private val bufferPoolManager = BufferPoolManager(diskManager, replacer, config.indexConfig, config.storageConfig.poolSize)

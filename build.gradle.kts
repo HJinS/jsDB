@@ -49,6 +49,11 @@ tasks.withType<Test>().configureEach {
     jvmArgs("-XX:+EnableDynamicAgentLoading")
     systemProperty("net.bytebuddy.experimental", "true")
     testLogging { events("passed", "failed"); showStandardStreams = true }
+    afterSuite(KotlinClosure2({ desc: TestDescriptor, result: TestResult ->
+        if (desc.parent == null) {
+            println("\nTest Results: ${result.resultType} (${result.testCount} tests, ${result.successfulTestCount} passed, ${result.failedTestCount} failed, ${result.skippedTestCount} skipped)")
+        }
+    }))
 }
 
 kotlin {

@@ -93,3 +93,4 @@ bin
 *.skill
 .gemini/
 .claude/
+.superpowers/
