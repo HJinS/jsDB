@@ -185,7 +185,6 @@ class CatalogManager(
     }
 
     fun getColumns(tableId: Long): List<ColumnRow> {
-        val prefix = listOf<Any?>(tableId)
         val seek = columnCatalogKeySerializer.serialize(listOf(tableId))
         val stop = columnCatalogKeySerializer.serializeUpper(listOf(tableId))
         val cursor =
