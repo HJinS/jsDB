@@ -196,8 +196,8 @@ class CatalogManager(
                 val entry = it.step() ?: break
                 val (key, value) = entry
                 if (stop != null) {
-                    val result = Arrays.compareUnsigned(key, stop)
-                    if (result >= 0) break
+                    val compareResult = Arrays.compareUnsigned(key, stop)
+                    if (compareResult >= 0) break
                 }
                 result += ColumnRaw(columnCatalogValueSerializer.deserialize(value).first).toRow()
             }
