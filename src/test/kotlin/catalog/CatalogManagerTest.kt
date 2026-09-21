@@ -4,6 +4,7 @@ import exception.CatalogException
 import config.MidpointLruConfig
 import config.SimpleConfig
 import config.StorageConfig
+import schema.ColumnRow
 import schema.ColumnType
 import schema.IndexColumn
 import io.kotest.assertions.throwables.shouldThrow
@@ -35,7 +36,23 @@ class CatalogManagerTest: BehaviorSpec({
             )
         )
     )
-    afterSpec { File(dbPath).delete() }
+    // getColumns scan cases get their own catalog file so they don't depend on (or disturb)
+    // the rows the sequential "A Catalog Manager" scenario below registers.
+    val scanDbPath = "test-catalog-manager-scan-${Uuid.random()}"
+    val scanConfig = SimpleConfig(
+        storageConfig=StorageConfig(
+            dbPath = scanDbPath,
+            poolSize = 100,
+            midPointLruConfig = MidpointLruConfig(
+                capacity = 100,
+                lruOldBlocksTimeMs = 100
+            )
+        )
+    )
+    afterSpec {
+        File(dbPath).delete()
+        File(scanDbPath).delete()
+    }
     given("A Catalog Manager") {
         val catalogManager = initCatalogManager(config)
 
@@ -189,6 +206,73 @@ class CatalogManagerTest: BehaviorSpec({
                 columns[0].ordinal shouldBe ordinal
                 columns[0].name shouldBe columnName1
                 columns[0].type shouldBe validColumnType
+            }
+        }
+    }
+
+    given("A catalog holding columns of several neighbouring tables") {
+        val scanCatalogManager = initCatalogManager(scanConfig)
+        val columnTypes = listOf(ColumnType.LONG, ColumnType.INT, ColumnType.STRING, ColumnType.DOUBLE, ColumnType.FLOAT)
+
+        fun registerColumns(tableId: Long, ordinals: List<Int>): List<ColumnRow> =
+            ordinals.map { ordinal ->
+                scanCatalogManager.registerNewColumn(
+                    tableId,
+                    ordinal,
+                    "t${tableId}_c$ordinal",
+                    columnTypes[ordinal % columnTypes.size].name,
+                    ordinal % 2 == 0,
+                )
+            }
+
+        val below = registerColumns(4L, listOf(1, 0))
+        val target = registerColumns(5L, listOf(2, 0, 1, 3))
+        val above = registerColumns(6L, listOf(0, 1, 2))
+
+        val columnsPerTable = 400
+        val bigBelow = registerColumns(10L, (0 until columnsPerTable).shuffled())
+        val bigTarget = registerColumns(11L, (0 until columnsPerTable).shuffled())
+        val bigAbove = registerColumns(12L, (0 until columnsPerTable).shuffled())
+
+        `when`("Getting columns of the table sitting between two other tables") {
+            val columns = scanCatalogManager.getColumns(5L)
+            then("Only its own columns come back, in ordinal order") {
+                columns shouldBe target.sortedBy { it.ordinal }
+                columns.map { it.tableId }.toSet() shouldBe setOf(5L)
+            }
+        }
+
+        `when`("Getting columns of the neighbours on either side") {
+            then("The lower neighbour gets just its own columns, none leaked from table 5") {
+                scanCatalogManager.getColumns(4L) shouldBe below.sortedBy { it.ordinal }
+            }
+            then("The upper neighbour gets just its own columns, none from before it") {
+                scanCatalogManager.getColumns(6L) shouldBe above.sortedBy { it.ordinal }
+            }
+        }
+
+        `when`("Getting columns of a table id that has none") {
+            then("An id below every registered table returns an empty list") {
+                scanCatalogManager.getColumns(3L) shouldBe emptyList()
+            }
+            then("An id in the gap between registered tables returns an empty list") {
+                scanCatalogManager.getColumns(8L) shouldBe emptyList()
+            }
+            then("An id above every registered table returns an empty list") {
+                scanCatalogManager.getColumns(13L) shouldBe emptyList()
+                scanCatalogManager.getColumns(Long.MAX_VALUE) shouldBe emptyList()
+            }
+        }
+
+        `when`("Getting columns of a table whose block spans several leaf pages") {
+            val columns = scanCatalogManager.getColumns(11L)
+            then("Every column comes back exactly once, in ordinal order") {
+                columns.size shouldBe columnsPerTable
+                columns shouldBe bigTarget.sortedBy { it.ordinal }
+            }
+            then("Neither big neighbour is affected") {
+                scanCatalogManager.getColumns(10L) shouldBe bigBelow.sortedBy { it.ordinal }
+                scanCatalogManager.getColumns(12L) shouldBe bigAbove.sortedBy { it.ordinal }
             }
         }
     }

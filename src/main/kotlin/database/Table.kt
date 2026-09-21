@@ -156,7 +156,7 @@ class Table(
                     when (scanDirection) {
                         ScanDirection.FORWARD ->
                             when {
-                                result > 0 || result == 0 -> break
+                                result >= 0 -> break
                             }
                         ScanDirection.BACKWARD ->
                             when {
