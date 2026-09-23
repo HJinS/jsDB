@@ -3,6 +3,7 @@ package exception
 import util.SQLErrorDetail
 import util.SqlState
 
+/** Failures from [database.Table]'s row CRUD and range-scan API — the one caller-triggerable layer among these five exception hierarchies (bad `ORDER BY`, uniqueness, missing row), plus [CorruptedIndex] for a genuine storage-level inconsistency. */
 sealed class TableException(
     sqlState: SqlState,
     detail: SQLErrorDetail,

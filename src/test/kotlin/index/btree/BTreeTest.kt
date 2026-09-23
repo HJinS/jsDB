@@ -23,6 +23,7 @@ import storageEngine.MetaPageManager
 import storageEngine.StorageManager
 import storageEngine.lru.FrameNodePolicy
 import util.INVALID_PAGE_ID
+import kotlin.uuid.Uuid
 
 /**
  * Test-only wrapper pairing a byte-only [BTree] with the key/value serializers, so existing test
@@ -63,7 +64,7 @@ class TypedBTree<T : Any>(
 
     /**
      * Drains a [BTree.search] scan (the range-scan entry point) into a typed list, for tests that
-     * only care about the sequence of entries a seek + [Cursor.step] walk produces — not [Table]'s
+     * only care about the sequence of entries a seek + [Cursor.step] walk produces — not [database.Table]'s
      * open/closed boundary construction, which lives above this layer entirely and is covered by
      * `TableTest` instead.
      */
@@ -996,7 +997,7 @@ class BTreeTest :
         }
     }) {
     companion object {
-        val config = SimpleConfig(StorageConfig(dbPath = "test-btree.db", poolSize = 100))
+        val config = SimpleConfig(StorageConfig(dbPath = "test-btree-${Uuid.random()}.db", poolSize = 100))
         val diskManager = DiskManager(config.storageConfig, config.indexConfig)
         val lruPolicy = FrameNodePolicy(config.storageConfig.midPointLruConfig)
         val bufferPoolManager =

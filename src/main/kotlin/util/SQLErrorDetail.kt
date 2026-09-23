@@ -1,5 +1,9 @@
 package util
 
+/**
+ * [ErrorDetail] for SQL/schema-level failures (undefined table, unique violation, etc.)
+ * - [exception.CatalogException]/[exception.TableException]/[exception.DatabaseException]'s payload.
+ * */
 class SQLErrorDetail(
     reason: String? = null,
     val entityType: EntityType,

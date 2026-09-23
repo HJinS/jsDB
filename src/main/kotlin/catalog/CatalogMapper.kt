@@ -12,6 +12,15 @@ import util.EntityType
 import util.SQLErrorDetail
 import kotlin.Long
 
+/**
+ * `toRow()`: turns a `*Raw` wrapper (a catalog `BTree`'s deserialized `List<Any?>`, positional and
+ * untyped) into its typed `schema.*Row` data class, casting each position and reporting any
+ * failure (wrong arity, wrong type, unrecognized enum name) as [CatalogException.CorruptedRow]
+ * rather than letting the raw [ClassCastException]/etc. escape - these bytes only ever come from
+ * this same file's `toList()`, so a decode failure means on-disk corruption, not a caller error.
+ *
+ * `toRow.toList()`: the inverse, building the positional value list [CatalogManager] serializes.
+ * */
 fun ColumnRaw.toRow(): ColumnRow {
     return try {
         ColumnRow(

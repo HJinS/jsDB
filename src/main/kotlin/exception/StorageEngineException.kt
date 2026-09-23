@@ -3,6 +3,7 @@ package exception
 import util.EngineErrorDetail
 import util.SqlState
 
+/** Failures from the storage stack below indexing ([storageEngine.DiskManager]/[storageEngine.BufferPoolManager]/[storageEngine.page.SlottedPage]) — always [SqlState.INTERNAL_ERROR], since these are disk/memory-level invariant violations, not query-triggerable. */
 sealed class StorageEngineException(
     sqlState: SqlState,
     detail: EngineErrorDetail,

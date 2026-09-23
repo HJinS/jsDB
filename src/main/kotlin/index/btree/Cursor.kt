@@ -8,6 +8,20 @@ import storageEngine.page.SlottedPage
 import util.INVALID_PAGE_ID
 import util.LockMode
 
+/**
+ * A single, one-shot walk over a [BTree]'s leaves in [direction], starting at [currentPosition].
+ * Produced only by [BTree.search] (the `Cursor?` overload) — that call has already fetched the
+ * seek position and pushed its lock, so [step] resumes from exactly that spot.
+ *
+ * Purely mechanical: it knows nothing about columns, sort direction of the caller's query, or
+ * where to stop — deserialization and the "have I passed the bound?" decision are the caller's
+ * job (see `Table.selectByRange`). A `null` from [step] means the tree itself is exhausted, not
+ * that a caller-supplied bound was reached; callers with a bound typically stop before that.
+ *
+ * `AutoCloseable`, and must be used through `.use { }`: every fetched page is pinned/locked and
+ * only released as the walk advances past it or [close] runs. An abandoned, unclosed `Cursor`
+ * leaks locks/pins for the pages it was last standing on.
+ * */
 class Cursor(
     private val lockManager: LockManager,
     private var currentPosition: SearchPosition,

@@ -8,6 +8,11 @@ import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 
+/**
+ * Raw fixed-size-page file I/O — the bottom of the storage stack, wrapped by
+ * [BufferPoolManager] for everything above it. Owns the single open [fileChannel] for the whole
+ * database file; page id `n` always lives at byte offset `n * pageSize`.
+ * */
 class DiskManager(storageConfig: StorageConfig, indexConfig: IndexConfig) {
     private val fileChannel: FileChannel = RandomAccessFile(storageConfig.dbPath, "rw").channel
 

@@ -4,18 +4,21 @@ import config.MidpointLruConfig
 
 
 /**
- * [ReplacementPolicy] 어댑터. old/young 판단·승격·순수 LRU 전환 같은 알고리즘 내부는
- * 전부 [GenerationalList]에 위임하고, 여기선 두 가지만 책임진다.
- * - `frameId ↔ LRUNode` 매핑([map])
- * - pin 생명주기(처음 pin되면 노드 생성, pin 중엔 리스트에서 제외, unpin 시 원래 상태로 복귀)
+ * [ReplacementPolicy] adapter. The algorithm internals — old/young decisions, promotion, plain-LRU
+ * conversion — are all delegated to [GenerationalList]; this class is only responsible for two
+ * things:
+ * - `frameId ↔ LRUNode` mapping ([map])
+ * - pin lifecycle (create a node the first time it's pinned, exclude it from the list while
+ *   pinned, restore it to its original state on unpin)
  *
- * 그래서 [add]가 한 줄짜리 위임으로 보이는 건 의도된 결과다 - "지금 순수 LRU인지,
- * old 노드가 승격 가능한지"를 판단하는 로직이 전부 [GenerationalList] 한 곳에만
- * 존재하게 만든 것이지, 이 클래스의 역할이 사라진 게 아니다.
+ * So [add] looking like a one-line delegation is intentional — it's the result of keeping the
+ * "is this currently plain LRU, is this old node promotable" logic entirely inside
+ * [GenerationalList], not this class's role disappearing.
  *
  * @constructor
- * @param midpointLruConfig [GenerationalList]에 그대로 전달되는 `youngRatio`/`capacity`/`lruOldMinLength`와,
- *   [PromotionRule]을 만드는 데 쓰이는 `lruOldBlocksTimeMs`를 담고 있는 설정값.
+ * @param midpointLruConfig Config holding `youngRatio`/`capacity`/`lruOldMinLength`, passed
+ *   straight through to [GenerationalList], plus `lruOldBlocksTimeMs`, used to build
+ *   [PromotionRule].
  * */
 class FrameNodePolicy(
     midpointLruConfig: MidpointLruConfig
@@ -30,7 +33,7 @@ class FrameNodePolicy(
         )
     )
 
-    /** @return evict된 프레임의 frameId. */
+    /** @return The frameId of the evicted frame. */
     override fun evict(): Int {
         val oldNode = generationalList.removeOldest()
         val frameId = oldNode.frameId
@@ -39,9 +42,10 @@ class FrameNodePolicy(
     }
 
     /**
-     * pin되지 않은(=리스트에 있는) 노드의 재접근. old/young·순수 LRU 판단은 [GenerationalList.touch]가 전담.
+     * Re-access of a not-pinned (i.e. currently listed) node. Old/young and plain-LRU decisions
+     * are entirely [GenerationalList.touch]'s job.
      *
-     * @param frameId 재접근된 프레임의 id. [map]에 이미 등록되어 있어야 한다.
+     * @param frameId The id of the re-accessed frame. Must already be registered in [map].
      * */
     override fun add(frameId: Int) {
         val node = map[frameId]!!
@@ -49,11 +53,12 @@ class FrameNodePolicy(
     }
 
     /**
-     * pin 해제 시 리스트로 복귀. `node.isOld`는 이 노드가 pin되기 전 원래 있던 위치를 그대로 보존한 값이라
-     * [GenerationalList.addOld]/[GenerationalList.addYoung] 중 그 값에 맞는 쪽을 그대로 호출하면 된다
-     * - 순수 LRU 상태인지 여부는 `addOld` 내부에서 알아서 걸러주므로 여기서 별도 분기가 필요 없다.
+     * Returns the node to the list once unpinned. `node.isOld` still holds the position it was in
+     * before being pinned, so simply calling whichever of [GenerationalList.addOld]/
+     * [GenerationalList.addYoung] matches that value is enough — whether the list is currently in
+     * plain-LRU state is already handled inside `addOld`, so no extra branching is needed here.
      *
-     * @param frameId unpin 할 프레임의 id.
+     * @param frameId The id of the frame to unpin.
      * */
     override fun unpin(frameId: Int) {
         val node = map[frameId]!!
@@ -64,12 +69,13 @@ class FrameNodePolicy(
     }
 
     /**
-     * 처음 보는 frameId면 새 [LRUNode]를 만들어 pin 상태로 등록만 해두고(아직 [GenerationalList]엔 안 들어감),
-     * 이미 있던(리스트에 들어있던) 노드를 다시 pin하는 거면 리스트에서 빼내고 링크를 초기화한다.
-     * `isOld = true`로 초기화해두는 값은 잠정치일 뿐이고, 최종적으로는 [unpin]에서
-     * [GenerationalList.addOld]가 순수 LRU 여부에 따라 다시 판단해 덮어쓴다.
+     * For a frameId never seen before, creates a new [LRUNode] and just registers it as pinned
+     * (not yet added to [GenerationalList]). For an existing (already-listed) node being pinned
+     * again, removes it from the list and resets its links. The `isOld = true` it's initialized
+     * with is only a provisional value — [unpin] later has [GenerationalList.addOld] re-decide it
+     * based on whether the list is in plain-LRU state and overwrite it.
      *
-     * @param frameId pin할 프레임의 id.
+     * @param frameId The id of the frame to pin.
      * */
     override fun pin(frameId: Int) {
         val node = map[frameId]

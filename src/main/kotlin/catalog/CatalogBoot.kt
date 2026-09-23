@@ -6,6 +6,15 @@ import schema.IndexKeySchema
 import schema.RowColumn
 import schema.RowSchema
 
+/**
+ * Fixed schemas and names for the three system catalog tables ([CatalogManager] owns one
+ * [index.btree.BTree] per `*_CATALOG_KEY`/`*_CATALOG_ROW` pair). These are the catalog's *own*
+ * schemas — unrelated to any user table's columns.
+ *
+ * [INDEX_COLUMN_ROW] is different from the other three: it's not a catalog table's row schema on
+ * its own, but the per-element schema [encodeKeyColumns]/[decodeKeyColumns] use to pack the whole
+ * `keyColumns` list into the single `BYTES` field of one [INDEX_CATALOG_ROW] row.
+ * */
 object CatalogBoot {
     val TABLE_CATALOG_ROW = RowSchema(
         listOf(
