@@ -3,6 +3,7 @@ package exception
 import util.SQLErrorDetail
 import util.SqlState
 
+/** Failures from [database.DataBase] — table/index/column DDL validation (duplicates, undefined references, PK nullability). */
 sealed class DatabaseException(
     sqlState: SqlState,
     detail: SQLErrorDetail,

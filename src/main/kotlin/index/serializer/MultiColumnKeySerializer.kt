@@ -11,6 +11,18 @@ import java.lang.IndexOutOfBoundsException
  * @see IndexKeySchema
  * */
 class MultiColumnKeySerializer(schema: IndexKeySchema) : BaseKeySerializer<List<Any?>>(schema) {
+    /**
+     * Packs each column of [key] with [packKeyItem], in schema order, concatenated so the result
+     * is byte-comparable exactly like the full key (each column's own encoding is already
+     * byte-comparable and ASC/DESC-aware; concatenation preserves column-priority ordering).
+     *
+     * [key] may have **fewer** columns than the schema (a prefix / equality search on a leading
+     * subset). When it does, exactly one padding byte is appended for the first missing column —
+     * `0x00` (ASC) or `0xFF` (DESC) — the same byte [packKeyItem] uses for an explicit `null`, and
+     * for the same reason: it's the smallest byte any real encoding for that column could start
+     * with, so this key sorts at-or-below every full key sharing [key] as a prefix. No bytes are
+     * added for columns after that; the loop stops there.
+     * */
     override fun serialize(key: List<Any?>): ByteArray {
         require(key.size <= schema.indexColumns.size) { "Too many key values for schema" }
         var totalByteSize = 0
@@ -77,6 +89,12 @@ class MultiColumnKeySerializer(schema: IndexKeySchema) : BaseKeySerializer<List<
         return null
     }
 
+    /**
+     * Unpacks [bytes] column by column via [unpackKeyItem]. Stops early (returning whatever
+     * columns were recovered so far) if it runs out of bytes partway through a column — this
+     * happens for a padded/prefix key produced by [serialize] with fewer columns than the schema,
+     * which is not expected to round-trip back to the original column count.
+     * */
     override fun deserialize(bytes: ByteArray): List<Any?> {
         val unpackedKeys = mutableListOf<Any?>()
         var offset = 0
@@ -93,6 +111,7 @@ class MultiColumnKeySerializer(schema: IndexKeySchema) : BaseKeySerializer<List<
         return unpackedKeys
     }
 
+    /** Debug-only pipe-joined rendering of [key]'s column values (e.g. for `BTree.printTree`). */
     override fun format(key: List<Any?>): String {
         val viewBuilder = StringBuilder()
         for (keyItem in key) {

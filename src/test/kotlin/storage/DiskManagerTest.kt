@@ -9,6 +9,7 @@ import storageEngine.DiskManager
 import exception.StorageEngineException
 import java.io.File
 import java.nio.ByteBuffer
+import kotlin.uuid.Uuid
 
 
 class DiskManagerTest: BehaviorSpec({
@@ -67,7 +68,7 @@ class DiskManagerTest: BehaviorSpec({
     }
 }){
     companion object {
-        private val config = SimpleConfig(storageConfig = StorageConfig(dbPath = "./js-test-disk-manager.db"))
+        private val config = SimpleConfig(storageConfig = StorageConfig(dbPath = "./js-test-disk-manager-${Uuid.random()}.db"))
         private val DBPATH = config.storageConfig.dbPath
         private val PAGE_SIZE = config.indexConfig.pageSize
         private val diskManager = DiskManager(config.storageConfig, config.indexConfig)

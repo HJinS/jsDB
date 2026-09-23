@@ -13,21 +13,21 @@ import java.util.Arrays
 
 /**
  *
- * 헤더
- * 1. 새 페이지를 특정 노드 타입의 슬롯 페이지 구조로 초기화
- * 2. 페이지 타입 조회 및 설정
- * 3. 페이지에 저장된 레코드의 개수를 설정 및 조회
- * 4. 다음 형제 리프 노드의 페이지 ID를 설정하거나 읽어오기(리프 전용)
+ * Header
+ * 1. Initializes a new page into a given node type's slotted-page structure.
+ * 2. Reads/sets the page type.
+ * 3. Sets/reads the number of records stored on the page.
+ * 4. Sets/reads the next sibling leaf's page id (leaf only).
  *
- * 레코드
- * 1. 가변 길이의 레코드를 페이지의 빈 공간에 삽입 -> 해당 레코드의 슬롯 번호 반환
- * 2. 특정 슬롯 번호에 있는 레코드를 삭제 처리
- * 3. 특정 슬롯 번호에 해당하는 레코드의 ByteArray 반환
- * 4. 특정 슬롯의 레코드를 새로운 데이터로 갱신(크기가 변할 경우 내부적으로 이동 처리)
+ * Records
+ * 1. Inserts a variable-length record into the page's free space -> returns that record's slot number.
+ * 2. Deletes the record at a given slot number.
+ * 3. Returns the ByteArray of the record at a given slot number.
+ * 4. Updates the record at a given slot with new data (moves it internally if the size changes).
  *
- * 페이지 상태 및 공간 관리
- * 1. 페이지 안에 남아있는 빈 공간의 크기 반환
- * 2. 삭제 등으로 인해 생긴 파편화된 공간을 정리하여 빈 공간을 확보
+ * Page state and space management
+ * 1. Returns the amount of free space remaining on the page.
+ * 2. Cleans up space fragmented by deletions etc. to reclaim contiguous free space.
  *
  * | offset | bytes | fieldName          | description                                       |
  * |--------|-------|--------------------|---------------------------------------------------|
@@ -37,13 +37,18 @@ import java.util.Arrays
  * | 10     | 2     | recordCount        | Count of the stored cell(record)                  |
  * | 12     | 2     | freeSpaceStart     | Start point of the free space(=end of slot array) |
  * | 14     | 2     | freeSpaceEnd       | End point of the free space(=start of data area)  |
- * | 16     | 2     | freeSlotHead       | Start point of the free slot array                |
+ * | 16     | 2     | reserved           | Unused (was a free-slot-list head; see BUG-028)   |
  * | 18     | 6     | reserved           | Extra space for byte alignment                    |
  * | 24     | 8     | parentPageId       | Page id of the parent node.                       |
- * | 32     | 8     | leftSiblingPageId  | Page id of the left sibling node.                 |
- * | 40     | 8     | rightSiblingPageId | Page id of the right sibling node.                |
- * | 48     | 8     | lsn                | Log sequence number for WAL recovery.             |
+ * | 32     | 8     | leftSiblingPageId  | Leaf: left sibling.                               |
+ * | 40     | 8     | rightSiblingPageId | Page id of the right sibling node (leaf only).    |
+ * | 48     | 8     | lsn                | Reserved for a future WAL; always 0, never read.  |
  *
+ *
+ * leftSiblingPageId
+ * - Leaf: left sibling.
+ * - Internal: leftmost child (see [Page.leftMostChildPageId]).
+ * - Freed page: free-list "next" pointer (see [storageEngine.FreeSpaceManager]). 
  * ```
  * Initial state
  * +-------------------------------------------------+
@@ -85,8 +90,9 @@ open class SlottedPage(
 ): Page(indexConfig, data, pageId){
 
     /**
-     * slot을 특정 index 에 삽입(shift 필요)
-     * @return the slotID of the last record
+     * Inserts one slot entry `(offset, length)` at [index], shifting every slot from [index]
+     * onward one position later first if [index] isn't already past the end (keeps the slot array
+     * — hence key order — contiguous and sorted; see [shiftSlot]).
      * */
     private fun insertSlot(index: Int, offset: Short, length: Short){
         val slotLocation = HEADER_SIZE + index * SLOT_SIZE
@@ -97,6 +103,10 @@ open class SlottedPage(
         data.putShort(slotLocation + 2, length)
     }
 
+    /**
+     * Writes one record's raw bytes at [offs
+     * - `keyLen | key | valueLen | value`, back-to-back.
+     * */
     private fun insertRecord(offset: Int, key: ByteArray, value: ByteArray, keyLengthEncoded: ByteArray, valueLengthEncoded: ByteArray){
         var insertLocation = offset
         data.put(insertLocation, keyLengthEncoded)
@@ -111,6 +121,16 @@ open class SlottedPage(
         data.put(insertLocation, value)
     }
 
+    /**
+     * Reads the record at [slotId]
+     * - looks up its `(offset, length)` in the slot array, then parses
+     * - the `keyLen | key | valueLen | value` layout [insertRecord] wrote.
+     *
+     * @throws StorageEngineException.SlotOutOfBound if [slotId] is outside `0..<recordCount`, or 
+     * if the slot's `length` is 0 — a slot number that's structurally in range but was never actually written.
+     * - (bounds check added in BUG-019, see `history/bugs/`)
+
+     * */
     fun getData(slotId: Int): Pair<ByteArray, ByteArray>{
         if(slotId !in 0..<recordCount)
             throw StorageEngineException.SlotOutOfBound(
@@ -132,21 +152,21 @@ open class SlottedPage(
                     reason = "No more data. slotID: $slotId"
                 )
             )
-        // slot 데이터를 가지고 실제 데이터 추출
-        // 반만 열린 범위인 것을 주의
+        // Extract the actual data using the slot info.
+        // Note: this is a half-open range.
         val tempBuffer = data.duplicate()
         tempBuffer.position(offset.toInt())
         val recordData = ByteArray(length.toInt())
         tempBuffer.get(recordData)
 
-        // 가장 앞에 있는 부분은 key의 길이 정보를 varInt로 인코딩 한 것
-        // keyLengthByteLen는 인코딩된 byte 길이를 말함
-        // 이 길이 정보를 통해 실제 key 데이터를 추출
+        // The very front is the key's length, varint-encoded.
+        // keyLengthByteLen is how many bytes that encoding itself took up.
+        // Use that length to extract the actual key data.
         val (keyLength, keyLengthByteLen) = decodeVarInt(recordData, 0)
         val key = recordData.slice(keyLengthByteLen until keyLengthByteLen + keyLength).toByteArray()
 
-        // valueLengthByteLen는 인코딩된 byte 길이를 말함
-        // 이 길이 정보를 통해 실제 value 데이터를 추출
+        // valueLengthByteLen is how many bytes the value-length encoding took up.
+        // Use that length to extract the actual value data.
         val (valueLength, valueLengthByteLen) = decodeVarInt(recordData, keyLengthByteLen + keyLength)
 
         val value = recordData.slice(
@@ -158,13 +178,22 @@ open class SlottedPage(
     }
 
     /**
-     * @return the slotID of the last one
+     * Replaces the record at [slotId] with ([key], [value]) — implemented as delete-then-insert
+     * rather than in-place, since the new record's encoded length may differ from the old one's.
+     *
+     * @return [slotId] itself, echoed back for chaining (matches [insertData]'s return contract).
      * */
     fun updateData(slotId: Int, key: ByteArray, value: ByteArray): Int{
         deleteData(slotId)
         return insertData(slotId, key, value)
     }
 
+    /**
+     * Standard binary search over the slot array by key bytes.
+     *
+     * @return The matching slot index, or `-(insertionPoint + 1)` if [key] isn't present
+     * - Kotlin/Java `Collections.binarySearch` convention.
+     * */
     fun binarySearch(key: ByteArray): Int{
         var low = 0
         var high = recordCount - 1
@@ -182,7 +211,13 @@ open class SlottedPage(
     }
 
     /**
-     * SLOT_SIZE(4 Byte) 단위로 slot을 옮김.
+     * Moves slots in SLOT_SIZE(4 byte) units
+     * - shifts the range `[src, src+srcLength)` by `shiftLength` slots.
+     *
+     * Safe even when the src/dst ranges overlap
+     * - the whole range is first copied into a plain JVM
+     * - heap array ([temp]) before being written back, so the overlap corruption that `ByteBuffer.put`
+     * - can cause via its internal memcpy (BUG-010) can't happen in the first place.
      * */
     private fun shiftSlot(src: Int, srcLength: Int, shiftLength: Int): Int {
         if (shiftLength == 0 || srcLength <= 0) return -1
@@ -212,12 +247,18 @@ open class SlottedPage(
         return src
     }
 
+    /**
+     * Inserts a new record at [slotId] (shifting later slots later, see [insertSlot]).
+     * If there isn't enough contiguous free space, tries [compaction] once before giving up with [StorageEngineException.PageFull].
+     *
+     * @return [slotId] itself, echoed back.
+     * */
     fun insertData(slotId: Int, key: ByteArray, value: ByteArray): Int {
-        // 1. [공간 확인] 헤더, 슬롯, 데이터가 들어갈 공간이 충분한지 확인
+        // 1. [Check space] Confirm there's enough room for the header, slot, and data.
         // (Total Length + Slot Size) <= Free Space
-        // ... (생략) ...
+        // ... (details below) ...
 
-        // 3. [데이터 준비] 직렬화 (VarInt 등 인코딩)
+        // 3. [Prepare data] Serialize (VarInt encoding, etc.)
         val keyLengthEncoded = encodeVarInt(key.size)
         val valueLengthEncoded = encodeVarInt(value.size)
         val totalDataLength = keyLengthEncoded.size + key.size + valueLengthEncoded.size + value.size
@@ -234,26 +275,31 @@ open class SlottedPage(
                 )
         }
 
-        // 4. [데이터 쓰기] FreeSpace 포인터 이동 및 데이터 기록
-        // 데이터는 페이지 끝에서 앞으로 자라납니다.
-        // freeSpaceEnd는 "현재 데이터가 시작되는 지점"을 가리키고 있다고 가정
+        // 4. [Write data] Move the FreeSpace pointer and write the data.
+        // Data grows from the end of the page toward the front.
+        // Assumes freeSpaceEnd points at "where the current data starts".
         val dataOffset = freeSpaceEnd - totalDataLength + 1
 
-        // 실제 데이터 기록 (순서: KeyLen -> Key -> ValLen -> Val)
+        // Actually write the data (order: KeyLen -> Key -> ValLen -> Val).
         insertRecord(dataOffset, key, value, keyLengthEncoded, valueLengthEncoded)
 
         data.putShort(PageHeaderOffset.FREE_SPACE_END.offset, (dataOffset - 1).toShort())
 
-        // 5. [슬롯 삽입] 슬롯 배열 정렬 유지 (Shift & Insert)
+        // 5. [Insert slot] Keep the slot array sorted (shift & insert).
         insertSlot(slotId, dataOffset.toShort(), totalDataLength.toShort())
 
-        // 6. [메타데이터 갱신] 레코드 수 증가 등
+        // 6. [Update metadata] Bump the record count, etc.
         increaseRecordCount()
         return slotId
     }
 
     /**
-     * @return the slotID of the last one
+     * Removes the record at [slotId], shifting every later slot one position earlier to keep the
+     * slot array contiguous (see BUG-028 in `history/bugs/` for why this replaced an earlier
+     * tombstone/free-list scheme). Does not run [compaction] on the data area — the vacated bytes
+     * there become fragmented free space, reclaimed later by [insertData]'s compaction-on-demand.
+     *
+     * @return The key and value that were stored at [slotId].
      * */
     fun deleteData(slotId: Int): Pair<ByteArray, ByteArray>{
         val (key, value) = getData(slotId)
@@ -264,22 +310,29 @@ open class SlottedPage(
         return key to value
     }
 
-    /*
-    * 1. write pointer = page 끝
-    * 2. read pointer = 첫번째 슬롯의 offset
-    *
-    * loop
-    * 1. write pointer 이동: 기존 write pointer에서 슬롯의 size 만큼 이동
-    * 2. read pointer에서 데이터를 읽어 write pointer로 이동
-    * 3. 슬롯의 offset 갱신
-    * */
+    /**
+     * Defragments the data area
+     * [deleteData] leaves gaps between live records without moving
+     * them, so free space accumulates as scattered holes rather than one contiguous region.
+     * This repacks every live record toward the page's end (in descending-offset groups, batching
+     * adjacent ones into a single copy) and updates each slot's offset to match, turning all the
+     * scattered free space back into one contiguous block at [freeSpaceEnd].
+     *
+     * 1. write pointer = end of page
+     * 2. read pointer = first slot's offset
+     *
+     * loop
+     * 1. Move write pointer: from the current write pointer, back up by the slot's size.
+     * 2. Read data at the read pointer and move it to the write pointer.
+     * 3. Update the slot's offset.
+     * */
     fun compaction(){
         val slotArrayEndBytes = data.getShort(PageHeaderOffset.FREE_SPACE_START.offset).toInt()
         var slotArrayStartBytes = HEADER_SIZE
         val slotArrayTemp = mutableListOf<Triple<Int, Int, Int>>()
 
         var slotNumber = 0
-        // slotArray 데이터를 memory에 로드
+        // Load the slot array data into memory.
         while(slotArrayStartBytes < slotArrayEndBytes){
             var offset = data.getShort(slotArrayStartBytes).toInt()
             val length = data.getShort(slotArrayStartBytes + 2).toInt()
@@ -290,40 +343,41 @@ open class SlottedPage(
             slotArrayStartBytes += SLOT_SIZE
             slotNumber += 1
         }
-        // offset 기준 내림차순 -> 끝에서 부터
+        // Sort by offset descending -> process from the end of the page.
         slotArrayTemp.sortByDescending { it.second }
 
         val readOnlyView = data.duplicate()
         val writeOnlyView = data.duplicate()
 
         var writePointer = indexConfig.pageSize
-        // iterate 하면서 write pointer는 끝에서 사이즈를 통해 점차 내려감
-        // read pointer는 slot array 데이터의 offset을 사용
-        
+        // As we iterate, the write pointer steps down from the end by each record's size.
+        // The read pointer uses the offset stored in the slot array data.
+
         var idx = 0
         while(idx < slotArrayTemp.size){
             var totalCopyLength = slotArrayTemp[idx].third
-            // 연속된 그룹의 가장 바깥에 있는 slot의 array idx
+            // Array index of the outermost slot in this contiguous group.
             val copyGroupStartIdx = idx
 
-            // while loop를 사용해 한번에 묶어서 복사할 연속된 slot을 찾음
-            // idx가 커지면, slot 위치상 가장 안쪽임(offset 기존 내림차순 이기 때문)
+            // Use a while loop to find a run of contiguous slots to copy together in one go.
+            // As idx increases, the slot sits further "inward" positionally (since we sorted by offset descending).
             while(idx+1 < slotArrayTemp.size && slotArrayTemp[idx].second == slotArrayTemp[idx+1].second + slotArrayTemp[idx+1].third){
                 totalCopyLength += slotArrayTemp[idx+1].third
                 idx++
             }
 
             val groupCopyReadStart = slotArrayTemp[idx].second
-            // 길이만큼 빼서 writePointer지점은 연속된 group의 가장 안쪽 slot임(데이터 위치상 가장 안쪽)
+            // Subtract the total length so writePointer lands on the innermost slot of this contiguous group (innermost in data position too).
             writePointer -= totalCopyLength
-            // DirectByteBuffer.put(ByteBuffer)는 내부적으로 UNSAFE.copyMemory(= memcpy)를 사용하기 때문에
-            // src와 dst가 같은 네이티브 메모리를 공유하면서 dst > src인 경우(위쪽으로 이동)
-            // 겹치는 구간의 데이터가 덮어씌워져 오염된다.
-            // compaction은 freeSpace < needed일 때만 호출되므로, 특정 페이지가 거의 꽉 찼을 때만
-            // 발생한다. 테스트가 랜덤 셔플 데이터를 쓰거나 삭제-삽입 패턴이 맞아떨어질 때만
-            // 해당 조건에 걸려서 버그가 간헐적으로 나타났다.
-            // ByteArray를 중간에 거치면 네이티브 메모리 → JVM 힙 → 네이티브 메모리 순서로 복사되므로
-            // src/dst overlap이 불가능해져 안전하다.
+            // DirectByteBuffer.put(ByteBuffer) uses UNSAFE.copyMemory (= memcpy) internally, so
+            // when src and dst share the same native memory and dst > src (moving "upward"),
+            // the overlapping region gets corrupted by being overwritten mid-copy.
+            // compaction is only called when freeSpace < needed, so this only happens when a
+            // page is nearly full. It surfaced intermittently only when a test used randomly
+            // shuffled data or happened to hit a delete-then-insert pattern that triggered this
+            // condition.
+            // Routing through a ByteArray in between forces the copy to go native memory -> JVM
+            // heap -> native memory, which makes src/dst overlap impossible and is therefore safe.
             if (writePointer != groupCopyReadStart) {
                 val groupData = ByteArray(totalCopyLength)
                 readOnlyView.clear()
@@ -334,7 +388,7 @@ open class SlottedPage(
             }
 
             var currentWritePointer = writePointer
-            // slot에 offset 업데이트, slot배열 은 변경점 없음
+            // Update each slot's offset; the slot array's own layout doesn't change.
             for(idx2 in idx downTo copyGroupStartIdx){
                 val slotIdx = slotArrayTemp[idx2].first
                 data.putShort(HEADER_SIZE + slotIdx * SLOT_SIZE, currentWritePointer.toShort())
@@ -347,6 +401,10 @@ open class SlottedPage(
         data.putShort(PageHeaderOffset.FREE_SPACE_END.offset, (writePointer-1).toShort())
     }
 
+    /**
+     * Total bytes an ([key], [value]) insert would need
+     * - encoded record bytes plus one slot entry.
+     * */
     fun getRequiredSpace(key: ByteArray, value: ByteArray): Int{
         val keyLengthEncoded = encodeVarInt(key.size)
         val valueLengthEncoded = encodeVarInt(value.size)

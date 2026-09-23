@@ -3,6 +3,11 @@ package exception
 import util.EngineErrorDetail
 import util.SqlState
 
+/**
+ * Failures from [index.btree.BTree]/[index.serializer.*] — always [SqlState.INTERNAL_ERROR]:
+ * every case here is a structural/logic invariant violation (corrupt trace stack, invalid bytes,
+ * wrong node type), never something a caller's query could trigger through normal use.
+ * */
 sealed class IndexException(
     sqlState: SqlState,
     detail: EngineErrorDetail,

@@ -12,11 +12,12 @@ import exception.IndexException
 
 
 /**
- * 작은 수는 작은 공간에, 큰 수는 큰 공간에 저장하기 위함(7 조각씩 자름)
+ * Stores small numbers in a small amount of space and large numbers in more
+ * - split into 7-bit chunks.
  * 1 -> 0x01
  * 300 -> 0xAC 0x02
- * Unsigned LEB128 기반
- * ushr: bit 오른쪽을 이동
+ * Based on Unsigned LEB128.
+ * ushr: shifts bits right.
  * 0x80: 0b10000000
  * 0x7F: 0b01111111
  *
@@ -32,16 +33,16 @@ fun encodeVarInt(value: Int): ByteArray{
     val output = mutableListOf<Byte>()
     do {
         var b = (v and 0x7F)
-        v = v ushr 7 // 7비트 옮겨서 다음 자리의 숫자 확인
-        if (v != 0) b = b or 0x80 // 0이 아닌 경우 앞에 가장 앞 자리 숫자를(MSB) 1로 변경
-        output.add(b.toByte()) // 원래 숫자를 추가
+        v = v ushr 7 // Shift by 7 bits to check the next digit.
+        if (v != 0) b = b or 0x80 // If nonzero, set the very first bit (MSB) to 1.
+        output.add(b.toByte()) // Append the byte.
     } while (v != 0)
     return output.toByteArray()
 }
 
 /**
- * encode 역함수
- * shl: bit 값을 왼쪽으로 이동
+ * Inverse of [encodeVarInt].
+ * shl: shifts bits left.
  * - 0xFF: 0b11111111
  * - 0x80: 0b10000000
  * - 0x7F: 0b01111111
@@ -62,7 +63,7 @@ fun decodeVarInt(bytes: ByteArray, offset: Int = 0): Pair<Int, Int> {
     var pos = offset
 
     while (true) {
-        // 배열 범위를 벗어나는지 확인
+        // Check whether we've run past the end of the array.
         if (pos >= bytes.size)
             throw IndexException.PositionOutOfBounds(
                 EngineErrorDetail(
@@ -71,18 +72,19 @@ fun decodeVarInt(bytes: ByteArray, offset: Int = 0): Pair<Int, Int> {
             )
 
         val byte = bytes[pos].toInt() and 0xFF
-        // ByteArray 에서 디코딩 대상 byte 가져옴 + 부호 없는 정수로 변환(int 변환 시 부호 확장을 고려하여 마지막 8bit만 가져옴)
-        // 뒤 7bit를 가지교 와서 7칸 쉬프트(처음엔 0칸)한 후에 or로 저장
-        // 인코딩 할 때 높은 자리 숫자가 배열 뒤쪽으로 오게 됨
-        // 숫자 가장 앞의 bit가 1이면 뒤에 숫자가 더 있다는 뜻
+        // Grab the byte to decode from the ByteArray and convert it to an unsigned int (only the
+        // last 8 bits are kept, accounting for sign extension during the int conversion).
+        // Take its lower 7 bits, shift them left by the running total (0 the first time), and OR
+        // them in. During encoding, higher-order digits end up further toward the end of the array.
+        // If a byte's leading bit is 1, that means there are more digits following.
         result = result or ((byte and 0x7F) shl shift)
         pos++
 
-        // MSB가 0이면 마지막 바이트 이므로 종료
+        // If the MSB is 0, this was the last byte, so stop.
         if ((byte and 0x80) == 0) break
         shift += 7
 
-        // 32비트 Int를 넘어서는 과도한 데이터 방지
+        // Guard against excessive data that would overflow a 32-bit Int.
         if (shift >= 32) {
             throw IndexException.VarIntTooLong(EngineErrorDetail(reason = "VarInt is too long"))
         }
@@ -91,7 +93,7 @@ fun decodeVarInt(bytes: ByteArray, offset: Int = 0): Pair<Int, Int> {
 }
 
 /**
- * 인덱스는 기본적으로 오름차순으로 정렬됨. 이를 DESC 로 정렬하기 위해 저장 할 떄의 Byte 순서를 반전(invert) 해서 저장
+ * Indexes are sorted ascending by default. To sort a column DESC instead, the stored bytes are bit-inverted.
  * 0xFF = 0000 0000 0000 0000 0000 0000 1111 1111
  * */
 fun ByteArray.invert(): ByteArray{
@@ -103,9 +105,9 @@ fun ByteArray.invert(): ByteArray{
 }
 
 /**
- * 가장 앞의 부호비트를 뒤집어서 정렬가능한 표현으로 변환
- * asc, desc 의 경우는 cmp 결과에 -1 곱하는 방식으로 사용
- *  - invert 할 경우 결과가 깨질 수 있음
+ * Flips the leading sign bit to produce a sortable representation.
+ * For ASC/DESC, this is used by multiplying the cmp result by -1
+ *  - inverting could otherwise corrupt the result.
  * */
 fun Int.encodeSortable(): ByteArray{
     val sortableBits = this xor Int.MIN_VALUE
@@ -141,9 +143,12 @@ fun Uuid.encodeSortable(): ByteArray{
 }
 
 /**
- * Bit 표현을 가져와서 양수인 경우 최상위 비트를 1로 변경. 음수인 경우 모든 bit를 뒤집음 이를 packing
- * asc, desc 의 경우는 cmp 결과에 -1 곱하는 방식으로 사용
- *  - invert 할 경우 결과가 깨질 수 있음
+ * Takes the bit representation
+ * - for a positive value, sets the top bit to 1
+ * - for a negative value, flips every bit.
+ * That's the packing.
+ * For ASC/DESC, this is used by multiplying the cmp result by -1
+ *  - inverting could otherwise corrupt the result.
  * */
 
 fun Float.encodeSortable(): ByteArray{
@@ -162,7 +167,7 @@ fun Double.encodeSortable(): ByteArray{
 
 
 /**
- * 0x00을 0x00 0xFF 로 escape 처리 + Termination mark 추가
+ * Escapes any `0x00` byte as `0x00 0xFF`, and appends a termination mark.
  *
  * */
 fun escapeZeroBytes(bytes: ByteArray): ByteArray{
@@ -206,8 +211,9 @@ fun escapeZeroBytes(bytes: ByteArray): ByteArray{
 }
 
 /**
- * string encode 할 경우 바로 사전식 비교를 할 수 있도록 길이 정보를 encoding 하는 것이 아닌 terminator(0x00) 을 끝에 붙이는 방식 사용
- * 문자열 중간에 0x00 이 있는 경우에는 0x00 을 0x00 0xFF 로 Escape 처리 하여 사용
+ * For string encoding, rather than encoding a length prefix, a terminator (`0x00`) is appended at
+ * the end so lexicographic comparison works directly. If a `0x00` appears inside the string
+ * itself, it's escaped as `0x00 0xFF`.
  * */
 fun String.encodeSortable(collator: Collator?): ByteArray{
     val bytes = collator?.getCollationKey(this)?.toByteArray() ?: this.toByteArray(StandardCharsets.UTF_8)
@@ -243,8 +249,8 @@ fun ByteArray.decodeSortableByte(): Byte {
 }
 
 /**
- * 인코딩 규칙을 역으로 적용
- * 양수인 경우에 MSB bit 를 1로 바꾸었기 때문에 0보다 작으면 xor 을 통해 원래대로 되돌림.
+ * Applies the encoding rule in reverse: since a positive value had its MSB set to 1, a negative
+ * `sortableBits` (meaning the original was positive) is restored via xor.
  * */
 fun ByteArray.decodeSortableFloat(): Float{
     val unEscaped = unescapeZeroBytes(this)
@@ -300,6 +306,12 @@ fun unescapeZeroBytes(bytes: ByteArray): ByteArray{
     return results
 }
 
+/**
+ * Inverse of [String.encodeSortable]. When [collator] is non-null, this is **not** actually
+ * invertible — a `CollationKey`'s bytes can't be turned back into the original string, since the
+ * transform is lossy by design (that's what makes it byte-comparable). Returns a hex-dump
+ * placeholder in that case instead; see [schema.IndexColumn.collation] for where this matters.
+ * */
 fun ByteArray.decodeSortableString(collator: Collator?): String{
     val unescaped = unescapeZeroBytes(this)
     return if (collator != null){

@@ -1,5 +1,21 @@
 package index.data
 
+/**
+ * What a [index.btree.node.LeafNode] and [index.btree.node.InternalNode])
+ * hands back to [index.btree.BTree.split] to build the new right sibling and promote a key to the parent.
+ *
+ * @property splitKeys The right piece's keys, in order.
+ * @property splitValues The right piece's values (leaf) / child pointers (internal), aligned with
+ *   [splitKeys].
+ * @property promotionKey The key handed up to the parent as the new separator.
+ * @property leftMostChildPageId Only meaningful for an [index.btree.node.InternalNode] split — its
+ *   new right sibling's leftmost child pointer. A [index.btree.node.LeafNode] split always passes
+ *   a literal `-1` here (not [util.INVALID_PAGE_ID]) since it's never read for a leaf.
+ *
+ * `equals`/`hashCode`/`toString` are overridden because the default `data class` versions would
+ * compare [splitKeys]/[splitValues] by `ByteArray` reference identity, not content — needed for
+ * test assertions on split results.
+ * */
 data class NodeSplitData(
     val splitKeys: MutableList<ByteArray>,
     val splitValues: MutableList<ByteArray>,

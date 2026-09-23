@@ -3,17 +3,18 @@ package exception
 import util.SQLErrorDetail
 import util.SqlState
 
+/** Failures from [catalog.CatalogManager] — resolving, registering, or updating a table/index/column catalog row. */
 sealed class CatalogException(
     sqlState: SqlState,
     detail: SQLErrorDetail,
     cause: Throwable? = null
 ): RuntimeException(detail.toMessage(sqlState), cause) {
 
-    /** 카탈로그 row가 스키마와 안 맞음 — 정상 동작이면 있을 수 없는, 저장 데이터 자체의 손상. */
+    /** A catalog row doesn't match its schema — under normal operation this can't happen; it means the stored data itself is corrupted. */
     class CorruptedRow(detail: SQLErrorDetail, cause: Throwable? = null):
         CatalogException(SqlState.INTERNAL_ERROR, detail, cause)
 
-    /** 테이블/인덱스 정의 자체가 구조적으로 잘못됨(예: key column이 하나도 없음, 컬럼이 하나도 없음). */
+    /** The table/index definition is itself structurally invalid (e.g. no key columns at all, no columns at all). */
     class InvalidDefinition(detail: SQLErrorDetail, cause: Throwable? = null):
         CatalogException(SqlState.INVALID_TABLE_DEFINITION, detail, cause)
 

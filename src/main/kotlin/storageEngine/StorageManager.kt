@@ -8,6 +8,11 @@ import exception.StorageEngineException
 import util.EngineErrorDetail
 import config.IndexConfig
 
+/**
+ * Thin layer over [BufferPoolManager]/[FreeSpaceManager] for the B+Tree: page allocation/fetch/
+ * reclamation, plus the one invariant [BufferPoolManager] itself doesn't know about — that every
+ * page it hands out here is a live [SlottedPage] node ([PageType.INTERNAL_NODE]/`LEAF_NODE`).
+ * */
 class StorageManager(
     private val freeSpaceManager: FreeSpaceManager,
     private val bufferPoolManager: BufferPoolManager,
@@ -15,9 +20,8 @@ class StorageManager(
 
 ){
     /**
-     * [FreeSpaceManager]에서 새로운 PageID(FreePageID)를 받아와야함
-     * 그 후 [BufferPoolManager]에 새로운 페이지 요청
-     * Page를 SlottedPage의 형식에 맞게 초기화초기화
+     * Gets a new page id (FreePageID) from [FreeSpaceManager], requests a new page from
+     * [BufferPoolManager], then initializes it in [SlottedPage]'s format.
      * */
     fun newPage(pageType: PageType, lockMode: LockMode): PageLock{
         val freePageID = freeSpaceManager.getFreePageID()
@@ -36,8 +40,11 @@ class StorageManager(
 
 
     /**
-     * [BufferPoolManager.fetchPage]로 page fetch
+     * Fetches the page via [BufferPoolManager.fetchPage], then verifies it's actually a live
+     * B+Tree node (`INTERNAL_NODE`/`LEAF_NODE`).
      *
+     * Known issue (#58): if the type check throws, `pageLock.close()` is never called, leaving
+     * the lock and pin behind.
      * */
     fun fetchPage(pageId: Long, lockMode: LockMode): PageLock{
         if(pageId <= 0L)
@@ -62,11 +69,12 @@ class StorageManager(
     }
 
     /**
-     * [FreeSpaceManager.addFreePageID] 를 통해 새로운 freePage로 등록
-     * 순서 중요:
-     * 1. addFreePageID  — page가 buffer pool에 있는 동안 free list 포인터 기록
-     * 2. flushPage      — 포인터를 디스크에 flush (getFreePageID가 나중에 disk read로 읽어야 하므로)
-     * 3. deletePage     — frame 회수
+     * Registers the page as a new free page via [FreeSpaceManager.addFreePageID].
+     * Order matters:
+     * 1. addFreePageID — records the free-list pointer while the page is still in the buffer pool.
+     * 2. flushPage      — flushes that pointer to disk (since [FreeSpaceManager.getFreePageID]
+     *    will later need to read it back from disk).
+     * 3. deletePage     — reclaims the frame.
      * */
     fun deletePage(pageId: Long){
         if(pageId <= 0L)

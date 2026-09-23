@@ -18,6 +18,7 @@ import storageEngine.page.SlottedPage
 import util.LockMode
 import util.PageType
 import java.io.File
+import kotlin.uuid.Uuid
 
 class StorageManagerTest: BehaviorSpec({
     afterSpec {
@@ -93,7 +94,7 @@ class StorageManagerTest: BehaviorSpec({
     companion object {
         private val config = SimpleConfig(
             storageConfig = StorageConfig(
-                dbPath = "./js-test-storage-manager.db",
+                dbPath = "./js-test-storage-manager-${Uuid.random()}.db",
                 poolSize = 20,
                 midPointLruConfig = MidpointLruConfig(capacity = 20)
             )

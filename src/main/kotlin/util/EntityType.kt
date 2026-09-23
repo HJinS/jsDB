@@ -1,5 +1,6 @@
 package util
 
+/** What kind of catalog object an [SQLErrorDetail] is about — [displayName] renders into the error message ([ErrorDetail.toMessage]). */
 enum class EntityType(val displayName: String) {
     TABLE("table"),
     COLUMN("column"),

@@ -2,6 +2,7 @@ package storageEngine
 
 import config.IndexConfig
 import storageEngine.lru.FrameNodePolicy
+import storageEngine.lru.ReplacementPolicy
 import storageEngine.page.Frame
 import storageEngine.page.PageLock
 import util.LockMode
@@ -11,41 +12,29 @@ import util.INVALID_PAGE_ID
 import java.util.concurrent.locks.ReentrantLock
 
 /**
- * frame table
- * - pageID, frameID 매핑
- * - pageID 로부터 frameID 를 얻어내기 위함
- * buffer pool
- * - frameID 를 가지고 실제 frame 을 보관
- * node map
- * - lru 를 관리하기 위함
- * - frame 접근을 바로 하기 위함
- * doubly linked list
- * - lru linked list
- * - new, old 로 나뉘어 져 있음
- *   - midpoint 를 두어 new, old 를 구분
- *   - old - 37, new 63
+ * Buffer pool caching disk pages into an in-memory [Frame] array.
+ * - [pageTable]: pageId -> frameId mapping (which page lives in which frame).
+ * - [frames]: fixed-size array (`poolSize` entries) actually holding the data.
+ * - [freeList]: ids of frames never yet used. Once exhausted, a frame is freed via [replacer]
+ *   (Midpoint LRU, [FrameNodePolicy]) eviction instead.
+ * - [globalLatch]: protects shared structures like [pageTable]/[freeList] only — never held across
+ *   disk I/O, which is instead guarded by the per-frame [Frame.latch].
  *
+ * Main responsibilities
+ * - Page caching/replacement: [fetchPage], [newPage] (on a cache miss, [replacer] picks a victim
+ *   frame; a dirty victim is written back — write-on-eviction).
+ * - Dirty page management: [flushPage] (write-on-eviction and explicit flush only — there's no
+ *   write-on-shutdown or background flush thread yet, see issue #47).
+ * - Page reclamation: [deletePage].
  *
- * 주요 기능
- * - 페이지 캐싱
- * - fetchPage
- * - 페이지 교체
- * - dirty page 관리
- *   - write on eviction
- *   - write on shutdown
- *   - background thread
- *
- *
- * BufferPool
- * Frame
- * LRU
- * StorageManager
+ * Known exception-safety gap (issue #58): if I/O fails inside [fetchPage]/[newPage], the
+ * [pageTable] entry and [Frame.pinCount] already registered are not rolled back.
  * */
 
 
 class BufferPoolManager(
     private val diskManager: DiskManager,
-    private val replacer: FrameNodePolicy,
+    private val replacer: ReplacementPolicy,
     private val indexConfig: IndexConfig,
     poolSize: Int
 ){
@@ -55,15 +44,19 @@ class BufferPoolManager(
     private val globalLatch = ReentrantLock()
 
     /**
-     * page 있는지 여부 확인
-     * 있으면 -> 사용 표시 + pin
-     * 없으면 -> 빈 프레임 확보
-     *   -> 기존 페이지가 Dirty이면 disk write
-     *   -> 메타데이터 초기화 및 매핑업데이트
-     *   -> disk manager 데이터 읽어오기
+     * Checks whether the page is already cached.
+     * If so -> mark in-use + pin.
+     * If not -> secure an empty frame
+     *   -> if the evicted page was dirty, write it to disk
+     *   -> reset metadata and update the mapping
+     *   -> read the data via the disk manager
      *   -> pin
-     *   -> 새로운 매핑 등록
-     * freeFrameId의 경우에는 LRU 알고리즘 사용
+     *   -> register the new mapping
+     * An empty frame id comes from the LRU algorithm.
+     *
+     * Known gap (#58): if the I/O (`readPage`) below fails, the `catch` only releases the write
+     * lock and rethrows — the [pageTable] entry and [Frame.pinCount] already registered before
+     * that point are not rolled back.
      * */
     fun fetchPage(pageId: Long, lockMode: LockMode): PageLock{
         var victimPageId: Long? = null
@@ -86,7 +79,7 @@ class BufferPoolManager(
                 frameId = getFreeFrameId()
                 frame = frames[frameId]
                 needIO = true
-                // writeLock을 여기서 미리 잡아둠. 밑에서 IO 작업 진행 필요
+                // Acquire the write lock here ahead of time; I/O happens below.
                 frame.latch.writeLock().lock()
                 isReadLocked = false
                 isWriteLocked = true
@@ -114,7 +107,7 @@ class BufferPoolManager(
                 if(victimPageId != null){
                     diskManager.writePage(victimPageId, frame.data)
                 }
-                // pageId 설정하는 부분이랑 reset은 정합성을 위해 writelock 안에서 수행
+                // Setting pageId and resetting happen inside the write lock, for consistency.
                 frame.pageId.set(pageId)
                 frame.reset()
                 diskManager.readPage(pageId, frame.data)
@@ -146,9 +139,13 @@ class BufferPoolManager(
 
 
     /**
-     * 1. 새로운 PageID 할당(pageID 관리는 보통 disk manager 가 관리함)
-     * 2. 빈 Frame 탐색 -> 빈 프레임이 없으면 eviction 실행 후 공간 확보(disk flush 필요.)
-     * 3. pageTable 업데이트, page pin, dirty 마킹, 페이지 초기화(헤더 등)
+     * 1. Allocate a new page id (page id management is usually the disk manager's job).
+     * 2. Find an empty frame -> if none, run eviction first to make room (needs a disk flush).
+     * 3. Update [pageTable], pin the page, mark it dirty, initialize the page (header, etc.).
+     *
+     * Known gap (#58): if writing the victim page (`writePage`) fails, only the write lock is
+     * released before rethrowing — the [pageTable] entry and [Frame.pinCount] already registered
+     * are not rolled back.
      * */
     fun newPage(pageId: Long): PageLock{
         var frame: Frame?
@@ -201,9 +198,9 @@ class BufferPoolManager(
     }
 
     /**
-     * page 사용 종료시 lock에서 호출
-     * frame 가져와서 -> pinCount -- -> isDirty 몇 표기
-     *
+     * Called from [PageLock.close] when a page is done being used.
+     * Looks up the frame -> decrements pinCount -> records [isDirty] (only ever set to true here;
+     * never cleared back to false by this call).
      * */
     fun unpinPage(pageId: Long, isDirty: Boolean){
         val frame: Frame
@@ -228,6 +225,11 @@ class BufferPoolManager(
         }
     }
 
+    /**
+     * If [pageId] is dirty, writes the frame's current content to disk and clears the dirty flag.
+     * Does nothing if it's already clean. Only briefly holds the frame's read lock, so it can run
+     * concurrently with other readers while excluding writers.
+     * */
     fun flushPage(pageId: Long){
         val frame: Frame
         val frameId: Int
@@ -256,6 +258,13 @@ class BufferPoolManager(
         }
     }
 
+    /**
+     * Reclaims [pageId] immediately if it's in the buffer pool (does nothing if it isn't cached —
+     * registering it on the disk free list is [StorageManager.deletePage]'s job, done before this
+     * is called). Throws [StorageEngineException.PageInUse] if it's still pinned
+     * ([Frame.pinCount] > 0) — flushing is the caller's responsibility, so dirtiness isn't checked
+     * here.
+     * */
     fun deletePage(pageId: Long){
         val frame: Frame
         val frameId: Int
@@ -286,6 +295,7 @@ class BufferPoolManager(
 
     }
 
+    /** Total page count on disk (regardless of caching status; delegates to [DiskManager]). */
     fun getNumPages() = diskManager.getNumPages()
 
     private fun getFreeFrameId() = if(freeList.isEmpty()) replacer.evict() else freeList.removeFirst()

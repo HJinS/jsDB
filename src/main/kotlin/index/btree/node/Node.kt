@@ -3,7 +3,6 @@ package index.btree.node
 import config.IndexConfig
 import exception.IndexException
 import util.EngineErrorDetail
-import index.serializer.KeySerializer
 import index.btree.BTreeOptMode
 import exception.StorageEngineException
 import storageEngine.page.SlottedPage
@@ -112,10 +111,6 @@ abstract class Node(
 
     fun deleteData(slotId: Int) = page.deleteData(slotId)
 
-    fun deleteAt(slotId: Int){
-        page.deleteData(slotId)
-    }
-
     abstract fun redistribute(targetNode: Node, parentNode: InternalNode, keyIdx: Int)
 
     /**
@@ -164,11 +159,17 @@ abstract class Node(
     }
 
     /**
-     * 특정 operation을 진행할 때 조상의 Lock 및 pin 을 풀어도 안전한지
-     * INSERT -> 삽입 시에는 하나 더 넣어도 split이 일어나지 않아야 함(keyCount < maxKeyCount)
-     * DELETE -> 삭제 시에는 하나 삭제하여도 underflow 상태가 되지 않아야 함 -> hasSurplusKey
-     * 추후 INSERT시에 용량을 기준으로한 조건 추가 필요.
-     * 그 경우에 UPDATE 시에는 UPDATE에 따른 가변 길이의 데이터 수정 시 용량 확인 필요
+     * Whether it's safe, for latch crabbing, to release the ancestor locks/pins already held once
+     * the descent has reached this node for the given [optMode] — i.e. whether the actual
+     * operation at this node is guaranteed not to trigger a split/merge that propagates upward.
+     * - INSERT: safe only if this node has both a free key slot and enough physical space for
+     *   [key]/[value] ([wouldOverflow]) — otherwise a split here could propagate to the parent.
+     * - DELETE: safe if this node has more than the minimum key count ([hasSurplusKey]) —
+     *   otherwise a merge/redistribute here could propagate to the parent.
+     * - UPDATE: currently reuses the DELETE condition ([hasSurplusKey]) only — it does **not**
+     *   check whether the new (possibly larger) value could overflow this node, so ancestor locks
+     *   can be released even when the update's re-insert would need to split. See issue #59.
+     * - SELECT: always safe — reads never trigger structural changes.
      * */
     fun isSafeNode(optMode: BTreeOptMode, key: ByteArray?=null, value: ByteArray?=null) = when(optMode){
         BTreeOptMode.INSERT -> {

@@ -23,9 +23,30 @@ import java.time.LocalDateTime
 import java.time.ZoneOffset
 import kotlin.uuid.Uuid
 
+/**
+ * Shared single-column encode/decode logic for [KeySerializer] implementations (see
+ * [MultiColumnKeySerializer] for how these are combined into a full multi-column key).
+ *
+ * Every column's encoding is byte-comparable (memcmp-style): typed values are converted to a
+ * form where unsigned byte comparison matches the type's natural ordering (`encodeSortable`, see
+ * `util/Encoder.kt`), DESC columns are then bit-flipped so byte-ascending order becomes
+ * value-descending, and NULL is placed as the smallest possible byte on either side so it sorts
+ * first (ASC) or last (DESC) — MySQL/SQLite convention. See `docs/index/range-scan-design.md`.
+ * */
 abstract class BaseKeySerializer<K>(
     protected val schema: IndexKeySchema,
 ) : KeySerializer<K> {
+    /**
+     * Encodes one column's [key] value for [indexColumn], byte-comparable and DESC-aware.
+     *
+     * Layout: `null` -> a single byte, `0x00` (ASC) or `0xFF` (DESC) — the smallest byte possible
+     * for ASC (so NULL sorts first) and the largest possible for DESC (so NULL sorts last),
+     * matching MySQL/SQLite's NULLS FIRST-ASC/NULLS LAST-DESC convention. Non-null -> a `0x01`
+     * presence flag followed by the type's `encodeSortable` bytes, then the *whole thing* (flag
+     * included) bit-flipped if [IndexColumn.descending] — flipping the presence flag too is what
+     * keeps it correctly ordered relative to the (never-flipped) DESC-NULL byte: `0x01` flips to
+     * `0xFE`, which is still less than NULL's `0xFF`, so NULL correctly stays last.
+     * */
     protected fun packKeyItem(
         key: Any?,
         indexColumn: IndexColumn,
@@ -106,6 +127,23 @@ abstract class BaseKeySerializer<K>(
         return if (indexColumn.descending) serialized.invert() else serialized
     }
 
+    /**
+     * Inverse of [packKeyItem]: decodes the column at [indexColumn] starting at [offset] within
+     * the larger multi-column [bytes] buffer.
+     *
+     * Un-flips first (whole [bytes], not just this column's slice — wasteful but harmless, since
+     * only this column's own range is read afterward) if [IndexColumn.descending], which is why a
+     * plain `0x00` check for the presence flag works uniformly for both directions: a DESC NULL's
+     * raw `0xFF` becomes `0x00` once un-flipped, same as an ASC NULL's raw `0x00` un-changed.
+     *
+     * `readVarType` finds this column's own end by scanning for a bare `0x00` terminator (one not
+     * immediately followed by the `0x00 0xFF` escape sequence [util.escapeZeroBytes] produces for
+     * a literal zero byte inside the value) — this is what lets fixed- and variable-width types
+     * share the same "keep reading until terminator" logic without knowing each type's width.
+     *
+     * @return The decoded value (or null), and how many bytes of [bytes] starting at [offset] this
+     *   column actually consumed — the caller advances its own offset by exactly that.
+     * */
     protected fun unpackKeyItem(
         bytes: ByteArray,
         offset: Int,
@@ -134,7 +172,7 @@ abstract class BaseKeySerializer<K>(
             var size = 0
             val startPosition = position
             for (byteIdx in position until bytes.size) {
-                // -128 ~ 127 의 범위를 0 ~ 255 로 변환
+                // Convert the -128..127 range to 0..255.
                 val byte = bytes[byteIdx].toInt() and 0xFF
                 if (byte == terminator &&
                     byteIdx + 1 < bytes.size &&

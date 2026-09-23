@@ -10,14 +10,29 @@ import util.MetaPageOffset
 import util.START_PAGE_ID
 import util.requireOrThrow
 
+/**
+ * Owns the fixed meta page ([util.META_PAGE_ID], page 0): the system catalog's three root page
+ * ids, the next-file-growth counter, the free list head, and the next table/index id counters
+ * (see [util.MetaPageOffset] for the exact byte layout). This is what makes the catalog (and
+ * hence every table/index) findable again after a re-open — see [index.btree.BTree]'s
+ * `onRootChanged`.
+ * */
 class MetaPageManager(
     private val bufferPoolManager: BufferPoolManager,
 ) {
 
+    /** Bootstraps the meta page on a brand-new (empty) file, or loads the existing one otherwise. */
     fun initialize(): MetaPageData {
         return if (bufferPoolManager.getNumPages() == 0L) createMetaPage() else loadMetaPage()
     }
 
+    /**
+     * Persists a catalog tree's new root page id — the `onRootChanged` callback wiring in
+     * `DataBase.initialize` calls this whenever one of the three catalog [index.btree.BTree]s'
+     * root changes.
+     *
+     * @param metaPageOffset Must be one of the three `*_CATALOG_ROOT_PAGE_ID` offsets.
+     * */
     fun updateRootPageId(metaPageOffset: MetaPageOffset, newRootPageId: Long){
         requireOrThrow(
             metaPageOffset in setOf(
@@ -35,6 +50,12 @@ class MetaPageManager(
         pageLock.close()
     }
 
+    /**
+     * Returns the next unused id for [metaPageOffset] and increments the stored counter — a
+     * simple monotonic sequence, not reclaimed on delete (unlike page ids, see [FreeSpaceManager]).
+     *
+     * @param metaPageOffset Must be [MetaPageOffset.NEXT_TABLE_ID] or [MetaPageOffset.NEXT_INDEX_ID].
+     * */
     fun getNextId(metaPageOffset: MetaPageOffset): Long{
         requireOrThrow(metaPageOffset in setOf(MetaPageOffset.NEXT_INDEX_ID, MetaPageOffset.NEXT_TABLE_ID)){
             StorageEngineException.InvalidMetaArgument(EngineErrorDetail(reason = "Invalid argument: $metaPageOffset"))
@@ -49,6 +70,7 @@ class MetaPageManager(
         return tableId
     }
 
+    /** Initializes a fresh meta page: no catalog trees yet, empty free list, id counters starting at 1. */
     private fun createMetaPage(): MetaPageData{
         val pageLock = bufferPoolManager.newPage(META_PAGE_ID)
         pageLock.asWriteView { buffer ->
@@ -68,6 +90,7 @@ class MetaPageManager(
         )
     }
 
+    /** Reads the three catalog root page ids back from an existing meta page. */
     private fun loadMetaPage(): MetaPageData{
         val pageLock = bufferPoolManager.fetchPage(META_PAGE_ID, LockMode.READ)
         val metaData = pageLock.asReadView { buffer ->

@@ -16,6 +16,19 @@ import util.EntityType
 import util.SQLErrorDetail
 import util.requireOrThrow
 
+/**
+ * System catalog: table/index/column metadata, each stored as rows in its own [BTree]
+ * ([tableCatalog], [indexCatalog], [columnCatalog]), seeded from the root page ids in
+ * [metaPageData] and persisted back via the `on*RootChanged` callbacks whenever a catalog tree's
+ * root changes (split, etc.) — see [storageEngine.MetaPageManager].
+ *
+ * Like every [BTree], the catalog trees are byte-only; this class owns the serializers for its
+ * own fixed catalog schemas ([CatalogBoot]) and does all encode/decode itself, independent of
+ * `Table`'s serializers for user data.
+ *
+ * @constructor Wraps the (possibly newly-bootstrapped) catalog trees rooted at [metaPageData]'s
+ *   root page ids.
+ * */
 class CatalogManager(
     metaPageData: MetaPageData,
     private val storageManager: StorageManager,
@@ -62,6 +75,7 @@ class CatalogManager(
             onRootChanged = onColumnCatalogRootChanged,
         )
 
+    /** Looks up an index by name, or null if it isn't registered. */
     fun resolveIndex(name: String): IndexRow? {
         val serialized = indexCatalogKeySerializer.serialize(listOf(name))
         val data = indexCatalog.search(serialized) ?: return null
@@ -69,6 +83,7 @@ class CatalogManager(
         return IndexRaw(deserialized).toRow()
     }
 
+    /** Looks up one column by (table, ordinal), or null if it isn't registered. */
     fun resolveColumn(tableId: Long, ordinal: Int): ColumnRow? {
         val serialized = columnCatalogKeySerializer.serialize(listOf(tableId, ordinal))
         val data = columnCatalog.search(serialized) ?: return null
@@ -76,6 +91,7 @@ class CatalogManager(
         return ColumnRaw(deserialized).toRow()
     }
 
+    /** Looks up a table by name, or null if it isn't registered. */
     fun resolveTable(name: String): TableRow? {
         val serialized = tableCatalogKeySerializer.serialize(listOf(name))
         val data = tableCatalog.search(serialized) ?: return null
@@ -83,6 +99,7 @@ class CatalogManager(
         return TableRaw(deserialized).toRow()
     }
 
+    /** Registers a new column row; does not validate uniqueness — callers (`DataBase`) check first. */
     fun registerNewColumn(
         tableId: Long,
         ordinal: Int,
@@ -109,6 +126,7 @@ class CatalogManager(
         return ColumnRow(tableId, ordinal, name, columnType, nullable)
     }
 
+    /** Registers a new table row; does not validate uniqueness — callers (`DataBase`) check first. */
     fun registerNewTable(tableId: Long, tableName: String, primaryIndexName: String?): TableRow {
         val keySerialized = tableCatalogKeySerializer.serialize(listOf(tableName))
         val valueSerialized =
@@ -117,6 +135,10 @@ class CatalogManager(
         return TableRow(tableId, tableName, primaryIndexName)
     }
 
+    /**
+     * Registers a new index row; does not validate uniqueness or create the index's own BTree
+     * (callers — `DataBase.createIndex` — check first and construct the [BTree] separately).
+     * */
     fun registerNewIndex(
         indexId: Long,
         indexName: String,
@@ -143,6 +165,11 @@ class CatalogManager(
         return IndexRow(indexId, indexName, tableName, rootPageId, isPrimary, isUnique, keyColumns)
     }
 
+    /**
+     * Sets `tableName`'s primary index name in the table catalog. Tables are registered with a
+     * null primary index name (`DataBase.createTable` needs the table row to exist first, to
+     * create the primary index against it), so this back-fills it once that index is created.
+     * */
     fun updatePrimaryIndexName(tableName: String, primaryIndexName: String) {
         val searchkey = tableCatalogKeySerializer.serialize(listOf(tableName))
         val value =
@@ -161,6 +188,11 @@ class CatalogManager(
         tableCatalog.update(newKeySerialized, newKeySerialized, newValueSerialized)
     }
 
+    /**
+     * Persists `indexName`'s current BTree root page id into the index catalog. This is the
+     * `onRootChanged` callback [BTree] invokes on every root change (split, root shrink) for a
+     * catalog-registered index — see `DataBase.createIndex`/`loadIndex`.
+     * */
     fun updateIndexRootPageId(indexName: String, rootPageId: Long) {
         val keySerialized = indexCatalogKeySerializer.serialize(listOf(indexName))
 
@@ -184,6 +216,16 @@ class CatalogManager(
         indexCatalog.update(newKeySerialized, newKeySerialized, newValueSerialized)
     }
 
+    /**
+     * All columns registered for [tableId], ordered by ordinal (the column catalog's key is
+     * `(tableId, ordinal)`, so a forward scan naturally comes out in ordinal order).
+     *
+     * Implemented as a prefix scan rather than [getIndexes]'s full [BTree.traverse]: `seek` is
+     * `(tableId)` (padded, so it sorts at-or-below every `(tableId, *)` row) and `stop` is
+     * `(tableId)`'s successor via `serializeUpper` (the first key that's definitely past every
+     * `(tableId, *)` row) — see `docs/index/range-scan-design.md` for why this pattern needs no
+     * predecessor and works regardless of which ordinals actually exist.
+     * */
     fun getColumns(tableId: Long): List<ColumnRow> {
         val seek = columnCatalogKeySerializer.serialize(listOf(tableId))
         val stop = columnCatalogKeySerializer.serializeUpper(listOf(tableId))
@@ -205,6 +247,15 @@ class CatalogManager(
         return result
     }
 
+    /**
+     * All indexes registered against [tableName].
+     *
+     * Unlike [getColumns], this still does a full [BTree.traverse] of the whole index catalog:
+     * the index catalog's key is `(indexName)` and `tableName` only exists as a *value* field, so
+     * there's no key prefix to scan by. Narrowing this would need a secondary catalog structure
+     * keyed by table name (and a meta page format change) — deferred until it's actually a
+     * bottleneck.
+     * */
     fun getIndexes(tableName: String): List<IndexRow> {
         return indexCatalog
             .traverse()

@@ -1,7 +1,6 @@
 package index.btree.node
 
 import config.IndexConfig
-import index.serializer.KeySerializer
 import index.data.NodeSplitData
 import storageEngine.page.SlottedPage
 
@@ -20,15 +19,16 @@ class LeafNode(
     /**
      * Split the leaf node into 2 pieces.
      *
-     * PromotionKey also remains at leaf node.
+     * Unlike [InternalNode.split], the promotion key is **copied**, not moved: B+Tree leaves must
+     * hold every actual key, so it stays as the new (right) node's first key while also being
+     * handed up to the parent as the separator (see BUG-030 in `history/bugs/`).
      * - PromotionKey: floor(len / 2)
-     * - PromotionKey goes to parent node.
-     * - Key separation: [0, promotionKey-1], [promotionKey, len-1]
-     * - Value separation: [0, promotionKey-1], [promotionKey, len-1]
+     * - Key separation: [0, promotionKeyIdx], [promotionKeyIdx+1, len-1]
+     * - Value separation: [0, promotionKeyIdx], [promotionKeyIdx+1, len-1]
      *
      * @see splitData
      * @see promotionKeyIdx
-     * @return key, value for a new node.
+     * @return [NodeSplitData] holding the right node's split keys/values and the promotion key.
      * */
     fun split(): NodeSplitData {
         val promotionKeyIdx = promotionKeyIdx()
@@ -41,7 +41,7 @@ class LeafNode(
 
     /**
      * Split keys into 2 pieces.
-     * [[promotionKeyIdx], len-1]
+     * [[promotionKeyIdx]+1, len-1]
      *
      * @param promotionKeyIdx Standard for splitting values
      * @return split key array

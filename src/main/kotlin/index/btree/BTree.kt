@@ -24,13 +24,26 @@ import util.PageType
 val logger = KotlinLogging.logger {}
 
 /**
- * B+tree implementation.
+ * Disk-based B+tree implementation, keyed off latch crabbing (see
+ * `docs/index/btree-latch-crabbing.md`) for concurrency.
  *
- * @property name Name of BTree.
- * @property targetTable Table to apply.
- *   serializing keys.
- * @property indexConfig Index configuration.
- * @constructor Create empty B tree.
+ * Byte-only: every public method takes/returns already-serialized `ByteArray` keys and values.
+ * This class knows nothing about columns, types, or ASC/DESC — that's entirely the caller's
+ * responsibility (in practice, `IndexHandle`'s `keySerializer`/`valueSerializer`, called from
+ * `database.Table`). See `docs/index/range-scan-design.md` for the byte-comparable encoding this
+ * relies on.
+ *
+ * @property name Name of this index.
+ * @property targetTable Name of the table this index belongs to (used only for error messages).
+ * @property storageManager Provides the page fetch/allocate/delete operations this tree's nodes
+ *   are built on.
+ * @property indexConfig Index/page sizing configuration (e.g. `maxKeys`, `pageSize`).
+ * @property rootPageId Page id of the current root node, or [INVALID_PAGE_ID] for an empty tree.
+ *   Mutated in place as splits/root-shrinks change the root; see [changeRootPageId].
+ * @property onRootChanged Callback invoked whenever [rootPageId] changes, so the owner (typically
+ *   `CatalogManager`) can persist the new root id.
+ * @constructor Wraps an existing (possibly empty) tree rooted at [rootPageId]; does not create any
+ *   pages itself.
  */
 class BTree(
     val name: String,
@@ -45,13 +58,15 @@ class BTree(
     }
 
     /**
-     * Insert the provided key and value to B+tree.
+     * Insert the provided key and value into the B+tree.
      * - Find the place to insert.
      * - Insert the key and value.
      * - Split the node at overflow.
      *
-     * @param key key to insert into B+tree of type [K].
-     * @param value value to insert into B+tree of type [V].
+     * @param key Already-serialized key bytes (the caller — [database.Table] via an
+     *   `IndexHandle`'s `keySerializer` — owns domain <-> byte conversion; this class is
+     *   byte-only).
+     * @param value Already-serialized value bytes.
      * @see split
      */
     fun insert(
@@ -101,7 +116,7 @@ class BTree(
      * If underflow, re-balance tree by [handleUnderflow]
      * - Underflow condition: keySize < maxKeys / 2
      *
-     * @param key key to delete from B+tree of type [K].
+     * @param key Already-serialized key bytes.
      * @see handleUnderflow
      * @see Node.isUnderflow
      */
@@ -131,7 +146,7 @@ class BTree(
             leafLock.asWriteView { buffer ->
                 val page = SlottedPage(indexConfig, leafNodePageId, buffer)
                 val node = Node.from(indexConfig, page)
-                node.deleteAt(keyIdx)
+                node.deleteData(keyIdx)
                 isUnderflow = checkUnderflow(node, leafNodePageId)
                 // When the first key of a leaf is deleted, the ancestor separator that points
                 // to this subtree becomes stale. Propagate the new first key upward.
@@ -150,12 +165,16 @@ class BTree(
     }
 
     /**
-     * Update key and value of certain key.
+     * Update the key and value stored at [key]. If [newKey] differs from [key] (a key-column
+     * change, not just a value-column change), the entry is moved to its new sort position;
+     * otherwise the value is replaced in place (splitting first if the new value overflows).
      *
-     * If the key does not exist, do nothing.
+     * If [key] does not exist, do nothing.
      *
-     * @param key key to find from B+tree of type [K].
-     * @param newValue new value to update of type [V].
+     * @param key Already-serialized bytes of the existing key to find.
+     * @param newKey Already-serialized bytes of the key to replace it with (same as [key] for a
+     *   value-only update).
+     * @param newValue Already-serialized bytes of the new value.
      */
     fun update(
         key: ByteArray,
@@ -225,12 +244,24 @@ class BTree(
         lockManager.close()
     }
 
+    /**
+     * Point lookup: the value stored at exactly [key], or null if [key] doesn't exist (or the
+     * tree is empty).
+     *
+     * For a range/prefix scan instead of an exact match, use the other `search` overload that
+     * takes a [direction] and returns a [Cursor].
+     *
+     * @param key Already-serialized key bytes.
+     */
     fun search(key: ByteArray): ByteArray? {
         if (rootPageId == INVALID_PAGE_ID) return null
         val traceNode: Stack<Triple<Long, Int, PageLock>> = Stack<Triple<Long, Int, PageLock>>()
         val lockManager = LockManager(LockMode.READ)
         val (leafNodePageId, keyIdx, isExist) =
             searchLeafNode(key, null, traceNode, lockManager, BTreeOptMode.SELECT)
+        // NOTE: leafNodePageId's lock was already fetched and pushed by searchLeafNode above —
+        // this fetches and pushes a second lock/pin on the same page. Known redundant, tracked in
+        // issue #59; harmless (re-entrant read lock) but wasteful.
         val lock = storageManager.fetchPage(leafNodePageId, lockManager.lockMode)
         lockManager.push(lock)
         val value: ByteArray? = lock.asReadView { buffer ->
@@ -244,6 +275,22 @@ class BTree(
         return value
     }
 
+    /**
+     * Opens a range/prefix scan: a [Cursor] positioned just before the first entry the walk
+     * should yield in [direction], or null if the tree is empty or the bound rules out every
+     * entry. The actual seek position is computed by [findSearchPosition] — see its doc for how
+     * [key]/[boundGiven] map to "no bound", "bound past the tree's edge", and the normal case.
+     *
+     * This method only opens the walk; it doesn't know where the caller wants to stop. The
+     * returned [Cursor] must be driven with `.use { }` and [Cursor.step] — see [Cursor]'s doc.
+     *
+     * @param key The boundary this scan direction starts from, already built by the caller
+     *   ([database.Table]) via `serialize`/`serializeUpper` per its own inclusive/exclusive rule
+     *   — or null (see [boundGiven]/[findSearchPosition]).
+     * @param direction Which way the resulting [Cursor] walks.
+     * @param boundGiven Whether the caller had an actual domain-level bound for this direction at
+     *   all (false = no WHERE condition on that side — scan from the tree's own edge).
+     * */
     fun search(
         key: ByteArray?,
         direction: ScanDirection,
@@ -308,7 +355,7 @@ class BTree(
         }
         // First slot with key >= boundary (lower-bound). FORWARD's result is already the answer;
         // BACKWARD's result points one slot past it, hence the -1.
-        val (pageId, keyIdx, isExist) =
+        val (pageId, keyIdx, _) =
             searchLeafNode(key, null, traceNode, lockManager, BTreeOptMode.SELECT)
         val idx = if (direction == ScanDirection.FORWARD) keyIdx else keyIdx - 1
         return SearchPosition(pageId, idx)
@@ -508,8 +555,8 @@ class BTree(
                         var isMerged = false
                         if (!isDone) {
                             /*
-                             * merge 후에 right node 삭제 처리
-                             * leaf node의 경우 sibling 재연결 처리 필요
+                             * Handle deleting the right node after a merge.
+                             * For a leaf node, sibling relinking is also needed.
                              * */
                             for (siblingLock in siblingLocks) {
                                 if (!isMerged) {
@@ -566,7 +613,10 @@ class BTree(
                 changeRootPageId(newRootId)
                 lockManager.closeAndRemoveLock(currentLock)
                 storageManager.deletePage(currentPageId)
-                // 트리의 메타데이터(rootPageId) 를 디스크에 써주는 내용 추가해야함
+                // NOTE: this used to be a TODO to persist the tree's metadata (rootPageId) to
+                // disk — already handled by changeRootPageId's onRootChanged callback, which
+                // catalog-registered indexes wire up to MetaPageManager/CatalogManager (see
+                // BUG-034 in history/bugs/).
             }
         }
     }

@@ -21,33 +21,37 @@ internal class DoublyLinkedList {
     }
 
     /**
-     * @return head 바로 다음(가장 최근에 touch된) 실제 데이터 노드. 리스트가 비어있으면 `null`.
+     * @return The real data node right after head (the most recently touched one), or `null` if
+     *   the list is empty.
      *
-     * 빈 리스트에서는 `head.next`가 `tail` sentinel 자신을 가리키므로, `count == 0`을 먼저 확인해야
-     * "sentinel을 실제 노드로 착각해서 반환"하는 걸 막을 수 있다.
+     * On an empty list, `head.next` points at the `tail` sentinel itself, so `count == 0` must be
+     * checked first to avoid mistaking the sentinel for a real node and returning it.
      * */
     fun getFirst(): LRUNode? = if(count == 0) null else head.next
 
     /**
-     * @return tail 바로 앞(가장 오래 방치된) 실제 데이터 노드. 리스트가 비어있으면 `null`.
+     * @return The real data node right before tail (the longest-untouched one), or `null` if the
+     *   list is empty.
      *
-     * 빈 리스트에서는 `tail.prev`가 `head` sentinel 자신을 가리키므로, [getFirst]와 같은 이유로
-     * `count == 0` 가드가 필요하다.
+     * On an empty list, `tail.prev` points at the `head` sentinel itself, so the same `count == 0`
+     * guard as [getFirst] is needed.
      * */
     fun getLast(): LRUNode? = if(count == 0) null else tail.prev
 
     /**
-     * [node]가 실존 데이터가 아니라 tail sentinel인지 확인. old 영역이 비어질 때 경계 포인터가 sentinel을 가리키는 걸 막는 데 사용.
+     * Checks whether [node] is the tail sentinel rather than real data. Used to prevent a
+     * boundary pointer from ending up pointing at the sentinel once the old region empties out.
      *
-     * @param node 확인할 노드.
-     * @return sentinel(`tail`) 자신이면 t`rue`.
+     * @param node The node to check.
+     * @return `true` if it's the sentinel (`tail`) itself.
      * */
     internal fun isTail(node: LRUNode): Boolean = node === tail
 
     /**
-     * [node]를 현재 위치에서 제거한다. [node]가 이미 리스트에 들어있어(`prev`/`next`가 세팅되어) 있어야 한다.
+     * Removes [node] from its current position. [node] must already be in the list (its
+     * `prev`/`next` already set).
      *
-     * @param node 제거할 노드.
+     * @param node The node to remove.
      * */
     fun remove(node: LRUNode){
         val prevFrame = node.prev!!
@@ -58,7 +62,7 @@ internal class DoublyLinkedList {
     }
 
 
-    /** @return tail 바로 앞 노드를 제거하고 반환. 리스트가 비어있으면 `null`. */
+    /** @return Removes and returns the node right before tail, or `null` if the list is empty. */
     fun removeLast(): LRUNode?{
         if(count == 0) return null
         val lastFrame = tail.prev!!
@@ -72,8 +76,9 @@ internal class DoublyLinkedList {
     /**
      * add [node] to the left of [targetNode]
      *
-     * @param node 새로 삽입할 노드.
-     * @param targetNode 삽입 기준이 되는, 이미 리스트에 들어있는 노드. `node`는 이 노드 바로 앞(head 쪽)에 들어간다.
+     * @param node The new node to insert.
+     * @param targetNode The already-listed reference node; `node` is inserted right before it
+     *   (toward head).
      * */
     fun add(node: LRUNode, targetNode: LRUNode){
         val prevFrame = targetNode.prev!!
@@ -85,9 +90,9 @@ internal class DoublyLinkedList {
     }
 
     /**
-     * [node]를 head 바로 다음(young 영역의 맨 앞)에 삽입한다.
+     * Inserts [node] right after head (the front of the young region).
      *
-     * @param node 삽입할 노드. 아직 리스트에 없어야 한다.
+     * @param node The node to insert. Must not already be in the list.
      * */
     fun addFirst(node: LRUNode){
         val insertPoint = head.next!!
@@ -99,9 +104,9 @@ internal class DoublyLinkedList {
     }
 
     /**
-     * [node]를 tail 바로 앞(리스트의 가장 오래된 끝)에 삽입한다.
+     * Inserts [node] right before tail (the oldest end of the list).
      *
-     * @param node 삽입할 노드. 아직 리스트에 없어야 한다.
+     * @param node The node to insert. Must not already be in the list.
      * */
     fun addLast(node: LRUNode){
         val insertPoint = tail.prev!!
@@ -113,9 +118,10 @@ internal class DoublyLinkedList {
     }
 
     /**
-     * head→tail 순서로 실제 데이터 노드(sentinel 제외)만 순회. [GenerationalList]의 일괄 old/young 전환에 사용.
+     * Iterates head-to-tail over real data nodes only (sentinels excluded). Used for
+     * [GenerationalList]'s batch old/young conversions.
      *
-     * @param action 각 노드마다 실행할 동작.
+     * @param action The action to run for each node.
      * */
     internal fun forEach(action: (LRUNode) -> Unit){
         var nodePointer = head.next
@@ -126,8 +132,8 @@ internal class DoublyLinkedList {
     }
 
     /**
-     * @param frameId 찾을 프레임 id.
-     * @return 일치하는 [LRUNode], 없으면 `null`.
+     * @param frameId The frame id to look for.
+     * @return The matching [LRUNode], or `null` if none.
      * */
     internal fun findNode(frameId: Int): LRUNode?{
         var nodePointer = head.next
@@ -138,7 +144,7 @@ internal class DoublyLinkedList {
         return null
     }
 
-    /** @return head→tail 순서로 나열한 frameId 목록. */
+    /** @return The frame ids listed in head-to-tail order. */
     internal fun traverseIds(): List<Int>{
         val result = mutableListOf<Int>()
         var nodePointer = head.next

@@ -14,6 +14,20 @@ import util.EntityType
 import util.SQLErrorDetail
 import util.requireOrThrow
 
+/**
+ * Row-level CRUD for one table, built on top of its indexes' byte-only [index.btree.BTree]s. This
+ * is the boundary where domain values meet bytes: [IndexHandle]'s serializers are only ever called
+ * from here (or from [catalog.CatalogManager] for its own, unrelated catalog schemas) — the BTree
+ * layer itself never sees a typed key or value.
+ *
+ * Index-organized: the primary index's leaves store the full row
+ * ([IndexHandle.valueSerializer]-encoded); every secondary index instead stores the primary key,
+ * so a secondary hit needs one extra lookup through the primary index (see [extractData]).
+ *
+ * @property rowSchema The table's column layout, shared by every row this instance produces.
+ * @property primaryIndex The clustered index rows are actually stored under.
+ * @property secondaryIndexes Every other index on this table, keyed by index name.
+ * */
 class Table(
     private val rowSchema: RowSchema,
     private val primaryIndex: IndexHandle,
@@ -194,7 +208,6 @@ class Table(
      */
     fun selectByIndex(indexName: String, key: List<Any?>): Row? {
         val index = resolveIndex(indexName)
-        val primaryTree = primaryIndex.btree
         val keySerialized = index.keySerializer.serialize(key)
         val searchedPrimaryKey = index.btree.search(keySerialized) ?: return null
         return extractData(index, searchedPrimaryKey)
@@ -476,9 +489,9 @@ class Table(
     private fun extractData(index: IndexHandle, value: ByteArray): Row {
         val rowValue =
             if (!index.metadata.isPrimary) {
-                val pageId = index.valueSerializer.deserialize(value).first
-                val pageIdSerialized = primaryIndex.keySerializer.serialize(pageId)
-                primaryIndex.btree.search(pageIdSerialized)
+                val primaryKey = index.valueSerializer.deserialize(value).first
+                val primaryKeySerialized = primaryIndex.keySerializer.serialize(primaryKey)
+                primaryIndex.btree.search(primaryKeySerialized)
                     ?: throw TableException.CorruptedIndex(
                         SQLErrorDetail(
                             entityType = EntityType.INDEX,

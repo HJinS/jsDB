@@ -1,11 +1,13 @@
 package util
 
 /**
- * SQL 표준(SQLSTATE)에 정의된 코드 중, 프로젝트에서 실제로 던지는 상황에 해당하는 것만 가져옴.
- * Class 02(No Data): 조회/갱신/삭제 대상 row가 없음
- * Class 23(Integrity Constraint Violation): NOT NULL, UNIQUE 등 제약 위반
- * Class 42(Syntax Error or Access Rule Violation): 중복 정의, 존재하지 않는 대상 참조, 잘못된 정의
- * Class XX(Internal Error): SQL 의미 조건이 아닌, 스토리지 엔진 내부 실패
+ * Only the codes defined by the SQL standard (SQLSTATE) that correspond to situations this
+ * project actually throws.
+ * Class 02 (No Data): no row to select/update/delete.
+ * Class 23 (Integrity Constraint Violation): NOT NULL, UNIQUE, etc. violated.
+ * Class 42 (Syntax Error or Access Rule Violation): duplicate definition, reference to a
+ *   nonexistent object, invalid definition.
+ * Class XX (Internal Error): a storage-engine-internal failure, not a SQL-semantic condition.
  * */
 enum class SqlState(val code: String) {
     NO_DATA("02000"),
