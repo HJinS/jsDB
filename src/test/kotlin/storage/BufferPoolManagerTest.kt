@@ -5,7 +5,10 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.instanceOf
+import io.mockk.Runs
 import io.mockk.clearMocks
+import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
 import io.mockk.verify
 import storageEngine.BufferPoolManager
@@ -294,6 +297,78 @@ class BufferPoolManagerTest: BehaviorSpec({
         }
         thread1.interrupt()
         thread2.interrupt()
+    }
+
+    // issue #58, checklist item 4: inject a one-off disk failure and verify the rollback leaves
+    // the pool in a clean, retryable state - not just that the exception propagates.
+    given("a BufferPoolManager (pool size 1) whose diskManager.readPage fails once, then recovers"){
+        val replacer = FrameNodePolicy(midpointLruConfig)
+        val bufferPoolManager = BufferPoolManager(diskManager, replacer, indexConfig, 1)
+        val pageId = 50L
+        clearMocks(diskManager)
+        // Grab a stable reference to the pool's one-and-only frame via an unrelated warmup fetch,
+        // so the failure `then` below can inspect it directly (pool size 1 guarantees fetchPage
+        // always reuses this exact same Frame instance).
+        val warmupLock = bufferPoolManager.fetchPage(999L, LockMode.READ)
+        val frame = warmupLock.frame
+        warmupLock.close()
+        clearMocks(diskManager)
+        every { diskManager.readPage(pageId, any()) } throws RuntimeException("simulated read failure")
+        `when`("fetching the page while the disk is failing"){
+            then("the failure should propagate and the frame should be discarded (reset to $INVALID_PAGE_ID), not left holding the failed pageId"){
+                shouldThrow<RuntimeException> { bufferPoolManager.fetchPage(pageId, LockMode.READ) }
+                frame.pageId.get() shouldBe INVALID_PAGE_ID
+                frame.pinCount.get() shouldBe 0
+            }
+            then("retrying after the disk recovers should reuse the same frame cleanly"){
+                every { diskManager.readPage(pageId, any()) } just Runs
+                val pageLock = bufferPoolManager.fetchPage(pageId, LockMode.READ)
+                frame.frameId shouldBe 0
+                frame.pageId.get() shouldBe pageId
+                frame.pinCount.get() shouldBe 1
+                frame.latch.isWriteLocked shouldBe false
+                verify(exactly = 2) { diskManager.readPage(pageId, any()) }
+                pageLock.close()
+                frame.pinCount.get() shouldBe 0
+            }
+        }
+    }
+
+    given("a BufferPoolManager (pool size 1) whose diskManager.writePage fails once when evicting a dirty victim"){
+        val replacer = FrameNodePolicy(midpointLruConfig)
+        val bufferPoolManager = BufferPoolManager(diskManager, replacer, indexConfig, 1)
+        val victimPageId = 60L
+        val newPageId = 61L
+        clearMocks(diskManager)
+        val victimLock = bufferPoolManager.fetchPage(victimPageId, LockMode.WRITE)
+        victimLock.setDirty()
+        victimLock.close()
+        every { diskManager.writePage(victimPageId, any()) } throws RuntimeException("simulated write failure")
+        `when`("fetching a different page evicts the dirty victim and the write-back fails"){
+            then("the failure should propagate and the victim's mapping should be restored, not discarded"){
+                shouldThrow<RuntimeException> { bufferPoolManager.fetchPage(newPageId, LockMode.READ) }
+                // The victim is still fetchable (its old mapping was restored) and still dirty
+                // (write-back never actually happened) - not silently lost.
+                val retryVictimLock = bufferPoolManager.fetchPage(victimPageId, LockMode.READ)
+                val victimFrame = retryVictimLock.frame
+                victimFrame.pageId.get() shouldBe victimPageId
+                victimFrame.pinCount.get() shouldBe 1
+                victimFrame.isDirty.get() shouldBe true
+                retryVictimLock.close()
+                victimFrame.pinCount.get() shouldBe 0
+            }
+            then("retrying to fetch the new page after the disk recovers should succeed and evict the victim cleanly"){
+                clearMocks(diskManager, answers = false, recordedCalls = true, childMocks = false)
+                every { diskManager.writePage(victimPageId, any()) } just Runs
+                val newLock = bufferPoolManager.fetchPage(newPageId, LockMode.READ)
+                val newFrame = newLock.frame
+                newFrame.pageId.get() shouldBe newPageId
+                newFrame.pinCount.get() shouldBe 1
+                verify(exactly = 1) { diskManager.writePage(victimPageId, any()) }
+                newLock.close()
+                newFrame.pinCount.get() shouldBe 0
+            }
+        }
     }
 
 }){

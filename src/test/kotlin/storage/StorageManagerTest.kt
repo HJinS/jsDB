@@ -89,6 +89,32 @@ class StorageManagerTest: BehaviorSpec({
                 newPageLock.close()
             }
         }
+
+        // issue #58, checklist item 3: fetching a page whose type isn't a live B+Tree node
+        // (INTERNAL_NODE/LEAF_NODE) must not leak the pin/lock bufferPoolManager.fetchPage already
+        // acquired before the type check ran.
+        `when`("fetch a page whose type is neither ${PageType.INTERNAL_NODE} nor ${PageType.LEAF_NODE}"){
+            val invalidPageId = 999L
+            val rawPageLock = bufferPoolManager.newPage(invalidPageId)
+            rawPageLock.asWriteView { buffer ->
+                // initData() alone leaves the page's type at PageType.EMPTY - never overwritten
+                // with INTERNAL_NODE/LEAF_NODE, so it's an invalid page for StorageManager.
+                SlottedPage(indexConfig, invalidPageId, buffer).initData()
+            }
+            rawPageLock.close()
+            then("should throw InvalidPageType without leaking the underlying pin/lock"){
+                shouldThrow<StorageEngineException.InvalidPageType> {
+                    storageManager.fetchPage(invalidPageId, LockMode.READ)
+                }
+                // If the pin/lock had leaked, this fresh fetch would see pinCount 2 (the leaked
+                // pin plus this call's own) instead of a clean 1.
+                val retryLock = bufferPoolManager.fetchPage(invalidPageId, LockMode.READ)
+                retryLock.frame.pinCount.get() shouldBe 1
+                retryLock.frame.latch.isWriteLocked shouldBe false
+                retryLock.close()
+                retryLock.frame.pinCount.get() shouldBe 0
+            }
+        }
     }
 }){
     companion object {
