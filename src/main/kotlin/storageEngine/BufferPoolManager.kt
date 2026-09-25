@@ -145,12 +145,8 @@ class BufferPoolManager(
                 }
                 throw e
             }
-            if (lockMode == LockMode.READ) {
-                frame.latch.writeLock().unlock()
-                frame.latch.readLock().lock()
-                isReadLocked = true
-                isWriteLocked = false
-            }
+            // Still holding the write lock taken for the I/O above (isWriteLocked already true) -
+            // downgraded below via PageLock.downgradeLock, same as the cache-hit path's WRITE case.
         } else {
             if (lockMode == LockMode.READ) {
                 frame.latch.readLock().lock()
@@ -162,7 +158,11 @@ class BufferPoolManager(
                 isWriteLocked = true
             }
         }
-        return PageLock(frame, this, isReadLocked, isWriteLocked)
+        val pageLock = PageLock(frame, this, isReadLocked, isWriteLocked)
+        // Downgrade after PageLock construction so it happens through PageLock's own atomic
+        // write-to-read downgrade rather than duplicating that lock choreography here.
+        if (needIO && lockMode == LockMode.READ) pageLock.downgradeLock()
+        return pageLock
     }
 
     /**

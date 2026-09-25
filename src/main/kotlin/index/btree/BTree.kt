@@ -186,7 +186,7 @@ class BTree(
         val (leafNodePageId, keyIdx, isExist) =
             searchLeafNode(
                 key,
-                null,
+                newValue,
                 traceNode,
                 lockManager,
                 BTreeOptMode.UPDATE,
@@ -259,11 +259,8 @@ class BTree(
         val lockManager = LockManager(LockMode.READ)
         val (leafNodePageId, keyIdx, isExist) =
             searchLeafNode(key, null, traceNode, lockManager, BTreeOptMode.SELECT)
-        // NOTE: leafNodePageId's lock was already fetched and pushed by searchLeafNode above —
-        // this fetches and pushes a second lock/pin on the same page. Known redundant, tracked in
-        // issue #59; harmless (re-entrant read lock) but wasteful.
-        val lock = storageManager.fetchPage(leafNodePageId, lockManager.lockMode)
-        lockManager.push(lock)
+        // The leaf's lock was already fetched and pushed by searchLeafNode above - just reuse it,
+        val lock = lockManager.last
         val value: ByteArray? = lock.asReadView { buffer ->
             val currentPage = SlottedPage(indexConfig, leafNodePageId, buffer)
             val node = Node.from(indexConfig, currentPage)

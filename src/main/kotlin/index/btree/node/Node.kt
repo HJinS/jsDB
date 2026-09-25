@@ -166,9 +166,10 @@ abstract class Node(
      *   [key]/[value] ([wouldOverflow]) — otherwise a split here could propagate to the parent.
      * - DELETE: safe if this node has more than the minimum key count ([hasSurplusKey]) —
      *   otherwise a merge/redistribute here could propagate to the parent.
-     * - UPDATE: currently reuses the DELETE condition ([hasSurplusKey]) only — it does **not**
-     *   check whether the new (possibly larger) value could overflow this node, so ancestor locks
-     *   can be released even when the update's re-insert would need to split. See issue #59.
+     * - UPDATE: safe only if both [hasSurplusKey] (a same-node delete could still underflow) and
+     *   `!wouldOverflow` (a same-node re-insert could still overflow) hold — the descent doesn't
+     *   yet know which of the two the update will actually turn into (in-place replace vs.
+     *   delete-here-then-insert-elsewhere), so both must be safe.
      * - SELECT: always safe — reads never trigger structural changes.
      * */
     fun isSafeNode(optMode: BTreeOptMode, key: ByteArray?=null, value: ByteArray?=null) = when(optMode){
@@ -182,7 +183,15 @@ abstract class Node(
             keyCount < indexConfig.maxKeys && !wouldOverflow(key, value)
         }
         BTreeOptMode.DELETE -> hasSurplusKey
-        BTreeOptMode.UPDATE -> hasSurplusKey
+        BTreeOptMode.UPDATE -> {
+            if(!(key != null && value != null))
+                throw IndexException.InvalidSafeCheck(
+                    EngineErrorDetail(
+                        reason = "Key, Value must be provided for safe check when optMode is Insert or Update"
+                    )
+                )
+            !wouldOverflow(key, value) && hasSurplusKey
+            }
         BTreeOptMode.SELECT -> true
     }
 
