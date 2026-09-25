@@ -81,15 +81,15 @@ class PageLock(
      * Converts a held write lock to a read lock, for a descent that took WRITE but turned out to
      * only need to read this node. No-op if [isWriteLocked] is false.
      *
-     * **Not atomic**: releases the write lock, then separately acquires the read lock — another
-     * writer can acquire the latch in between. The frame stays pinned throughout, so it can't be
-     * evicted, but this differs from the atomic write-held-while-acquiring-read strategy the
-     * latch-crabbing design called for. See issue #59.
+     * Atomic: acquires the read lock while the write lock is still held (same-thread reentrant
+     * acquisition, guaranteed to succeed immediately - `ReentrantReadWriteLock` explicitly
+     * supports this write-to-read downgrade), then releases the write lock. No other thread can
+     * ever observe this frame with neither lock held.
      * */
     fun downgradeLock(){
         if(isWriteLocked){
-            frame.latch.writeLock().unlock()
             frame.latch.readLock().lock()
+            frame.latch.writeLock().unlock()
             isWriteLocked = false
             isReadLocked = true
         }
