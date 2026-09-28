@@ -980,6 +980,40 @@ class BTreeTest :
             }
         }
 
+        // Issue #49: BTree.destroy() must actually return every page to the free list, not just
+        // make the tree logically empty - proven here by refilling with the same amount of data
+        // and checking the file didn't grow, i.e. the refill reused the freed pages rather than
+        // extending the file for brand-new ones.
+        given("A Tree spanning multiple internal levels, then destroyed") {
+            @Serializable data class ScanData(val id: Long)
+
+            val schema =
+                IndexKeySchema(listOf(IndexColumn("id", ColumnType.LONG, descending = false)))
+            val btree = initData<ScanData>(schema)
+
+            val recordCount = 500
+            for (id in 0 until recordCount) {
+                btree.insert(listOf(id.toLong()), ScanData(id.toLong()))
+            }
+            val pagesAfterFirstFill = diskManager.getNumPages()
+
+            `when`("destroying the tree, then refilling it with the same amount of data") {
+                btree.btree.destroy()
+                for (id in 0 until recordCount) {
+                    btree.insert(listOf(id.toLong()), ScanData(id.toLong()))
+                }
+
+                then("the file did not grow - the destroyed pages were reused, not leaked") {
+                    diskManager.getNumPages() shouldBe pagesAfterFirstFill
+                }
+
+                then("every entry is present and correct after the refill") {
+                    btree.traverse().map { it.second.id } shouldBe
+                        (0 until recordCount).map { it.toLong() }
+                }
+            }
+        }
+
         given("A Tree with a single descending column that can hold NULL") {
             @Serializable data class ScanData(val priority: Long?)
 
