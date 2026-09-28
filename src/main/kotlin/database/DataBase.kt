@@ -4,14 +4,18 @@ import catalog.CatalogManager
 import config.SimpleConfig
 import exception.CatalogException
 import exception.DatabaseException
+import exception.TableException
 import index.btree.BTree
 import index.serializer.BinaryRowSerializer
 import index.serializer.MultiColumnKeySerializer
+import java.util.Arrays
 import kotlin.String
 import schema.ColumnRow
 import schema.IndexColumn
 import schema.IndexHandle
 import schema.IndexKeySchema
+import schema.Row
+import schema.RowColumn
 import schema.RowSchema
 import schema.toPrimaryRowSchema
 import schema.toRowColumn
@@ -149,8 +153,60 @@ class DataBase(private val config: SimpleConfig) {
             )
         }
 
-        val indexId = metaPageManager.getNextId(MetaPageOffset.NEXT_INDEX_ID)
+        val keySerializer = MultiColumnKeySerializer(keySchema)
         val valueSchema = resolveIndexValueSchema(primaryIdxName, tableName, isPrimary)
+        val valueSerializer = BinaryRowSerializer(valueSchema)
+
+        // A secondary index created on an already-populated table must start backfilled with
+        // every existing row - a brand-new empty BTree would otherwise silently miss every row
+        // inserted before this index existed. Computed (and, if isUnique, validated) *before* the
+        // catalog row/BTree are created at all, so a uniqueness violation leaves nothing to clean
+        // up (no WAL to roll back a partially-built index with).
+        val backfillEntries: List<Pair<ByteArray, ByteArray>>? =
+            if (isPrimary) {
+                null
+            } else {
+                val resolvedPrimaryIdxName = primaryIdxName ?: PRIMARY_KEY_IDX_NAME_PREFIX.format(tableName)
+                val primaryHandle = loadIndex(resolvedPrimaryIdxName)
+                val primaryRowSchema = resolveIndexValueSchema(null, tableName, true)
+                val primaryValueSerializer = BinaryRowSerializer(primaryRowSchema)
+                val entries =
+                    primaryHandle.btree.traverse().map { (_, rowBytes) ->
+                        val row = Row(primaryRowSchema, primaryValueSerializer.deserialize(rowBytes).first)
+                        val keyValues = keySchema.indexColumns.map { row[it.name] }
+                        val indexKey = keySerializer.serialize(keyValues)
+                        // A secondary index's *value* is the primary key, but valueSerializer-encoded
+                        // - a different byte layout than primaryHandle's own keySerializer bytes (see
+                        // Table.updateRow's doc for why mixing these up is a real, easy-to-miss bug).
+                        val indexValue = valueSerializer.serialize(primaryHandle.extractKey(row))
+                        Triple(indexKey, indexValue, keyValues.any { it == null })
+                    }
+                if (isUnique) {
+                    // NULL is never considered equal to another NULL for uniqueness (standard SQL
+                    // semantics: NULL != NULL) - only compare entries where every key column is
+                    // non-null, so rows that are merely both-NULL don't falsely collide.
+                    val sortedKeys =
+                        entries.filter { (_, _, hasNullKey) -> !hasNullKey }
+                            .map { it.first }
+                            .sortedWith(Arrays::compareUnsigned)
+                    for (i in 1 until sortedKeys.size) {
+                        requireOrThrow(!(sortedKeys[i - 1] contentEquals sortedKeys[i])) {
+                            TableException.UniqueViolation(
+                                SQLErrorDetail(
+                                    entityType = EntityType.INDEX,
+                                    entityName = indexName,
+                                    tableName = tableName,
+                                    columnNames = keySchema.indexColumns.map { it.name },
+                                    reason = "Existing rows already violate uniqueness on this column set.",
+                                )
+                            )
+                        }
+                    }
+                }
+                entries.map { (indexKey, indexValue, _) -> indexKey to indexValue }
+            }
+
+        val indexId = metaPageManager.getNextId(MetaPageOffset.NEXT_INDEX_ID)
         val indexData =
             catalogManager.registerNewIndex(
                 indexId,
@@ -172,11 +228,12 @@ class DataBase(private val config: SimpleConfig) {
                     catalogManager.updateIndexRootPageId(indexName, newRoot)
                 },
             )
+        backfillEntries?.forEach { (indexKey, indexValue) -> index.insert(indexKey, indexValue) }
         return IndexHandle(
             indexData,
             index,
-            MultiColumnKeySerializer(keySchema),
-            BinaryRowSerializer(valueSchema),
+            keySerializer,
+            valueSerializer,
         )
     }
 
