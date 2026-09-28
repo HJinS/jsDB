@@ -27,16 +27,16 @@ val logger = KotlinLogging.logger {}
  * Disk-based B+tree implementation, keyed off latch crabbing (see
  * `docs/index/btree-latch-crabbing.md`) for concurrency.
  *
- * Byte-only: every public method takes/returns already-serialized `ByteArray` keys and values.
- * This class knows nothing about columns, types, or ASC/DESC — that's entirely the caller's
+ * Byte-only: every public method takes/returns already-serialized `ByteArray` keys and values. This
+ * class knows nothing about columns, types, or ASC/DESC — that's entirely the caller's
  * responsibility (in practice, `IndexHandle`'s `keySerializer`/`valueSerializer`, called from
  * `database.Table`). See `docs/index/range-scan-design.md` for the byte-comparable encoding this
  * relies on.
  *
  * @property name Name of this index.
  * @property targetTable Name of the table this index belongs to (used only for error messages).
- * @property storageManager Provides the page fetch/allocate/delete operations this tree's nodes
- *   are built on.
+ * @property storageManager Provides the page fetch/allocate/delete operations this tree's nodes are
+ *   built on.
  * @property indexConfig Index/page sizing configuration (e.g. `maxKeys`, `pageSize`).
  * @property rootPageId Page id of the current root node, or [INVALID_PAGE_ID] for an empty tree.
  *   Mutated in place as splits/root-shrinks change the root; see [changeRootPageId].
@@ -63,9 +63,8 @@ class BTree(
      * - Insert the key and value.
      * - Split the node at overflow.
      *
-     * @param key Already-serialized key bytes (the caller — [database.Table] via an
-     *   `IndexHandle`'s `keySerializer` — owns domain <-> byte conversion; this class is
-     *   byte-only).
+     * @param key Already-serialized key bytes (the caller — [database.Table] via an `IndexHandle`'s
+     *   `keySerializer` — owns domain <-> byte conversion; this class is byte-only).
      * @param value Already-serialized value bytes.
      * @see split
      */
@@ -245,11 +244,11 @@ class BTree(
     }
 
     /**
-     * Point lookup: the value stored at exactly [key], or null if [key] doesn't exist (or the
-     * tree is empty).
+     * Point lookup: the value stored at exactly [key], or null if [key] doesn't exist (or the tree
+     * is empty).
      *
-     * For a range/prefix scan instead of an exact match, use the other `search` overload that
-     * takes a [direction] and returns a [Cursor].
+     * For a range/prefix scan instead of an exact match, use the other `search` overload that takes
+     * a [direction] and returns a [Cursor].
      *
      * @param key Already-serialized key bytes.
      */
@@ -273,21 +272,21 @@ class BTree(
     }
 
     /**
-     * Opens a range/prefix scan: a [Cursor] positioned just before the first entry the walk
-     * should yield in [direction], or null if the tree is empty or the bound rules out every
-     * entry. The actual seek position is computed by [findSearchPosition] — see its doc for how
+     * Opens a range/prefix scan: a [Cursor] positioned just before the first entry the walk should
+     * yield in [direction], or null if the tree is empty or the bound rules out every entry. The
+     * actual seek position is computed by [findSearchPosition] — see its doc for how
      * [key]/[boundGiven] map to "no bound", "bound past the tree's edge", and the normal case.
      *
-     * This method only opens the walk; it doesn't know where the caller wants to stop. The
-     * returned [Cursor] must be driven with `.use { }` and [Cursor.step] — see [Cursor]'s doc.
+     * This method only opens the walk; it doesn't know where the caller wants to stop. The returned
+     * [Cursor] must be driven with `.use { }` and [Cursor.step] — see [Cursor]'s doc.
      *
      * @param key The boundary this scan direction starts from, already built by the caller
-     *   ([database.Table]) via `serialize`/`serializeUpper` per its own inclusive/exclusive rule
-     *   — or null (see [boundGiven]/[findSearchPosition]).
+     *   ([database.Table]) via `serialize`/`serializeUpper` per its own inclusive/exclusive rule —
+     *   or null (see [boundGiven]/[findSearchPosition]).
      * @param direction Which way the resulting [Cursor] walks.
      * @param boundGiven Whether the caller had an actual domain-level bound for this direction at
      *   all (false = no WHERE condition on that side — scan from the tree's own edge).
-     * */
+     */
     fun search(
         key: ByteArray?,
         direction: ScanDirection,
@@ -299,63 +298,6 @@ class BTree(
         val searchPosition =
             findSearchPosition(key, boundGiven, direction, lockManager, traceNode) ?: return null
         return Cursor(lockManager, searchPosition, direction, storageManager, indexConfig)
-    }
-
-    /**
-     * Computes the [SearchPosition] that the first [Cursor.step] will read, seeking off of
-     * whichever bound this scan direction starts from (the lower bound for FORWARD, the upper
-     * bound for BACKWARD).
-     *
-     * [key] is boundary bytes the caller (Table) has already built after resolving open vs.
-     * closed on its own - inclusive calls `serialize`, exclusive calls `serializeUpper` - so this
-     * function never knows which one produced it. There are three cases:
-     *
-     * - [boundGiven] is false: there's no condition at all on this direction's seek side (e.g. no
-     *   WHERE clause on that column). With nothing to compare against, descend straight to the
-     *   leftmost/rightmost leaf via [findExtremeLeafPageId].
-     * - [key] is null: a condition existed, but `serializeUpper` couldn't produce a successor —
-     *   the value's last column is DESC and exactly NULL, so that group already sits at the
-     *   tree's physical right edge. For BACKWARD, that edge group *is* the seek target, so land
-     *   on the rightmost leaf. For FORWARD, we were asked for something greater than the very
-     *   end of the tree, which can't exist, so there's no result at all (null).
-     * - Otherwise: [searchLeafNode] finds the first slot with key >= the given bytes (a plain
-     *   lower-bound search). Because each direction's boundary bytes are already built to point
-     *   at the right spot, FORWARD's result is the answer as-is, while BACKWARD's result points
-     *   one slot past the last item we actually want - hence the `- 1`.
-     */
-    private fun findSearchPosition(
-        key: ByteArray?,
-        boundGiven: Boolean,
-        direction: ScanDirection,
-        lockManager: LockManager,
-        traceNode: Stack<Triple<Long, Int, PageLock>>,
-    ): SearchPosition? {
-        if (!boundGiven) {
-            // No condition on this direction's seek side — skip key comparison, go straight to
-            // the tree's edge (leftmost/rightmost).
-            val pageId =
-                if (direction == ScanDirection.FORWARD) findLeftMostLeafPageId(lockManager)
-                else findRightMostLeafPageId(lockManager)
-            return pageId?.let { SearchPosition(it, null) }
-        }
-        if (key == null) {
-            // serializeUpper couldn't produce a successor — that group is already the tree's
-            // rightmost edge.
-            if (direction == ScanDirection.BACKWARD) {
-                // Upper-bound seek: the edge group itself is the seek target.
-                val pageId = findRightMostLeafPageId(lockManager)
-                return pageId?.let { SearchPosition(pageId, null) }
-            } else {
-                // Lower-bound seek (exclusive): nothing sorts past the tree's end, so no result.
-                return null
-            }
-        }
-        // First slot with key >= boundary (lower-bound). FORWARD's result is already the answer;
-        // BACKWARD's result points one slot past it, hence the -1.
-        val (pageId, keyIdx, _) =
-            searchLeafNode(key, null, traceNode, lockManager, BTreeOptMode.SELECT)
-        val idx = if (direction == ScanDirection.FORWARD) keyIdx else keyIdx - 1
-        return SearchPosition(pageId, idx)
     }
 
     /**
@@ -394,6 +336,25 @@ class BTree(
         }
         lockManager.close()
         return result
+    }
+
+    /**
+     * Frees every page in this tree back to the free list (issue #50: DROP TABLE/INDEX). Unlike
+     * delete(key), doesn't maintain any B+Tree invariant since the whole structure is being
+     * discarded - a single post-order walk (children freed before their parent, so a page's child
+     * pointers are always read before that page itself is gone), O(page count) not O(key count).
+     *
+     * No WAL yet, so this isn't crash-atomic: a failure mid-walk can leave this one tree with some
+     * pages freed and some not - the same class of risk every other multi-page BTree mutation
+     * (split/merge) already has. A real fix needs WAL, tracked separately.
+     *
+     * Callers must ensure no concurrent reader/writer is using this tree - destroy bypasses latch
+     * crabbing entirely.
+     */
+    fun destroy() {
+        if (rootPageId == INVALID_PAGE_ID) return
+        destroySubtree(rootPageId)
+        changeRootPageId(INVALID_PAGE_ID)
     }
 
     private fun checkOverflowAndSplitFirst(
@@ -877,6 +838,76 @@ class BTree(
     private fun changeRootPageId(newRootPageId: Long) {
         rootPageId = newRootPageId
         onRootChanged?.invoke(newRootPageId)
+    }
+
+    /**
+     * Computes the [SearchPosition] that the first [Cursor.step] will read, seeking off of
+     * whichever bound this scan direction starts from (the lower bound for FORWARD, the upper bound
+     * for BACKWARD).
+     *
+     * [key] is boundary bytes the caller (Table) has already built after resolving open vs. closed
+     * on its own - inclusive calls `serialize`, exclusive calls `serializeUpper` - so this function
+     * never knows which one produced it. There are three cases:
+     *
+     * - [boundGiven] is false: there's no condition at all on this direction's seek side (e.g. no
+     *   WHERE clause on that column). With nothing to compare against, descend straight to the
+     *   leftmost/rightmost leaf via [findExtremeLeafPageId].
+     * - [key] is null: a condition existed, but `serializeUpper` couldn't produce a successor — the
+     *   value's last column is DESC and exactly NULL, so that group already sits at the tree's
+     *   physical right edge. For BACKWARD, that edge group *is* the seek target, so land on the
+     *   rightmost leaf. For FORWARD, we were asked for something greater than the very end of the
+     *   tree, which can't exist, so there's no result at all (null).
+     * - Otherwise: [searchLeafNode] finds the first slot with key >= the given bytes (a plain
+     *   lower-bound search). Because each direction's boundary bytes are already built to point at
+     *   the right spot, FORWARD's result is the answer as-is, while BACKWARD's result points one
+     *   slot past the last item we actually want - hence the `- 1`.
+     */
+    private fun findSearchPosition(
+        key: ByteArray?,
+        boundGiven: Boolean,
+        direction: ScanDirection,
+        lockManager: LockManager,
+        traceNode: Stack<Triple<Long, Int, PageLock>>,
+    ): SearchPosition? {
+        if (!boundGiven) {
+            // No condition on this direction's seek side — skip key comparison, go straight to
+            // the tree's edge (leftmost/rightmost).
+            val pageId =
+                if (direction == ScanDirection.FORWARD) findLeftMostLeafPageId(lockManager)
+                else findRightMostLeafPageId(lockManager)
+            return pageId?.let { SearchPosition(it, null) }
+        }
+        if (key == null) {
+            // serializeUpper couldn't produce a successor — that group is already the tree's
+            // rightmost edge.
+            if (direction == ScanDirection.BACKWARD) {
+                // Upper-bound seek: the edge group itself is the seek target.
+                val pageId = findRightMostLeafPageId(lockManager)
+                return pageId?.let { SearchPosition(pageId, null) }
+            } else {
+                // Lower-bound seek (exclusive): nothing sorts past the tree's end, so no result.
+                return null
+            }
+        }
+        // First slot with key >= boundary (lower-bound). FORWARD's result is already the answer;
+        // BACKWARD's result points one slot past it, hence the -1.
+        val (pageId, keyIdx, _) =
+            searchLeafNode(key, null, traceNode, lockManager, BTreeOptMode.SELECT)
+        val idx = if (direction == ScanDirection.FORWARD) keyIdx else keyIdx - 1
+        return SearchPosition(pageId, idx)
+    }
+
+    private fun destroySubtree(pageId: Long) {
+        val lock = storageManager.fetchPage(pageId, LockMode.READ)
+        val childPageIds = lock.asReadView { buffer ->
+            val page = SlottedPage(indexConfig, pageId, buffer)
+            val node = Node.from(indexConfig, page)
+            if (node is InternalNode) (0..node.keyCount).map { node.childPageId(it) }
+            else emptyList()
+        }
+        lock.close()
+        childPageIds.forEach { destroySubtree(it) }
+        storageManager.deletePage(pageId)
     }
 
     /** Print the tree with logger. Only for test. */

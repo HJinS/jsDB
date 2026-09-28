@@ -27,4 +27,9 @@ sealed class DatabaseException(
 
     class NotNullViolation(detail: SQLErrorDetail, cause: Throwable? = null):
         DatabaseException(SqlState.NOT_NULL_VIOLATION, detail, cause)
+
+    /** Dropping this object directly isn't allowed because something else still depends on it —
+     * e.g. a table's primary index can only be removed via DROP TABLE (issue #49). */
+    class DependentObjectsExist(detail: SQLErrorDetail, cause: Throwable? = null):
+        DatabaseException(SqlState.DEPENDENT_OBJECTS_STILL_EXIST, detail, cause)
 }

@@ -25,10 +25,7 @@ class InternalNode(
             }
 
     val rightMostChildPageId: Long
-        get() {
-            val totalSize = page.recordCount
-            return childPageId(totalSize - 1)
-        }
+        get() = childPageId(page.recordCount)
 
     fun childPageId(index: Int): Long =
         if (index == 0) {
