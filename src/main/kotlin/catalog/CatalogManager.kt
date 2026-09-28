@@ -274,6 +274,31 @@ class CatalogManager(
             }
     }
 
+    /**
+     * Removes [tableId]'s column at [ordinal], then shifts every later column (`ordinal > ordinal`)
+     * down by one so ordinals stay dense (`0..N-1`) - callers (`DataBase.addColumn`) rely on
+     * `getColumns(tableId).size` being the next free ordinal, which a gap would break.
+     *
+     * Shifts ascending (lowest ordinal first) so each destination slot is already vacated by the
+     * previous step (or by this column's own removal, for the first one) before it's reused.
+     */
+    fun removeColumn(tableId: Long, ordinal: Int){
+        val key = columnCatalogKeySerializer.serialize(listOf(tableId, ordinal))
+        columnCatalog.delete(key)
+        getColumns(tableId)
+            .filter { it.ordinal > ordinal }
+            .sortedBy { it.ordinal }
+            .forEach { column ->
+                val oldKey = columnCatalogKeySerializer.serialize(listOf(tableId, column.ordinal))
+                val newKey = columnCatalogKeySerializer.serialize(listOf(tableId, column.ordinal - 1))
+                val newValue =
+                    columnCatalogValueSerializer.serialize(
+                        listOf(tableId, column.ordinal - 1, column.name, column.type.name, column.nullable)
+                    )
+                columnCatalog.update(oldKey, newKey, newValue)
+            }
+    }
+
     fun dropIndex(name: String) {
         val serialized = indexCatalogKeySerializer.serialize(listOf(name))
         indexCatalog.delete(serialized)
