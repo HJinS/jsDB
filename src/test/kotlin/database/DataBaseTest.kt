@@ -221,5 +221,86 @@ class DataBaseTest: BehaviorSpec({
                 }
             }
         }
+
+        // Insert enough rows that the drop tests below actually walk a multi-level tree in
+        // BTree.destroy(), not just a single leaf page - a small dataset would let a broken
+        // destroy() (or a broken internal-node child lookup - see the InternalNode.rightMost-
+        // ChildPageId regression this session already found from exactly this kind of gap) pass
+        // silently.
+        val bulkTable = db.loadTable(tableName)
+        val bulkRowCount = 500
+        for (id in 2L..bulkRowCount + 1L) {
+            bulkTable.insertRow(Row(columns, listOf(id, id.toInt(), id.toDouble(), id.toFloat())))
+        }
+
+        // Issue #49: DROP INDEX (secondary only, standalone - table stays)
+        `when`("Dropping a non-existent index"){
+            then("UndefinedObject should be thrown"){
+                shouldThrow<CatalogException.UndefinedObject> {
+                    db.dropIndex("non-existing index")
+                }
+            }
+        }
+
+        `when`("Dropping the primary index directly"){
+            then("DependentObjectsExist should be thrown - only DROP TABLE may remove it"){
+                shouldThrow<DatabaseException.DependentObjectsExist> {
+                    db.dropIndex(primaryIdxName)
+                }
+            }
+            then("the primary index should be untouched - still loadable"){
+                db.loadIndex(primaryIdxName).metadata.indexName shouldBe primaryIdxName
+            }
+        }
+
+        `when`("Dropping the secondary index $secondaryIndexName"){
+            db.dropIndex(secondaryIndexName)
+            then("it should no longer be loadable"){
+                shouldThrow<CatalogException.UndefinedObject> {
+                    db.loadIndex(secondaryIndexName)
+                }
+            }
+            then("the table itself and its primary index should be unaffected, including the bulk rows"){
+                val reloaded = db.loadTable(tableName)
+                reloaded.selectByKey(listOf(2L)).shouldNotBeNull { this["column1"] shouldBe 2 }
+                reloaded.selectByKey(listOf(bulkRowCount + 1L)).shouldNotBeNull {
+                    this["column1"] shouldBe bulkRowCount + 1
+                }
+            }
+            then("the same index name can be registered again"){
+                val recreated = db.createIndex(
+                    secondaryIndexName,
+                    primaryIdxName,
+                    tableName,
+                    isPrimary = false,
+                    isUnique = false,
+                    keySchema = indexSchema,
+                )
+                recreated.metadata.indexName shouldBe secondaryIndexName
+            }
+        }
+
+        // Issue #50: DROP TABLE (table + every index it has, including primary)
+        `when`("Dropping table $tableName"){
+            db.dropTable(tableName)
+            then("the table should no longer be loadable"){
+                shouldThrow<CatalogException.UndefinedTable> {
+                    db.loadTable(tableName)
+                }
+            }
+            then("its primary index should no longer be loadable"){
+                shouldThrow<CatalogException.UndefinedObject> {
+                    db.loadIndex(primaryIdxName)
+                }
+            }
+            then("the same table/primary-index names can be registered again, as a fresh table"){
+                val recreatedTable = db.createTable(tableName, primaryIdxName, columns)
+                val row = Row(columns, listOf(1L, 99, 1.5, 2.5f))
+                recreatedTable.insertRow(row)
+                db.loadTable(tableName).selectByKey(listOf(1L)).shouldNotBeNull {
+                    this["column1"] shouldBe 99
+                }
+            }
+        }
     }
 })

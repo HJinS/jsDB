@@ -29,13 +29,13 @@ import util.SQLErrorDetail
 import util.requireOrThrow
 
 /**
- * Top-level façade wiring the storage engine (disk I/O, buffer pool, page/free-space management)
- * to the system catalog, and exposing table/index lifecycle operations. One instance per database
+ * Top-level façade wiring the storage engine (disk I/O, buffer pool, page/free-space management) to
+ * the system catalog, and exposing table/index lifecycle operations. One instance per database
  * file.
  *
- * [initialize] must be called once before any other method — it opens or bootstraps the catalog
- * and wires each catalog BTree's root-changed callback back into the meta page.
- * */
+ * [initialize] must be called once before any other method — it opens or bootstraps the catalog and
+ * wires each catalog BTree's root-changed callback back into the meta page.
+ */
 class DataBase(private val config: SimpleConfig) {
     private val diskManager = DiskManager(config.storageConfig, config.indexConfig)
     private val lruPolicy = FrameNodePolicy(config.storageConfig.midPointLruConfig)
@@ -48,9 +48,9 @@ class DataBase(private val config: SimpleConfig) {
     private lateinit var catalogManager: CatalogManager
 
     /**
-     * Opens the database file (creating it if new) and loads or bootstraps the system catalog.
-     * Must be called exactly once before any other method on this instance.
-     * */
+     * Opens the database file (creating it if new) and loads or bootstraps the system catalog. Must
+     * be called exactly once before any other method on this instance.
+     */
     fun initialize() {
         val metaPageData = metaPageManager.initialize()
         catalogManager =
@@ -82,26 +82,26 @@ class DataBase(private val config: SimpleConfig) {
     /**
      * Closes the underlying file handle.
      *
-     * Does **not** flush the buffer pool first — [storageEngine.BufferPoolManager] has no
-     * "flush all" operation, so any dirty page not already flushed individually may not reach
-     * disk before the file closes. Whether a subsequent re-open preserves all writes made before
-     * this call is not yet verified. See issue #47.
-     * */
+     * Does **not** flush the buffer pool first — [storageEngine.BufferPoolManager] has no "flush
+     * all" operation, so any dirty page not already flushed individually may not reach disk before
+     * the file closes. Whether a subsequent re-open preserves all writes made before this call is
+     * not yet verified. See issue #47.
+     */
     fun close() {
         diskManager.close()
     }
 
     /**
-     * Registers and creates a new index (BTree) for [tableName], after validating that
-     * [indexName] is free, the table exists, and every column in [keySchema] already exists on
-     * the table with a matching type. For a primary index ([isPrimary] true), also requires the
-     * table not already have one.
+     * Registers and creates a new index (BTree) for [tableName], after validating that [indexName]
+     * is free, the table exists, and every column in [keySchema] already exists on the table with a
+     * matching type. For a primary index ([isPrimary] true), also requires the table not already
+     * have one.
      *
      * @param primaryIdxName Only meaningful when building a **secondary** index ([isPrimary]
-     *   false): the table's primary index name, needed to resolve the value schema stored
-     *   alongside the primary key. Ignored when [isPrimary] is true.
+     *   false): the table's primary index name, needed to resolve the value schema stored alongside
+     *   the primary key. Ignored when [isPrimary] is true.
      * @return A ready-to-use [IndexHandle] (the [BTree] plus its key/value serializers).
-     * */
+     */
     fun createIndex(
         indexName: String,
         primaryIdxName: String?,
@@ -228,7 +228,7 @@ class DataBase(private val config: SimpleConfig) {
      * @param columns The table's full column list. Exactly the ones with a non-null
      *   `primaryKeyOrder` become the primary key, ordered by that value; none of them may be
      *   nullable.
-     * */
+     */
     fun createTable(tableName: String, primaryIdxName: String?, columns: RowSchema): Table {
         val resolved = catalogManager.resolveTable(tableName)
         requireOrThrow(resolved == null) {
@@ -299,7 +299,10 @@ class DataBase(private val config: SimpleConfig) {
         )
     }
 
-    /** Loads an existing table by name: its primary index plus every non-primary index registered against it. */
+    /**
+     * Loads an existing table by name: its primary index plus every non-primary index registered
+     * against it.
+     */
     fun loadTable(tableName: String): Table {
         val tableData =
             catalogManager.resolveTable(tableName)
@@ -327,6 +330,64 @@ class DataBase(private val config: SimpleConfig) {
         )
     }
 
+    fun dropTable(tableName: String) {
+        val tableData =
+            catalogManager.resolveTable(tableName)
+                ?: throw CatalogException.UndefinedTable(
+                    SQLErrorDetail(entityType = EntityType.TABLE, entityName = tableName)
+                )
+        val primaryIdxName =
+            tableData.primaryIndexName
+                ?: throw DatabaseException.UndefinedObject(
+                    SQLErrorDetail(entityType = EntityType.PRIMARY_INDEX, tableName = tableName)
+                )
+
+        val primaryIdxHandle = loadIndex(primaryIdxName)
+
+        val secondaryIndexes =
+            catalogManager
+                .getIndexes(tableName)
+                .filter { !it.isPrimary }
+                .map { loadIndex(it.indexName) }
+
+        secondaryIndexes.forEach { indexHandle ->
+            val indexName = indexHandle.metadata.indexName
+            val index = indexHandle.btree
+            index.destroy()
+            catalogManager.dropIndex(indexName)
+        }
+
+        primaryIdxHandle.btree.destroy()
+        catalogManager.dropIndex(primaryIdxName)
+        catalogManager.dropColumns(tableData.tableId)
+        catalogManager.dropTable(tableData.tableName)
+    }
+
+    /**
+     * Drops a secondary index: frees every page of its [BTree] (see [BTree.destroy]) and removes
+     * its catalog row. A primary index can't be dropped this way - it's only removed as part of
+     * [dropTable] (issue #49).
+     */
+    fun dropIndex(indexName: String) {
+        val indexData = catalogManager.resolveIndex(indexName)
+            ?: throw CatalogException.UndefinedObject(
+                SQLErrorDetail(entityType = EntityType.INDEX, entityName = indexName)
+            )
+        requireOrThrow(!indexData.isPrimary) {
+            DatabaseException.DependentObjectsExist(
+                SQLErrorDetail(
+                    entityType = EntityType.PRIMARY_INDEX,
+                    entityName = indexName,
+                    tableName = indexData.tableName,
+                    reason = "A primary index can't be dropped directly - drop the table instead.",
+                )
+            )
+        }
+        loadIndex(indexName).btree.destroy()
+        catalogManager.dropIndex(indexName)
+    }
+
+
     /** Registers one column of an existing table in the catalog. */
     fun createColumn(
         tableId: Long,
@@ -350,12 +411,12 @@ class DataBase(private val config: SimpleConfig) {
 
     /**
      * Builds the [RowSchema] an index's BTree stores as its *value*, which differs by [isPrimary]:
-     * - primary index: the table's full row. This is an index-organized table — the primary
-     *   index's leaves *are* the row storage, so its value must hold every column.
-     * - secondary index: just the primary key columns, resolved from [primaryIdxName]. A
-     *   secondary index only points back to the row via the primary key; `Table` re-fetches the
-     *   full row through the primary index using that key.
-     * */
+     * - primary index: the table's full row. This is an index-organized table — the primary index's
+     *   leaves *are* the row storage, so its value must hold every column.
+     * - secondary index: just the primary key columns, resolved from [primaryIdxName]. A secondary
+     *   index only points back to the row via the primary key; `Table` re-fetches the full row
+     *   through the primary index using that key.
+     */
     private fun resolveIndexValueSchema(
         primaryIdxName: String?,
         tableName: String,

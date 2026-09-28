@@ -5,6 +5,9 @@ package util
  * project actually throws.
  * Class 02 (No Data): no row to select/update/delete.
  * Class 23 (Integrity Constraint Violation): NOT NULL, UNIQUE, etc. violated.
+ * Class 2B (Dependent Privilege Descriptors Still Exist): can't drop an object directly because
+ *   something else still depends on it (e.g. a table's primary index — only removable via DROP
+ *   TABLE, see issue #49).
  * Class 42 (Syntax Error or Access Rule Violation): duplicate definition, reference to a
  *   nonexistent object, invalid definition.
  * Class XX (Internal Error): a storage-engine-internal failure, not a SQL-semantic condition.
@@ -13,6 +16,7 @@ enum class SqlState(val code: String) {
     NO_DATA("02000"),
     NOT_NULL_VIOLATION("23502"),
     UNIQUE_VIOLATION("23505"),
+    DEPENDENT_OBJECTS_STILL_EXIST("2BP01"),
     DUPLICATE_TABLE("42P07"),
     DUPLICATE_COLUMN("42701"),
     DUPLICATE_OBJECT("42710"),

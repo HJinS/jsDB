@@ -49,9 +49,22 @@ class CatalogManagerTest: BehaviorSpec({
             )
         )
     )
+    // Same reasoning: drop cases get their own catalog file too.
+    val dropDbPath = "test-catalog-manager-drop-${Uuid.random()}"
+    val dropConfig = SimpleConfig(
+        storageConfig=StorageConfig(
+            dbPath = dropDbPath,
+            poolSize = 100,
+            midPointLruConfig = MidpointLruConfig(
+                capacity = 100,
+                lruOldBlocksTimeMs = 100
+            )
+        )
+    )
     afterSpec {
         File(dbPath).delete()
         File(scanDbPath).delete()
+        File(dropDbPath).delete()
     }
     given("A Catalog Manager") {
         val catalogManager = initCatalogManager(config)
@@ -206,6 +219,55 @@ class CatalogManagerTest: BehaviorSpec({
                 columns[0].ordinal shouldBe ordinal
                 columns[0].name shouldBe columnName1
                 columns[0].type shouldBe validColumnType
+            }
+        }
+    }
+
+    // Issue #50: DROP TABLE - dropIndex/dropColumns/dropTable should leave zero catalog rows
+    // behind, and the same names should be freely reusable afterward.
+    given("A catalog with a table, two columns, a primary index, and a secondary index") {
+        val dropCatalogManager = initCatalogManager(dropConfig)
+        val tableId = 0L
+        val tableName = "drop_test_table"
+        val primaryIndexName = "drop_test_primary_idx"
+        val secondaryIndexName = "drop_test_secondary_idx"
+
+        dropCatalogManager.registerNewTable(tableId, tableName, null)
+        dropCatalogManager.registerNewColumn(tableId, 0, "id", ColumnType.LONG.name, false)
+        dropCatalogManager.registerNewColumn(tableId, 1, "name", ColumnType.STRING.name, true)
+        dropCatalogManager.registerNewIndex(
+            0L, primaryIndexName, tableName, null, isPrimary = true, isUnique = true,
+            keyColumns = listOf(IndexColumn("id", ColumnType.LONG, false)),
+        )
+        dropCatalogManager.registerNewIndex(
+            1L, secondaryIndexName, tableName, null, isPrimary = false, isUnique = false,
+            keyColumns = listOf(IndexColumn("name", ColumnType.STRING, true)),
+        )
+        dropCatalogManager.updatePrimaryIndexName(tableName, primaryIndexName)
+
+        `when`("dropping both indexes, the columns, and the table"){
+            dropCatalogManager.dropIndex(secondaryIndexName)
+            dropCatalogManager.dropIndex(primaryIndexName)
+            dropCatalogManager.dropColumns(tableId)
+            dropCatalogManager.dropTable(tableName)
+
+            then("no catalog row remains for the table, its columns, or either index"){
+                dropCatalogManager.resolveTable(tableName) shouldBe null
+                dropCatalogManager.resolveIndex(primaryIndexName) shouldBe null
+                dropCatalogManager.resolveIndex(secondaryIndexName) shouldBe null
+                dropCatalogManager.getColumns(tableId) shouldBe emptyList()
+                dropCatalogManager.getIndexes(tableName) shouldBe emptyList()
+            }
+
+            then("the same table/index names can be registered again"){
+                val newTableRow = dropCatalogManager.registerNewTable(tableId + 100L, tableName, null)
+                newTableRow.tableName shouldBe tableName
+                val newIndexRow =
+                    dropCatalogManager.registerNewIndex(
+                        2L, primaryIndexName, tableName, null, isPrimary = true, isUnique = true,
+                        keyColumns = listOf(IndexColumn("id", ColumnType.LONG, false)),
+                    )
+                newIndexRow.indexName shouldBe primaryIndexName
             }
         }
     }
