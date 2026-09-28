@@ -11,6 +11,7 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import java.io.File
 import java.time.LocalDate
+import kotlin.uuid.Uuid
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.serializer
 import schema.ColumnType
@@ -23,7 +24,6 @@ import storageEngine.MetaPageManager
 import storageEngine.StorageManager
 import storageEngine.lru.FrameNodePolicy
 import util.INVALID_PAGE_ID
-import kotlin.uuid.Uuid
 
 /**
  * Test-only wrapper pairing a byte-only [BTree] with the key/value serializers, so existing test
@@ -64,9 +64,9 @@ class TypedBTree<T : Any>(
 
     /**
      * Drains a [BTree.search] scan (the range-scan entry point) into a typed list, for tests that
-     * only care about the sequence of entries a seek + [Cursor.step] walk produces — not [database.Table]'s
-     * open/closed boundary construction, which lives above this layer entirely and is covered by
-     * `TableTest` instead.
+     * only care about the sequence of entries a seek + [Cursor.step] walk produces — not
+     * [database.Table]'s open/closed boundary construction, which lives above this layer entirely
+     * and is covered by `TableTest` instead.
      */
     fun scan(
         key: ByteArray?,
@@ -956,6 +956,28 @@ class BTreeTest :
                     result.map { it.second.id } shouldBe (500L downTo 0L).toList()
                 }
             }
+
+            // Regression test: InternalNode.rightMostChildPageId used to be off by one
+            // (childPageId(keyCount - 1) instead of childPageId(keyCount)), so
+            // findRightMostLeafPageId descended into the wrong (not-actually-rightmost) child at
+            // every internal level - a BACKWARD, no-bound scan on a tree with only a single leaf
+            // (too small to have any internal node at all, see "A Tree used for range-scan
+            // coverage" above) can't catch this; it needs a tree deep enough to actually have
+            // internal nodes, like this 800-record one.
+            `when`("scanning BACKWARD with no bound at all, spanning multiple internal levels") {
+                then("the whole tree comes back descending, via the true rightmost-leaf descent") {
+                    val result = btree.scan(null, ScanDirection.BACKWARD, boundGiven = false)
+                    result.map { it.second.id } shouldBe
+                        (0 until recordCount).map { it.toLong() }.reversed()
+                }
+            }
+
+            `when`("scanning FORWARD with no bound at all, spanning multiple internal levels") {
+                then("the whole tree comes back ascending, via the leftmost-leaf descent") {
+                    val result = btree.scan(null, ScanDirection.FORWARD, boundGiven = false)
+                    result.map { it.second.id } shouldBe (0 until recordCount).map { it.toLong() }
+                }
+            }
         }
 
         given("A Tree with a single descending column that can hold NULL") {
@@ -997,7 +1019,8 @@ class BTreeTest :
         }
     }) {
     companion object {
-        val config = SimpleConfig(StorageConfig(dbPath = "test-btree-${Uuid.random()}.db", poolSize = 100))
+        val config =
+            SimpleConfig(StorageConfig(dbPath = "test-btree-${Uuid.random()}.db", poolSize = 100))
         val diskManager = DiskManager(config.storageConfig, config.indexConfig)
         val lruPolicy = FrameNodePolicy(config.storageConfig.midPointLruConfig)
         val bufferPoolManager =
