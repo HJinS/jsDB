@@ -4,14 +4,18 @@ import catalog.CatalogManager
 import config.SimpleConfig
 import exception.CatalogException
 import exception.DatabaseException
+import exception.TableException
 import index.btree.BTree
 import index.serializer.BinaryRowSerializer
 import index.serializer.MultiColumnKeySerializer
+import java.util.Arrays
 import kotlin.String
 import schema.ColumnRow
 import schema.IndexColumn
 import schema.IndexHandle
 import schema.IndexKeySchema
+import schema.Row
+import schema.RowColumn
 import schema.RowSchema
 import schema.toPrimaryRowSchema
 import schema.toRowColumn
@@ -149,8 +153,60 @@ class DataBase(private val config: SimpleConfig) {
             )
         }
 
-        val indexId = metaPageManager.getNextId(MetaPageOffset.NEXT_INDEX_ID)
+        val keySerializer = MultiColumnKeySerializer(keySchema)
         val valueSchema = resolveIndexValueSchema(primaryIdxName, tableName, isPrimary)
+        val valueSerializer = BinaryRowSerializer(valueSchema)
+
+        // A secondary index created on an already-populated table must start backfilled with
+        // every existing row - a brand-new empty BTree would otherwise silently miss every row
+        // inserted before this index existed. Computed (and, if isUnique, validated) *before* the
+        // catalog row/BTree are created at all, so a uniqueness violation leaves nothing to clean
+        // up (no WAL to roll back a partially-built index with).
+        val backfillEntries: List<Pair<ByteArray, ByteArray>>? =
+            if (isPrimary) {
+                null
+            } else {
+                val resolvedPrimaryIdxName = primaryIdxName ?: PRIMARY_KEY_IDX_NAME_PREFIX.format(tableName)
+                val primaryHandle = loadIndex(resolvedPrimaryIdxName)
+                val primaryRowSchema = resolveIndexValueSchema(null, tableName, true)
+                val primaryValueSerializer = BinaryRowSerializer(primaryRowSchema)
+                val entries =
+                    primaryHandle.btree.traverse().map { (_, rowBytes) ->
+                        val row = Row(primaryRowSchema, primaryValueSerializer.deserialize(rowBytes).first)
+                        val keyValues = keySchema.indexColumns.map { row[it.name] }
+                        val indexKey = keySerializer.serialize(keyValues)
+                        // A secondary index's *value* is the primary key, but valueSerializer-encoded
+                        // - a different byte layout than primaryHandle's own keySerializer bytes (see
+                        // Table.updateRow's doc for why mixing these up is a real, easy-to-miss bug).
+                        val indexValue = valueSerializer.serialize(primaryHandle.extractKey(row))
+                        Triple(indexKey, indexValue, keyValues.any { it == null })
+                    }
+                if (isUnique) {
+                    // NULL is never considered equal to another NULL for uniqueness (standard SQL
+                    // semantics: NULL != NULL) - only compare entries where every key column is
+                    // non-null, so rows that are merely both-NULL don't falsely collide.
+                    val sortedKeys =
+                        entries.filter { (_, _, hasNullKey) -> !hasNullKey }
+                            .map { it.first }
+                            .sortedWith(Arrays::compareUnsigned)
+                    for (i in 1 until sortedKeys.size) {
+                        requireOrThrow(!(sortedKeys[i - 1] contentEquals sortedKeys[i])) {
+                            TableException.UniqueViolation(
+                                SQLErrorDetail(
+                                    entityType = EntityType.INDEX,
+                                    entityName = indexName,
+                                    tableName = tableName,
+                                    columnNames = keySchema.indexColumns.map { it.name },
+                                    reason = "Existing rows already violate uniqueness on this column set.",
+                                )
+                            )
+                        }
+                    }
+                }
+                entries.map { (indexKey, indexValue, _) -> indexKey to indexValue }
+            }
+
+        val indexId = metaPageManager.getNextId(MetaPageOffset.NEXT_INDEX_ID)
         val indexData =
             catalogManager.registerNewIndex(
                 indexId,
@@ -172,11 +228,12 @@ class DataBase(private val config: SimpleConfig) {
                     catalogManager.updateIndexRootPageId(indexName, newRoot)
                 },
             )
+        backfillEntries?.forEach { (indexKey, indexValue) -> index.insert(indexKey, indexValue) }
         return IndexHandle(
             indexData,
             index,
-            MultiColumnKeySerializer(keySchema),
-            BinaryRowSerializer(valueSchema),
+            keySerializer,
+            valueSerializer,
         )
     }
 
@@ -369,10 +426,11 @@ class DataBase(private val config: SimpleConfig) {
      * [dropTable] (issue #49).
      */
     fun dropIndex(indexName: String) {
-        val indexData = catalogManager.resolveIndex(indexName)
-            ?: throw CatalogException.UndefinedObject(
-                SQLErrorDetail(entityType = EntityType.INDEX, entityName = indexName)
-            )
+        val indexData =
+            catalogManager.resolveIndex(indexName)
+                ?: throw CatalogException.UndefinedObject(
+                    SQLErrorDetail(entityType = EntityType.INDEX, entityName = indexName)
+                )
         requireOrThrow(!indexData.isPrimary) {
             DatabaseException.DependentObjectsExist(
                 SQLErrorDetail(
@@ -387,9 +445,132 @@ class DataBase(private val config: SimpleConfig) {
         catalogManager.dropIndex(indexName)
     }
 
+    fun addColumn(
+        tableName: String,
+        name: String,
+        type: String,
+        nullable: Boolean,
+        defaultValue: Any?,
+    ) {
+        requireOrThrow(nullable || defaultValue != null) {
+            DatabaseException.NotNullViolation(
+                SQLErrorDetail(
+                    entityType = EntityType.COLUMN,
+                    entityName = name,
+                    tableName = tableName,
+                    reason =
+                        "ADD COLUMN requires nullable = true until default values are supported " +
+                            "- every existing row would otherwise need a value for '$name'.",
+                )
+            )
+        }
+        val tableData =
+            catalogManager.resolveTable(tableName)
+                ?: throw CatalogException.UndefinedTable(
+                    SQLErrorDetail(entityType = EntityType.TABLE, entityName = tableName)
+                )
+        val primaryIdxName =
+            tableData.primaryIndexName
+                ?: throw DatabaseException.UndefinedObject(
+                    SQLErrorDetail(entityType = EntityType.PRIMARY_INDEX, tableName = tableName)
+                )
+
+        val primaryIdxHandle = loadIndex(primaryIdxName)
+        val tableId = tableData.tableId
+        val columns = catalogManager.getColumns(tableId)
+
+        requireOrThrow(columns.none { it.name == name }) {
+            DatabaseException.DuplicateColumn(
+                SQLErrorDetail(
+                    entityType = EntityType.COLUMN,
+                    entityName = name,
+                    tableName = tableName,
+                )
+            )
+        }
+
+        // Must be resolved before createColumn registers the new column below - otherwise this
+        // would read the catalog's already-updated (N+1 column) state and misinterpret the still
+        // N-column bytes actually on disk.
+        val oldRowSchema = resolveIndexValueSchema(null, tableName, true)
+
+        val ordinal = columns.size
+        val columnRow = createColumn(tableId, ordinal, name, type, nullable)
+
+        val primaryBTree = primaryIdxHandle.btree
+        val newRowSchema = appendColumnToSchema(oldRowSchema, columnRow)
+        val newSerializer = BinaryRowSerializer(newRowSchema)
+        val oldSerializer = BinaryRowSerializer(oldRowSchema)
+        primaryBTree.traverse().forEach { (key, oldValueBytes) ->
+            val oldValues = oldSerializer.deserialize(oldValueBytes).first
+            val newValues = oldValues + defaultValue
+            val newValueBytes = newSerializer.serialize(newValues)
+            primaryBTree.update(key, key, newValueBytes)
+        }
+    }
+
+    fun dropColumn(tableName: String, name: String) {
+        val tableData =
+            catalogManager.resolveTable(tableName)
+                ?: throw CatalogException.UndefinedTable(
+                    SQLErrorDetail(entityType = EntityType.TABLE, entityName = tableName)
+                )
+        val primaryIdxName =
+            tableData.primaryIndexName
+                ?: throw DatabaseException.UndefinedObject(
+                    SQLErrorDetail(entityType = EntityType.PRIMARY_INDEX, tableName = tableName)
+                )
+
+        val primaryIdxHandle = loadIndex(primaryIdxName)
+        val tableId = tableData.tableId
+        val columns = catalogManager.getColumns(tableId)
+
+        val targetColumn = columns.firstOrNull { it.name == name }
+        requireOrThrow(targetColumn != null) {
+            DatabaseException.UndefinedColumn(
+                SQLErrorDetail(
+                    entityType = EntityType.COLUMN,
+                    entityName = name,
+                    tableName = tableName,
+                )
+            )
+        }
+
+        val referencingIndexes =
+            catalogManager.getIndexes(tableName).filter { idx ->
+                idx.keyColumns.any { it.name == name }
+            }
+        requireOrThrow(referencingIndexes.isEmpty()) {
+            DatabaseException.DependentObjectsExist(
+                SQLErrorDetail(
+                    entityType = EntityType.COLUMN,
+                    entityName = name,
+                    tableName = tableName,
+                    reason =
+                        "Column '$name' is used by index(es) " +
+                            referencingIndexes.joinToString { it.indexName } +
+                            " - drop them first.",
+                )
+            )
+        }
+
+        val primaryBTree = primaryIdxHandle.btree
+        val oldRowSchema = resolveIndexValueSchema(null, tableName, true)
+        val newRowSchema = deleteColumnFromSchema(oldRowSchema, targetColumn.ordinal)
+        val newSerializer = BinaryRowSerializer(newRowSchema)
+        val oldSerializer = BinaryRowSerializer(oldRowSchema)
+        primaryBTree.traverse().forEach { (key, oldValueBytes) ->
+            val oldValues = oldSerializer.deserialize(oldValueBytes).first.toMutableList()
+            oldValues.removeAt(targetColumn.ordinal)
+            val newValues = oldValues.toList()
+            val newValueBytes = newSerializer.serialize(newValues)
+            primaryBTree.update(key, key, newValueBytes)
+        }
+        catalogManager.removeColumn(tableId, targetColumn.ordinal)
+    }
 
     /** Registers one column of an existing table in the catalog. */
-    fun createColumn(
+    private fun createColumn(
         tableId: Long,
         ordinal: Int,
         name: String,
@@ -449,5 +630,19 @@ class DataBase(private val config: SimpleConfig) {
                     )
             IndexKeySchema(primaryIndexRow.keyColumns).toPrimaryRowSchema()
         }
+    }
+
+    /** Builds the [RowSchema] that results from appending [newColumn] to [oldSchema]'s end. */
+    private fun appendColumnToSchema(oldSchema: RowSchema, newColumn: ColumnRow): RowSchema {
+        val newRowColumns = oldSchema.rowColumns.map { it.copy() }.toMutableList()
+        newRowColumns.addLast(RowColumn(newColumn.name, newColumn.type, newColumn.nullable, null))
+        return RowSchema(newRowColumns.toList())
+    }
+
+    /** Builds the [RowSchema] that results from appending [newColumn] to [oldSchema]'s end. */
+    private fun deleteColumnFromSchema(oldSchema: RowSchema, ordinal: Int): RowSchema {
+        val newRowColumns = oldSchema.rowColumns.map { it.copy() }.toMutableList()
+        newRowColumns.removeAt(ordinal)
+        return RowSchema(newRowColumns.toList())
     }
 }

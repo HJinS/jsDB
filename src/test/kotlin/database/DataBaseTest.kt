@@ -4,6 +4,7 @@ import exception.CatalogException
 import config.SimpleConfig
 import config.StorageConfig
 import exception.DatabaseException
+import exception.TableException
 import schema.ColumnType
 import schema.IndexColumn
 import schema.IndexKeySchema
@@ -300,6 +301,192 @@ class DataBaseTest: BehaviorSpec({
                 db.loadTable(tableName).selectByKey(listOf(1L)).shouldNotBeNull {
                     this["column1"] shouldBe 99
                 }
+            }
+        }
+    }
+
+    // Issue #51: ADD COLUMN / DROP COLUMN
+    given("A table with bulk rows (spanning multiple leaves) and a secondary index"){
+        val dbPath = "test-database-addcol-dropcol-${Uuid.random()}.db"
+        val config = SimpleConfig(StorageConfig(dbPath = dbPath, poolSize = 100))
+        val db = DataBase(config).apply { initialize() }
+        afterSpec { db.close(); File(dbPath).delete() }
+
+        val tableName = "ac-dc-table"
+        val primaryIdxName = "ac-dc-primary"
+        val columns = RowSchema(listOf(
+            RowColumn("id", ColumnType.LONG, false, 0),
+            RowColumn("score", ColumnType.INT, true, null),
+        ))
+        val table = db.createTable(tableName, primaryIdxName, columns)
+        val rowCount = 500
+        for (id in 1L..rowCount) {
+            table.insertRow(Row(columns, listOf(id, id.toInt())))
+        }
+        val indexOnScore = "ac-dc-idx-score"
+        db.createIndex(
+            indexOnScore,
+            primaryIdxName,
+            tableName,
+            isPrimary = false,
+            isUnique = false,
+            keySchema = IndexKeySchema(listOf(IndexColumn("score", ColumnType.INT, false))),
+        )
+
+        `when`("Dropping a column a secondary index references"){
+            then("DependentObjectsExist should be thrown"){
+                shouldThrow<DatabaseException.DependentObjectsExist> {
+                    db.dropColumn(tableName, "score")
+                }
+            }
+        }
+
+        `when`("Dropping the primary key column"){
+            then("DependentObjectsExist should be thrown"){
+                shouldThrow<DatabaseException.DependentObjectsExist> {
+                    db.dropColumn(tableName, "id")
+                }
+            }
+        }
+
+        `when`("Dropping a non-existent column"){
+            then("UndefinedColumn should be thrown"){
+                shouldThrow<DatabaseException.UndefinedColumn> {
+                    db.dropColumn(tableName, "does-not-exist")
+                }
+            }
+        }
+
+        `when`("Adding a non-nullable column with no default value"){
+            then("NotNullViolation should be thrown"){
+                shouldThrow<DatabaseException.NotNullViolation> {
+                    db.addColumn(tableName, "required", ColumnType.INT.name, nullable = false, defaultValue = null)
+                }
+            }
+        }
+
+        `when`("Adding a nullable column (no default)"){
+            db.addColumn(tableName, "label", ColumnType.STRING.name, nullable = true, defaultValue = null)
+            then("every one of the $rowCount rows (spanning multiple leaves) reads back correctly, new column null"){
+                val reloaded = db.loadTable(tableName)
+                for (id in 1L..rowCount) {
+                    reloaded.selectByKey(listOf(id)).shouldNotBeNull {
+                        this["score"] shouldBe id.toInt()
+                        this["label"] shouldBe null
+                    }
+                }
+            }
+        }
+
+        `when`("Adding a non-nullable column WITH a default value"){
+            db.addColumn(tableName, "flag", ColumnType.BOOLEAN.name, nullable = false, defaultValue = true)
+            then("every existing row gets backfilled with the default value"){
+                val reloaded = db.loadTable(tableName)
+                reloaded.selectByKey(listOf(1L)).shouldNotBeNull { this["flag"] shouldBe true }
+                reloaded.selectByKey(listOf(rowCount.toLong())).shouldNotBeNull { this["flag"] shouldBe true }
+            }
+        }
+
+        `when`("Adding a column whose name already exists"){
+            then("DuplicateColumn should be thrown"){
+                shouldThrow<DatabaseException.DuplicateColumn> {
+                    db.addColumn(tableName, "score", ColumnType.INT.name, nullable = true, defaultValue = null)
+                }
+            }
+        }
+
+        `when`("Dropping the unreferenced 'label' column"){
+            db.dropColumn(tableName, "label")
+            then("every one of the $rowCount rows is still correct across every other column"){
+                val reloaded = db.loadTable(tableName)
+                for (id in 1L..rowCount) {
+                    reloaded.selectByKey(listOf(id)).shouldNotBeNull {
+                        this["score"] shouldBe id.toInt()
+                        this["flag"] shouldBe true
+                    }
+                }
+            }
+            then("the freed ordinal can be reused by a new column without colliding"){
+                db.addColumn(tableName, "note", ColumnType.STRING.name, nullable = true, defaultValue = null)
+                db.loadTable(tableName).selectByKey(listOf(1L)).shouldNotBeNull { this["note"] shouldBe null }
+            }
+        }
+    }
+
+    // createIndex: a secondary index created on an already-populated table must be backfilled
+    // with the existing rows, and (if isUnique) validated against them first - NULL-safely.
+    given("A table with bulk rows, then a secondary index created afterward"){
+        val dbPath = "test-database-index-backfill-${Uuid.random()}.db"
+        val config = SimpleConfig(StorageConfig(dbPath = dbPath, poolSize = 100))
+        val db = DataBase(config).apply { initialize() }
+        afterSpec { db.close(); File(dbPath).delete() }
+
+        val tableName = "backfill-table"
+        val primaryIdxName = "backfill-primary"
+        val columns = RowSchema(listOf(
+            RowColumn("id", ColumnType.LONG, false, 0),
+            RowColumn("email", ColumnType.STRING, true, null),
+            RowColumn("nickname", ColumnType.STRING, true, null),
+        ))
+        val table = db.createTable(tableName, primaryIdxName, columns)
+        val rowCount = 500
+        for (id in 1L..rowCount) {
+            // nickname is left NULL for every row here on purpose - used later to test that
+            // multiple NULLs don't violate a UNIQUE index.
+            table.insertRow(Row(columns, listOf(id, "user$id@example.com", null)))
+        }
+
+        `when`("creating a non-unique secondary index on 'email' after the data already exists"){
+            val indexName = "backfill-idx-email"
+            db.createIndex(
+                indexName,
+                primaryIdxName,
+                tableName,
+                isPrimary = false,
+                isUnique = false,
+                keySchema = IndexKeySchema(listOf(IndexColumn("email", ColumnType.STRING, false))),
+            )
+            then("every one of the $rowCount pre-existing rows (spanning multiple leaves) is findable through the new index"){
+                val reloaded = db.loadTable(tableName)
+                for (id in 1L..rowCount) {
+                    reloaded.selectByIndex(indexName, listOf("user$id@example.com")).shouldNotBeNull {
+                        this["id"] shouldBe id
+                    }
+                }
+            }
+        }
+
+        `when`("creating a UNIQUE secondary index on a column with duplicate existing values"){
+            table.insertRow(Row(columns, listOf(rowCount + 1L, "dup@example.com", null)))
+            table.insertRow(Row(columns, listOf(rowCount + 2L, "dup@example.com", null)))
+            then("UniqueViolation should be thrown, and no index/catalog row is left behind"){
+                val dupIndexName = "backfill-idx-email-unique"
+                shouldThrow<TableException.UniqueViolation> {
+                    db.createIndex(
+                        dupIndexName,
+                        primaryIdxName,
+                        tableName,
+                        isPrimary = false,
+                        isUnique = true,
+                        keySchema = IndexKeySchema(listOf(IndexColumn("email", ColumnType.STRING, false))),
+                    )
+                }
+                shouldThrow<CatalogException.UndefinedObject> {
+                    db.loadIndex(dupIndexName)
+                }
+            }
+        }
+
+        `when`("creating a UNIQUE secondary index on a nullable column where every existing row is NULL"){
+            then("index creation succeeds - NULL != NULL, so multiple NULLs don't violate uniqueness"){
+                db.createIndex(
+                    "backfill-idx-nickname-unique",
+                    primaryIdxName,
+                    tableName,
+                    isPrimary = false,
+                    isUnique = true,
+                    keySchema = IndexKeySchema(listOf(IndexColumn("nickname", ColumnType.STRING, false))),
+                )
             }
         }
     }
