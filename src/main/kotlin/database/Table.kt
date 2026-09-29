@@ -13,6 +13,8 @@ import schema.RowSchema
 import util.EntityType
 import util.SQLErrorDetail
 import util.requireOrThrow
+import java.util.concurrent.locks.Lock
+import kotlin.concurrent.withLock
 
 /**
  * Row-level CRUD for one table, built on top of its indexes' byte-only [index.btree.BTree]s. This
@@ -32,6 +34,7 @@ class Table(
     private val rowSchema: RowSchema,
     private val primaryIndex: IndexHandle,
     private val secondaryIndexes: Map<String, IndexHandle>,
+    private val readLock: Lock
 ) {
 
     /**
@@ -45,56 +48,60 @@ class Table(
      * same purpose (see the note there for why this mattered).
      */
     fun insertRow(row: Row) {
-        val primaryTree = primaryIndex.btree
-        val primaryKey = primaryIndex.extractKey(row)
-        val primarySerialized = primaryIndex.keySerializer.serialize(primaryKey)
-        if (primaryTree.search(primarySerialized) != null)
-            throw TableException.UniqueViolation(
-                SQLErrorDetail(
-                    entityType = EntityType.PRIMARY_INDEX,
-                    entityName = primaryIndex.metadata.indexName,
-                    tableName = primaryIndex.metadata.tableName,
-                    columnNames = primaryIndex.columnNames,
-                )
-            )
-
-        for ((_, handle) in secondaryIndexes) {
-            val indexKey = handle.extractKey(row)
-            val indexSerialized = handle.keySerializer.serialize(indexKey)
-            if (handle.metadata.isUnique && handle.btree.search(indexSerialized) != null) {
+        readLock.withLock { 
+            val primaryTree = primaryIndex.btree
+            val primaryKey = primaryIndex.extractKey(row)
+            val primarySerialized = primaryIndex.keySerializer.serialize(primaryKey)
+            if (primaryTree.search(primarySerialized) != null)
                 throw TableException.UniqueViolation(
                     SQLErrorDetail(
-                        entityType = EntityType.INDEX,
-                        entityName = handle.metadata.indexName,
-                        tableName = handle.metadata.tableName,
-                        columnNames = handle.columnNames,
+                        entityType = EntityType.PRIMARY_INDEX,
+                        entityName = primaryIndex.metadata.indexName,
+                        tableName = primaryIndex.metadata.tableName,
+                        columnNames = primaryIndex.columnNames,
                     )
                 )
-            }
-        }
-        val rowSerialized = primaryIndex.valueSerializer.serialize(row.toList())
-        primaryTree.insert(primarySerialized, rowSerialized)
 
-        for ((_, handle) in secondaryIndexes) {
-            val indexKey = handle.extractKey(row)
-            val indexSerialized = handle.keySerializer.serialize(indexKey)
-            val indexValueSerialized = handle.valueSerializer.serialize(primaryKey)
-            handle.btree.insert(indexSerialized, indexValueSerialized)
+            for ((_, handle) in secondaryIndexes) {
+                val indexKey = handle.extractKey(row)
+                val indexSerialized = handle.keySerializer.serialize(indexKey)
+                if (handle.metadata.isUnique && handle.btree.search(indexSerialized) != null) {
+                    throw TableException.UniqueViolation(
+                        SQLErrorDetail(
+                            entityType = EntityType.INDEX,
+                            entityName = handle.metadata.indexName,
+                            tableName = handle.metadata.tableName,
+                            columnNames = handle.columnNames,
+                        )
+                    )
+                }
+            }
+            val rowSerialized = primaryIndex.valueSerializer.serialize(row.toList())
+            primaryTree.insert(primarySerialized, rowSerialized)
+
+            for ((_, handle) in secondaryIndexes) {
+                val indexKey = handle.extractKey(row)
+                val indexSerialized = handle.keySerializer.serialize(indexKey)
+                val indexValueSerialized = handle.valueSerializer.serialize(primaryKey)
+                handle.btree.insert(indexSerialized, indexValueSerialized)
+            }
         }
     }
 
     /** Point lookup by primary key. Returns null if no row is stored under [key]. */
     fun selectByKey(key: List<Any?>): Row? {
-        val primaryTree = primaryIndex.btree
-        val keySerialized = primaryIndex.keySerializer.serialize(key)
-        val searchResult = primaryTree.search(keySerialized)
-        return searchResult?.let { extractData(primaryIndex, it) }
+        readLock.withLock { 
+            val primaryTree = primaryIndex.btree
+            val keySerialized = primaryIndex.keySerializer.serialize(key)
+            val searchResult = primaryTree.search(keySerialized)
+            return searchResult?.let { extractData(primaryIndex, it) }
+        }
     }
 
     /**
      * Runs a range scan over [indexName] between [lowerBound] and [upperBound], in the order
      * requested by [orderBy], and returns every matching row eagerly as a [List] (never a lazy
-     * [Cursor] — see the locking note below for why).
+     * [index.btree.Cursor] — see the locking note below for why).
      *
      * ### This is also how prefix search works
      * There is no separate mechanism for a pure prefix search (e.g. `col1 = 5`) — it's just the
@@ -132,56 +139,58 @@ class Table(
         upperBound: Bound<List<Any?>>,
         orderBy: List<ColumnOrder>,
     ): List<Row> {
-        val index = resolveIndex(indexName)
-        val keyColumns = index.metadata.keyColumns
-        val prefixLen = resolveEqualPrefixLen(lowerBound, upperBound)
-        val scanDirection = resolveScanDirection(keyColumns, orderBy, prefixLen)
-        val (start, end) = resolveBoundOrder(lowerBound, upperBound, scanDirection)
-        val serializedStartBound =
-            start.value?.let {
-                serializeBound(
-                    index.keySerializer,
-                    start.value,
-                    scanDirection,
-                    start.isInclusive,
-                    true,
-                )
-            }
-        val serializedEndBound =
-            end.value?.let {
-                serializeBound(
-                    index.keySerializer,
-                    end.value,
-                    scanDirection,
-                    end.isInclusive,
-                    false,
-                )
-            }
-        val cursor =
-            index.btree.search(serializedStartBound, scanDirection, start.value != null)
-                ?: return emptyList()
-        val result = mutableListOf<Row>()
-        cursor.use {
-            while (true) {
-                val entry = it.step() ?: break
-                val (currentKey, currentValue) = entry
-                if (serializedEndBound != null) {
-                    val result = Arrays.compareUnsigned(currentKey, serializedEndBound)
-                    when (scanDirection) {
-                        ScanDirection.FORWARD ->
-                            when {
-                                result >= 0 -> break
-                            }
-                        ScanDirection.BACKWARD ->
-                            when {
-                                result < 0 -> break
-                            }
-                    }
+        readLock.withLock { 
+            val index = resolveIndex(indexName)
+            val keyColumns = index.metadata.keyColumns
+            val prefixLen = resolveEqualPrefixLen(lowerBound, upperBound)
+            val scanDirection = resolveScanDirection(keyColumns, orderBy, prefixLen)
+            val (start, end) = resolveBoundOrder(lowerBound, upperBound, scanDirection)
+            val serializedStartBound =
+                start.value?.let {
+                    serializeBound(
+                        index.keySerializer,
+                        start.value,
+                        scanDirection,
+                        start.isInclusive,
+                        true,
+                    )
                 }
-                result.add(extractData(index, currentValue))
+            val serializedEndBound =
+                end.value?.let {
+                    serializeBound(
+                        index.keySerializer,
+                        end.value,
+                        scanDirection,
+                        end.isInclusive,
+                        false,
+                    )
+                }
+            val cursor =
+                index.btree.search(serializedStartBound, scanDirection, start.value != null)
+                    ?: return emptyList()
+            val result = mutableListOf<Row>()
+            cursor.use {
+                while (true) {
+                    val entry = it.step() ?: break
+                    val (currentKey, currentValue) = entry
+                    if (serializedEndBound != null) {
+                        val result = Arrays.compareUnsigned(currentKey, serializedEndBound)
+                        when (scanDirection) {
+                            ScanDirection.FORWARD ->
+                                when {
+                                    result >= 0 -> break
+                                }
+                            ScanDirection.BACKWARD ->
+                                when {
+                                    result < 0 -> break
+                                }
+                        }
+                    }
+                    result.add(extractData(index, currentValue))
+                }
             }
+            return result.toList()
         }
-        return result.toList()
     }
 
     /**
@@ -195,8 +204,10 @@ class Table(
         prefix: List<Any?>,
         orderBy: List<ColumnOrder>,
     ): List<Row> {
-        val bound = Bound(prefix, isInclusive = true)
-        return selectByRange(indexName, bound, bound, orderBy)
+        readLock.withLock {
+            val bound = Bound(prefix, isInclusive = true)
+            return selectByRange(indexName, bound, bound, orderBy)
+        }
     }
 
     /**
@@ -207,10 +218,12 @@ class Table(
      * index-consistency failure rather than a plain miss.
      */
     fun selectByIndex(indexName: String, key: List<Any?>): Row? {
-        val index = resolveIndex(indexName)
-        val keySerialized = index.keySerializer.serialize(key)
-        val searchedPrimaryKey = index.btree.search(keySerialized) ?: return null
-        return extractData(index, searchedPrimaryKey)
+        readLock.withLock { 
+            val index = resolveIndex(indexName)
+            val keySerialized = index.keySerializer.serialize(key)
+            val searchedPrimaryKey = index.btree.search(keySerialized) ?: return null
+            return extractData(index, searchedPrimaryKey)
+        }
     }
 
     /**
@@ -226,57 +239,61 @@ class Table(
      * the exact bytes written to a mocked secondary btree is what caught it.
      */
     fun updateRow(row: Row) {
-        val primaryTree = primaryIndex.btree
-        val primaryKey = primaryIndex.extractKey(row)
-        val primaryKeySerialized = primaryIndex.keySerializer.serialize(primaryKey)
-        val oldRow =
-            primaryTree.search(primaryKeySerialized)?.let { extractData(primaryIndex, it) }
-                ?: throw TableException.RowNotFound(
-                    SQLErrorDetail(
-                        entityType = EntityType.ROW,
-                        tableName = primaryIndex.metadata.tableName,
+        readLock.withLock { 
+            val primaryTree = primaryIndex.btree
+            val primaryKey = primaryIndex.extractKey(row)
+            val primaryKeySerialized = primaryIndex.keySerializer.serialize(primaryKey)
+            val oldRow =
+                primaryTree.search(primaryKeySerialized)?.let { extractData(primaryIndex, it) }
+                    ?: throw TableException.RowNotFound(
+                        SQLErrorDetail(
+                            entityType = EntityType.ROW,
+                            tableName = primaryIndex.metadata.tableName,
+                        )
                     )
-                )
 
-        primaryTree.update(
-            primaryKeySerialized,
-            primaryKeySerialized,
-            primaryIndex.valueSerializer.serialize(row.toList()),
-        )
+            primaryTree.update(
+                primaryKeySerialized,
+                primaryKeySerialized,
+                primaryIndex.valueSerializer.serialize(row.toList()),
+            )
 
-        for ((_, handle) in secondaryIndexes) {
-            val oldKey = handle.extractKey(oldRow)
-            val oldKeySerialized = handle.keySerializer.serialize(oldKey)
-            val newKey = handle.extractKey(row)
-            val newKeySerialized = handle.keySerializer.serialize(newKey)
-            val indexValueSerialized = handle.valueSerializer.serialize(primaryKey)
-            if (oldKeySerialized.contentEquals(newKeySerialized)) {
-                handle.btree.update(oldKeySerialized, oldKeySerialized, indexValueSerialized)
-            } else {
-                handle.btree.delete(oldKeySerialized)
-                handle.btree.insert(newKeySerialized, indexValueSerialized)
+            for ((_, handle) in secondaryIndexes) {
+                val oldKey = handle.extractKey(oldRow)
+                val oldKeySerialized = handle.keySerializer.serialize(oldKey)
+                val newKey = handle.extractKey(row)
+                val newKeySerialized = handle.keySerializer.serialize(newKey)
+                val indexValueSerialized = handle.valueSerializer.serialize(primaryKey)
+                if (oldKeySerialized.contentEquals(newKeySerialized)) {
+                    handle.btree.update(oldKeySerialized, oldKeySerialized, indexValueSerialized)
+                } else {
+                    handle.btree.delete(oldKeySerialized)
+                    handle.btree.insert(newKeySerialized, indexValueSerialized)
+                }
             }
         }
     }
 
     /** Deletes the row at [key] from the primary index and every secondary index. */
     fun deleteRow(key: List<Any?>) {
-        val primaryTree = primaryIndex.btree
-        val keySerialized = primaryIndex.keySerializer.serialize(key)
-        val oldRow =
-            primaryTree.search(keySerialized)?.let { extractData(primaryIndex, it) }
-                ?: throw TableException.RowNotFound(
-                    SQLErrorDetail(
-                        entityType = EntityType.ROW,
-                        tableName = primaryIndex.metadata.tableName,
+        readLock.withLock { 
+            val primaryTree = primaryIndex.btree
+            val keySerialized = primaryIndex.keySerializer.serialize(key)
+            val oldRow =
+                primaryTree.search(keySerialized)?.let { extractData(primaryIndex, it) }
+                    ?: throw TableException.RowNotFound(
+                        SQLErrorDetail(
+                            entityType = EntityType.ROW,
+                            tableName = primaryIndex.metadata.tableName,
+                        )
                     )
-                )
-        for ((_, handle) in secondaryIndexes) {
-            val indexKey = handle.extractKey(oldRow)
-            val indexKeySerialized = handle.keySerializer.serialize(indexKey)
-            handle.btree.delete(indexKeySerialized)
+            for ((_, handle) in secondaryIndexes) {
+                val indexKey = handle.extractKey(oldRow)
+                val indexKeySerialized = handle.keySerializer.serialize(indexKey)
+                handle.btree.delete(indexKeySerialized)
+            }
+            primaryTree.delete(keySerialized)
         }
-        primaryTree.delete(keySerialized)
     }
 
     /**
@@ -353,7 +370,7 @@ class Table(
      * FORWARD walks the tree byte-ascending, so it seeks off the lower bound and stops at the
      * upper; BACKWARD is the mirror image. [index.btree.BTree.search] only ever needs the seek side
      * — the stop side is never passed into the tree at all, and is instead checked by
-     * [selectByRange] itself against each [Cursor.step] result.
+     * [selectByRange] itself against each [index.btree.Cursor.step] result.
      */
     private fun <K> resolveBoundOrder(
         lower: Bound<K>,
