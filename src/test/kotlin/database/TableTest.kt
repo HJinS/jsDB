@@ -27,6 +27,7 @@ import schema.IndexRow
 import schema.Row
 import schema.RowColumn
 import schema.RowSchema
+import java.util.concurrent.locks.ReentrantReadWriteLock
 
 class TableTest :
     BehaviorSpec({
@@ -99,6 +100,11 @@ class TableTest :
         val compositeValueSerializer =
             BinaryRowSerializer(RowSchema(listOf(RowColumn("id", ColumnType.LONG, false, 0))))
 
+        // Table's DML methods just need *some* Lock to acquire per call - these tests exercise a
+        // single Table in isolation (no DataBase, no cross-table sharing to verify), so a
+        // throwaway lock of its own is enough; see DataBase for the real shared-lock wiring.
+        val testReadLock = ReentrantReadWriteLock().readLock()
+
         fun compositeHandle(btree: BTree) =
             IndexHandle(
                 IndexRow(
@@ -123,6 +129,7 @@ class TableTest :
                     rowSchema,
                     primaryHandle(primaryBtree),
                     mapOf("email_idx" to secondaryHandle(secondaryBtree)),
+                    testReadLock,
                 )
             every {
                 primaryBtree.search(eqBytes(primaryKeySerializer.serialize(listOf(1L))))
@@ -163,6 +170,7 @@ class TableTest :
                     rowSchema,
                     primaryHandle(primaryBtree),
                     mapOf("email_idx" to secondaryHandle(secondaryBtree)),
+                    testReadLock,
                 )
             every {
                 primaryBtree.search(eqBytes(primaryKeySerializer.serialize(listOf(1L))))
@@ -185,6 +193,7 @@ class TableTest :
                     rowSchema,
                     primaryHandle(primaryBtree),
                     mapOf("email_idx" to secondaryHandle(secondaryBtree)),
+                    testReadLock,
                 )
             every {
                 primaryBtree.search(eqBytes(primaryKeySerializer.serialize(listOf(1L))))
@@ -210,6 +219,7 @@ class TableTest :
                     rowSchema,
                     primaryHandle(primaryBtree),
                     mapOf("email_idx" to secondaryHandle(secondaryBtree, isUnique = false)),
+                    testReadLock,
                 )
             every {
                 primaryBtree.search(eqBytes(primaryKeySerializer.serialize(listOf(1L))))
@@ -239,6 +249,7 @@ class TableTest :
                     rowSchema,
                     primaryHandle(primaryBtree),
                     emptyMap(),
+                    testReadLock,
                 )
             every {
                 primaryBtree.search(eqBytes(primaryKeySerializer.serialize(listOf(1L))))
@@ -260,6 +271,7 @@ class TableTest :
                     rowSchema,
                     primaryHandle(primaryBtree),
                     emptyMap(),
+                    testReadLock,
                 )
             every {
                 primaryBtree.search(eqBytes(primaryKeySerializer.serialize(listOf(999L))))
@@ -280,6 +292,7 @@ class TableTest :
                     rowSchema,
                     primaryHandle(primaryBtree),
                     mapOf("email_idx" to secondaryHandle(secondaryBtree)),
+                    testReadLock,
                 )
             every {
                 secondaryBtree.search(eqBytes(secondaryKeySerializer.serialize(listOf("a@x.com"))))
@@ -305,6 +318,7 @@ class TableTest :
                     rowSchema,
                     primaryHandle(primaryBtree),
                     mapOf("email_idx" to secondaryHandle(secondaryBtree)),
+                    testReadLock,
                 )
             every {
                 secondaryBtree.search(
@@ -326,6 +340,7 @@ class TableTest :
                     rowSchema,
                     primaryHandle(primaryBtree),
                     emptyMap(),
+                    testReadLock,
                 )
 
             `when`("selecting via that unknown index name") {
@@ -344,6 +359,7 @@ class TableTest :
                     rowSchema,
                     primaryHandle(primaryBtree),
                     emptyMap(),
+                    testReadLock,
                 )
             every {
                 primaryBtree.search(eqBytes(primaryKeySerializer.serialize(listOf(1L))))
@@ -366,6 +382,7 @@ class TableTest :
                     rowSchema,
                     primaryHandle(primaryBtree),
                     mapOf("email_idx" to secondaryHandle(secondaryBtree)),
+                    testReadLock,
                 )
             every {
                 primaryBtree.search(eqBytes(primaryKeySerializer.serialize(listOf(1L))))
@@ -398,6 +415,7 @@ class TableTest :
                     rowSchema,
                     primaryHandle(primaryBtree),
                     mapOf("email_idx" to secondaryHandle(secondaryBtree)),
+                    testReadLock,
                 )
             every {
                 primaryBtree.search(eqBytes(primaryKeySerializer.serialize(listOf(1L))))
@@ -427,7 +445,9 @@ class TableTest :
 
         given("a table with no row at the primary key being deleted") {
             val primaryBtree = mockk<BTree>()
-            val table = Table(rowSchema, primaryHandle(primaryBtree), emptyMap())
+            val table = Table(rowSchema, primaryHandle(primaryBtree), emptyMap(),
+                    testReadLock,
+                )
             every {
                 primaryBtree.search(eqBytes(primaryKeySerializer.serialize(listOf(1L))))
             } returns null
@@ -447,6 +467,7 @@ class TableTest :
                     rowSchema,
                     primaryHandle(primaryBtree),
                     mapOf("email_idx" to secondaryHandle(secondaryBtree)),
+                    testReadLock,
                 )
             every {
                 primaryBtree.search(eqBytes(primaryKeySerializer.serialize(listOf(1L))))
@@ -475,7 +496,9 @@ class TableTest :
         given("an inclusive range scan whose cursor walks one entry past the upper bound") {
             val primaryBtree = mockk<BTree>()
             val cursor = mockk<Cursor>()
-            val table = Table(rowSchema, primaryHandle(primaryBtree), emptyMap())
+            val table = Table(rowSchema, primaryHandle(primaryBtree), emptyMap(),
+                    testReadLock,
+                )
 
             // id = 4 sits just past the serializeUpper(3) stop boundary and must never make it
             // into the result — this is exactly the off-by-one that once let a boundary-crossing
@@ -516,7 +539,9 @@ class TableTest :
         given("a range scan with no lower bound") {
             val primaryBtree = mockk<BTree>()
             val cursor = mockk<Cursor>()
-            val table = Table(rowSchema, primaryHandle(primaryBtree), emptyMap())
+            val table = Table(rowSchema, primaryHandle(primaryBtree), emptyMap(),
+                    testReadLock,
+                )
 
             val entry =
                 primaryKeySerializer.serialize(listOf(2L)) to
@@ -552,7 +577,9 @@ class TableTest :
         given("a range scan with no upper bound") {
             val primaryBtree = mockk<BTree>()
             val cursor = mockk<Cursor>()
-            val table = Table(rowSchema, primaryHandle(primaryBtree), emptyMap())
+            val table = Table(rowSchema, primaryHandle(primaryBtree), emptyMap(),
+                    testReadLock,
+                )
 
             val entries =
                 listOf(1L, 2L).map {
@@ -588,7 +615,9 @@ class TableTest :
         }
 
         given("a range scan on an unknown index name") {
-            val table = Table(rowSchema, primaryHandle(mockk<BTree>()), emptyMap())
+            val table = Table(rowSchema, primaryHandle(mockk<BTree>()), emptyMap(),
+                    testReadLock,
+                )
 
             `when`("selecting a range on that name") {
                 then("UndefinedIndex should be thrown") {
@@ -613,6 +642,7 @@ class TableTest :
                     rowSchema,
                     primaryHandle(primaryBtree),
                     mapOf("email_idx" to secondaryHandle(secondaryBtree)),
+                    testReadLock,
                 )
 
             val entry =
@@ -658,6 +688,7 @@ class TableTest :
                     rowSchema,
                     primaryHandle(primaryBtree),
                     mapOf("email_idx" to secondaryHandle(secondaryBtree)),
+                    testReadLock,
                 )
 
             val entry =
@@ -693,6 +724,7 @@ class TableTest :
                     rowSchema,
                     primaryHandle(mockk<BTree>()),
                     mapOf("composite_idx" to compositeHandle(compositeBtree)),
+                    testReadLock,
                 )
             every { compositeBtree.search(any(), any(), any()) } returns null
 
@@ -720,6 +752,7 @@ class TableTest :
                     rowSchema,
                     primaryHandle(mockk<BTree>()),
                     mapOf("composite_idx" to compositeHandle(compositeBtree)),
+                    testReadLock,
                 )
             every { compositeBtree.search(any(), any(), any()) } returns null
 
@@ -747,6 +780,7 @@ class TableTest :
                     rowSchema,
                     primaryHandle(mockk<BTree>()),
                     mapOf("composite_idx" to compositeHandle(compositeBtree)),
+                    testReadLock,
                 )
 
             `when`("scanning with col1 matching declared order but col2 not") {
@@ -773,6 +807,7 @@ class TableTest :
                     rowSchema,
                     primaryHandle(mockk<BTree>()),
                     mapOf("composite_idx" to compositeHandle(compositeBtree)),
+                    testReadLock,
                 )
 
             `when`("scanning with an orderBy naming a column beyond col1/col2") {
@@ -800,6 +835,7 @@ class TableTest :
                     rowSchema,
                     primaryHandle(mockk<BTree>()),
                     mapOf("composite_idx" to compositeHandle(compositeBtree)),
+                    testReadLock,
                 )
 
             `when`("scanning with orderBy starting from col2, skipping col1") {
@@ -825,6 +861,7 @@ class TableTest :
                     rowSchema,
                     primaryHandle(primaryBtree),
                     mapOf("composite_idx" to compositeHandle(compositeBtree)),
+                    testReadLock,
                 )
 
             // col1 = 1 fixed (the prefix), col2 varies — and each hit resolves to a different
