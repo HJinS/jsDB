@@ -39,7 +39,7 @@ Pin(참조 카운트)을 먼저 잡고, 페이지 내용은 content lock(버전�
 > SQLite는 페이지 단위 동시성을 요구하지 않고, 실제 동시성 제어를 데이터베이스 파일/WAL 레벨 락으로 처리한다.
 
 - 단일 뮤텍스 구조, 왜 콘텐츠 락이 없어도 되는지 → **[pcache-lock.md](../ref/SQLite/pcache-lock.md)**
-- 페이지 물리 구조(B-tree 페이지 헤더, dense cell pointer array, freeblock) → **[page.md](../ref/SQLite/page.md)** — 공식 문서([Database File Format](https://sqlite.org/fileformat2.html))가 있는 유일한 엔진이다.
+- 페이지 물리 구조(B-tree 페이지 헤더, dense cell pointer array, free block) → **[page.md](../ref/SQLite/page.md)** — 공식 문서([Database File Format](https://sqlite.org/fileformat2.html))가 있는 유일한 엔진이다.
 - LRU(pure LRU) → **[lru.md](../ref/SQLite/lru.md)**
 
 ### BufferPoolManager(`globalLatch`) 및 Frame(`ReentrantReadWriteLock`)
@@ -67,9 +67,9 @@ InnoDB `rw_lock_t`/PostgreSQL content lock과 같은 "CAS 우선, 실패 시에�
 - **느린 경로**: CAS 실패 시 대기 노드를 만들어 AQS 내부 큐에 건 뒤, 큐 맨 앞일 때만 잠깐 스핀(`Thread.onSpinWait()`)하고, 그래도 안 되면 `LockSupport.park(this)`에서 블로킹한다.
 - read-lock(`acquireShared`)과 write-lock(`acquire`)은 내부적으로 같은 큐/파킹 로직을 공유하고, `shared` 플래그로만 갈린다.
 
-| | InnoDB | PostgreSQL | jsDB(JDK) |
-|---|---|---|---|
-| CAS 대상 | `lock_word` | `BufferDesc.state` | AQS `state` |
+|                    | InnoDB                | PostgreSQL          | jsDB(JDK)            |
+|--------------------|-----------------------|---------------------|----------------------|
+| CAS 대상           | `lock_word`           | `BufferDesc.state`  | AQS `state`          |
 | CAS 실패 시 블로킹 | `os_event_wait_low()` | `PGSemaphoreLock()` | `LockSupport.park()` |
 
 **락 취득 순서** (`fetchPage()`, `BufferPoolManager.kt:66-138`)
@@ -89,12 +89,12 @@ InnoDB `rw_lock_t`/PostgreSQL content lock과 같은 "CAS 우선, 실패 시에�
 지금까지는 "버퍼 풀 안에서 락을 어떻게 거냐"를 비교했다면, 이건 한 단계 더 위 질문이다
 - **버퍼 풀 인스턴스 자체가 몇 개나 떠 있는가?** 커넥션(세션)마다 따로 있는지, 아니면 서버 프로세스 전체에 하나뿐인지는 엔진마다 다르다.
 
-| | InnoDB | PostgreSQL | SQLite |
-|---|---|---|---|
-| 서버 모델 | 서버 프로세스 1개, 커넥션 = **스레드** | 서버가 커넥션마다 **프로세스**를 fork | 서버 자체가 없음 — 앱에 링크되는 **라이브러리** |
-| 버퍼 풀 개수 | 서버 프로세스당 1개(전역) | 서버 인스턴스(cluster)당 1개(전역) | 기본: **커넥션(+ATTACH된 DB)마다 1개** |
-| 여러 DB/스키마 간 공유 | 공유(같은 프로세스 메모리) | 공유 — `BufferTag`에 `dbOid`가 있어 여러 DB 페이지가 한 풀에 공존 | 공유 안 함(각자 독립) |
-| 공유 메커니즘 | 같은 프로세스 주소공간 → 포인터 공유 | 명시적 OS 공유 메모리(`shared_buffers`, postmaster 시작 시 1회 할당) + 세마포어 기반 락 | 없음(기본) / opt-in shared-cache는 **같은 프로세스 내로 한정**, 프로세스 경계는 절대 못 넘음 |
+|                        | InnoDB                                 | PostgreSQL                                                                              | SQLite                                                                                       |
+|------------------------|----------------------------------------|-----------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
+| 서버 모델              | 서버 프로세스 1개, 커넥션 = **스레드** | 서버가 커넥션마다 **프로세스**를 fork                                                   | 서버 자체가 없음 — 앱에 링크되는 **라이브러리**                                              |
+| 버퍼 풀 개수           | 서버 프로세스당 1개(전역)              | 서버 인스턴스(cluster)당 1개(전역)                                                      | 기본: **커넥션(+ATTACH된 DB)마다 1개**                                                       |
+| 여러 DB/스키마 간 공유 | 공유(같은 프로세스 메모리)             | 공유 — `BufferTag`에 `dbOid`가 있어 여러 DB 페이지가 한 풀에 공존                       | 공유 안 함(각자 독립)                                                                        |
+| 공유 메커니즘          | 같은 프로세스 주소공간 → 포인터 공유   | 명시적 OS 공유 메모리(`shared_buffers`, postmaster 시작 시 1회 할당) + 세마포어 기반 락 | 없음(기본) / opt-in shared-cache는 **같은 프로세스 내로 한정**, 프로세스 경계는 절대 못 넘음 |
 
 **요지**
 - **InnoDB/PostgreSQL**: "서버 프로세스(인스턴스) 하나 = 버퍼 풀 하나"가 원칙이다. PostgreSQL은 커넥션이 스레드가 아니라 별도 OS 프로세스인데도 공유 메모리로 억지로(?) 하나의 풀을 공유하게 만든 것이라, 그만큼 프로세스 간 동기화 프리미티브(세마포어)가 필요해진다 — [content-lock.md](../ref/PostgreSQL/content-lock.md)에서 다룬 CAS/세마포어 구조가 바로 이 대가다.
@@ -113,13 +113,13 @@ InnoDB `rw_lock_t`/PostgreSQL content lock과 같은 "CAS 우선, 실패 시에�
 
 ### 페이지 구조
 
-| | InnoDB | PostgreSQL | SQLite | jsDB |
-|---|---|---|---|---|
-| 헤더 계층 | 2겹(FIL_PAGE 공통 + PAGE_HEADER 인덱스 전용) | 1겹(`PageHeaderData`) | 1겹(리프 8B/인테리어 12B) | 1겹(`HEADER_SIZE=56`) |
-| 슬롯/디렉토리 | **Sparse**(4~8개 레코드당 1개) + 레코드 연결리스트 | **Dense**(`ItemId`, 레코드당 1개) | **Dense**(cell pointer array, 레코드당 1개) | **Dense**(슬롯 배열, 레코드당 1개) |
-| heap/index 구분 | 없음("모든 페이지는 index") | 있음(heap page ≠ index page 포맷) | 해당 없음(B-tree 리프에 직접 저장) | 없음(B+tree 리프에 직접 저장) |
-| 형제 페이지 포인터 위치 | 공통 헤더(`FIL_PAGE_PREV/NEXT`) | special space(`BTPageOpaqueData`) | 별도 개념 없음(포인터 배열로 트리 구성) | 공통 헤더에 고정 필드 |
-| 공식 문서 | 사실상 없음(예전 Internals Manual 폐기) | 있음(Database Page Layout) | **가장 상세함**(Database File Format) | — |
+|                         | InnoDB                                             | PostgreSQL                        | SQLite                                      | jsDB                               |
+|-------------------------|----------------------------------------------------|-----------------------------------|---------------------------------------------|------------------------------------|
+| 헤더 계층               | 2겹(FIL_PAGE 공통 + PAGE_HEADER 인덱스 전용)       | 1겹(`PageHeaderData`)             | 1겹(리프 8B/인테리어 12B)                   | 1겹(`HEADER_SIZE=56`)              |
+| 슬롯/디렉토리           | **Sparse**(4~8개 레코드당 1개) + 레코드 연결리스트 | **Dense**(`ItemId`, 레코드당 1개) | **Dense**(cell pointer array, 레코드당 1개) | **Dense**(슬롯 배열, 레코드당 1개) |
+| heap/index 구분         | 없음("모든 페이지는 index")                        | 있음(heap page ≠ index page 포맷) | 해당 없음(B-tree 리프에 직접 저장)          | 없음(B+tree 리프에 직접 저장)      |
+| 형제 페이지 포인터 위치 | 공통 헤더(`FIL_PAGE_PREV/NEXT`)                    | special space(`BTPageOpaqueData`) | 별도 개념 없음(포인터 배열로 트리 구성)     | 공통 헤더에 고정 필드              |
+| 공식 문서               | 사실상 없음(예전 Internals Manual 폐기)            | 있음(Database Page Layout)        | **가장 상세함**(Database File Format)       | —                                  |
 
 **장단점**
 - **Sparse(InnoDB)**: directory 공간을 아낄 수 있고 삽입이 그룹 안에서는 `next` 포인터 갱신만으로 끝나지만, 탐색이 "이진탐색+짧은 선형탐색" 2단계라 상수 비용이 붙고 역방향 접근이 불가능하다.
@@ -131,11 +131,11 @@ InnoDB `rw_lock_t`/PostgreSQL content lock과 같은 "CAS 우선, 실패 시에�
 
 ### Lock(콘텐츠 락)
 
-| | InnoDB | PostgreSQL | SQLite | jsDB |
-|---|---|---|---|---|
-| 메타데이터 락 | 뮤텍스 6종 분리 | 파티션 `BufMappingLock` + 전용 `buffer_strategy_lock` | 단일 `pthread_mutex_t` | 단일 `globalLatch` |
-| 콘텐츠 락 | CAS 기반 `rw_lock_t`(S/SX/X 3단계) | CAS 기반 LWLock/전용 구현(2~3단계, 버전별 상이) | **없음**(파일/WAL 레벨로 위임) | `ReentrantReadWriteLock`(read/write 2단계) |
-| 구현 방식 | 커스텀 lock-free | 커스텀 lock-free | OS 뮤텍스 위임 | JDK 표준 락 |
+|               | InnoDB                             | PostgreSQL                                            | SQLite                         | jsDB                                       |
+|---------------|------------------------------------|-------------------------------------------------------|--------------------------------|--------------------------------------------|
+| 메타데이터 락 | 뮤텍스 6종 분리                    | 파티션 `BufMappingLock` + 전용 `buffer_strategy_lock` | 단일 `pthread_mutex_t`         | 단일 `globalLatch`                         |
+| 콘텐츠 락     | CAS 기반 `rw_lock_t`(S/SX/X 3단계) | CAS 기반 LWLock/전용 구현(2~3단계, 버전별 상이)       | **없음**(파일/WAL 레벨로 위임) | `ReentrantReadWriteLock`(read/write 2단계) |
+| 구현 방식     | 커스텀 lock-free                   | 커스텀 lock-free                                      | OS 뮤텍스 위임                 | JDK 표준 락                                |
 
 **장단점**
 - **세분화(InnoDB/PostgreSQL)**: 컨텐션을 잘게 분산해 고동시성에 유리하지만, 구현/디버깅 복잡도가 매우 높다(CAS 재시도 루프, 스레드 신원 추적, 재진입 처리 등).
@@ -147,13 +147,13 @@ InnoDB `rw_lock_t`/PostgreSQL content lock과 같은 "CAS 우선, 실패 시에�
 
 ### LRU
 
-| 항목 | InnoDB | PostgreSQL | SQLite | jsDB |
-|---|---|---|---|---|
-| 알고리즘 | Midpoint Insertion(segmented) | Clock-sweep(usage counter) | Pure LRU(단일 리스트) | Midpoint Insertion(segmented) |
-| 자료구조 | 이중연결리스트 + `LRU_old` 포인터 | 원형 배열 + `nextVictimBuffer` | 원형 이중연결리스트 | 이중연결리스트 + `midPoint` 포인터 |
-| 스캔 저항 | old/young 서브리스트 + 재접근 시간(`old_blocks_time`) 체크 | 별도의 소형 buffer ring 분리 | 없음 | old/young 서브리스트 + 재접근 시간(`lruOldBlocksTimeMs`) 체크 |
-| 승격 조건 | old 영역에서 시간 조건 만족 후 재접근 시 young으로 이동 | pin될 때마다 usage counter 증가 | 없음(항상 head로 이동) | old 영역에서 시간 조건 만족 후 재접근 시 young으로 이동 |
-| pinned 페이지 처리 | 리스트에 남고 스캔 시 skip | 배열에 남고 skip | **리스트에서 물리적 제거** | **리스트에서 물리적 제거** |
+| 항목               | InnoDB                                                     | PostgreSQL                      | SQLite                     | jsDB                                                          |
+|--------------------|------------------------------------------------------------|---------------------------------|----------------------------|---------------------------------------------------------------|
+| 알고리즘           | Midpoint Insertion(segmented)                              | Clock-sweep(usage counter)      | Pure LRU(단일 리스트)      | Midpoint Insertion(segmented)                                 |
+| 자료구조           | 이중연결리스트 + `LRU_old` 포인터                          | 원형 배열 + `nextVictimBuffer`  | 원형 이중연결리스트        | 이중연결리스트 + `midPoint` 포인터                            |
+| 스캔 저항          | old/young 서브리스트 + 재접근 시간(`old_blocks_time`) 체크 | 별도의 소형 buffer ring 분리    | 없음                       | old/young 서브리스트 + 재접근 시간(`lruOldBlocksTimeMs`) 체크 |
+| 승격 조건          | old 영역에서 시간 조건 만족 후 재접근 시 young으로 이동    | pin될 때마다 usage counter 증가 | 없음(항상 head로 이동)     | old 영역에서 시간 조건 만족 후 재접근 시 young으로 이동       |
+| pinned 페이지 처리 | 리스트에 남고 스캔 시 skip                                 | 배열에 남고 skip                | **리스트에서 물리적 제거** | **리스트에서 물리적 제거**                                    |
 
 **장단점**
 - **Midpoint Insertion(InnoDB/jsDB)**: old/young 서브리스트와 재접근 시간 체크로 read-ahead/풀스캔에 의한 캐시 오염을 잘 막지만, 구현이 세 방식 중 가장 복잡하다(비율 조정, 서브리스트 경계 유지).
@@ -169,10 +169,10 @@ InnoDB `rw_lock_t`/PostgreSQL content lock과 같은 "CAS 우선, 실패 시에�
 
 ### Pin
 
-| | InnoDB | PostgreSQL | SQLite | jsDB |
-|---|---|---|---|---|
-| 자료형 | `buf_fix_count`(atomic counter) | pin refcount(atomic counter) | **없음** — 리스트 멤버십(`pLruNext==0`)으로 판별 | `AtomicInteger pinCount` |
-| LRU와의 관계 | pin 중에도 LRU 리스트 멤버십 유지(skip만 함) | 배열 슬롯 유지(skip만 함) | pin=리스트에서 제거 그 자체 | pin=리스트에서 제거 그 자체 |
+|              | InnoDB                                       | PostgreSQL                   | SQLite                                           | jsDB                        |
+|--------------|----------------------------------------------|------------------------------|--------------------------------------------------|-----------------------------|
+| 자료형       | `buf_fix_count`(atomic counter)              | pin refcount(atomic counter) | **없음** — 리스트 멤버십(`pLruNext==0`)으로 판별 | `AtomicInteger pinCount`    |
+| LRU와의 관계 | pin 중에도 LRU 리스트 멤버십 유지(skip만 함) | 배열 슬롯 유지(skip만 함)    | pin=리스트에서 제거 그 자체                      | pin=리스트에서 제거 그 자체 |
 
 **장단점**
 - **별도 카운터(InnoDB/PostgreSQL/jsDB)**: "몇 번 pin 됐는지"를 정확히 알 수 있어 중첩 pin에 안전하지만, 필드가 하나 더 필요하다.

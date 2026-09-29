@@ -15,7 +15,7 @@
 
 ### 결정 - memcmp, InnoDB와 비슷한 방법 사용
 
-[Encoder.kt](../../src/main/kotlin/index/util/Encoder.kt), [BaseKeySerializer.kt](../../src/main/kotlin/index/serializer/BaseKeySerializer.kt)
+[Encoder.kt](../../src/main/kotlin/util/Encoder.kt), [BaseKeySerializer.kt](../../src/main/kotlin/index/serializer/BaseKeySerializer.kt)
 
 **정수/실수 — 부호 비트 반전**
 

@@ -47,8 +47,8 @@ class LeafNode(
      * @return split key array
      * */
     private fun splitData(promotionKeyIdx: Int): Pair<MutableList<ByteArray>, MutableList<ByteArray>> {
-        val keyList: MutableList<ByteArray> = mutableListOf<ByteArray>()
-        val values: MutableList<ByteArray> = mutableListOf<ByteArray>()
+        val keyList: MutableList<ByteArray> = mutableListOf()
+        val values: MutableList<ByteArray> = mutableListOf()
         val totalRecordCount = page.recordCount
         for (slotId in totalRecordCount - 1 downTo promotionKeyIdx + 1) {
             val (key, value) = page.deleteData(slotId)

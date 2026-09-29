@@ -9,37 +9,36 @@ import util.SqlState
  * wrong node type), never something a caller's query could trigger through normal use.
  * */
 sealed class IndexException(
-    sqlState: SqlState,
     detail: EngineErrorDetail,
     cause: Throwable? = null
-) : RuntimeException(detail.toMessage(sqlState), cause) {
+) : RuntimeException(detail.toMessage(SqlState.INTERNAL_ERROR), cause) {
     class InvalidTraceStack(detail: EngineErrorDetail, cause: Throwable? = null) :
-        IndexException(SqlState.INTERNAL_ERROR, detail, cause)
+        IndexException(detail, cause)
 
     class EmptyTree(detail: EngineErrorDetail, cause: Throwable? = null) :
-        IndexException(SqlState.INTERNAL_ERROR, detail, cause)
+        IndexException(detail, cause)
 
     class InvalidNodeType(detail: EngineErrorDetail, cause: Throwable? = null) :
-        IndexException(SqlState.INTERNAL_ERROR, detail, cause)
+        IndexException(detail, cause)
 
     class InvalidSafeCheck(detail: EngineErrorDetail, cause: Throwable? = null) :
-        IndexException(SqlState.INTERNAL_ERROR, detail, cause)
+        IndexException(detail, cause)
 
     class InvalidBytes(detail: EngineErrorDetail, cause: Throwable? = null) :
-        IndexException(SqlState.INTERNAL_ERROR, detail, cause)
+        IndexException(detail, cause)
 
     class PositionOutOfBounds(detail: EngineErrorDetail, cause: Throwable? = null) :
-        IndexException(SqlState.INTERNAL_ERROR, detail, cause)
+        IndexException(detail, cause)
 
     class VarIntTooLong(detail: EngineErrorDetail, cause: Throwable? = null) :
-        IndexException(SqlState.INTERNAL_ERROR, detail, cause)
+        IndexException(detail, cause)
 
     class InvalidUUIDLength(detail: EngineErrorDetail, cause: Throwable? = null) :
-        IndexException(SqlState.INTERNAL_ERROR, detail, cause)
+        IndexException(detail, cause)
 
     class InvalidTraceObject(detail: EngineErrorDetail, cause: Throwable? = null) :
-        IndexException(SqlState.INTERNAL_ERROR, detail, cause)
+        IndexException(detail, cause)
 
     class LeafNodeNotFound(detail: EngineErrorDetail, cause: Throwable? = null) :
-        IndexException(SqlState.INTERNAL_ERROR, detail, cause)
+        IndexException(detail, cause)
 }

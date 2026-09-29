@@ -125,7 +125,7 @@ internal class DoublyLinkedList {
      * */
     internal fun forEach(action: (LRUNode) -> Unit){
         var nodePointer = head.next
-        while(nodePointer != null && nodePointer.next != null){
+        while(nodePointer?.next != null){
             action(nodePointer)
             nodePointer = nodePointer.next
         }
@@ -137,7 +137,7 @@ internal class DoublyLinkedList {
      * */
     internal fun findNode(frameId: Int): LRUNode?{
         var nodePointer = head.next
-        while(nodePointer != null &&  nodePointer.next != null){
+        while(nodePointer?.next != null){
             if(nodePointer.frameId == frameId)  return nodePointer
             nodePointer = nodePointer.next
         }
@@ -148,7 +148,7 @@ internal class DoublyLinkedList {
     internal fun traverseIds(): List<Int>{
         val result = mutableListOf<Int>()
         var nodePointer = head.next
-        while(nodePointer != null && nodePointer.next != null){
+        while(nodePointer?.next != null){
             result.addLast(nodePointer.frameId)
             nodePointer = nodePointer.next
         }

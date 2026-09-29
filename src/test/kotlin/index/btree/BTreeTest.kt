@@ -1,3 +1,5 @@
+@file:Suppress("SpellCheckingInspection")
+
 package index.btree
 
 import config.SimpleConfig

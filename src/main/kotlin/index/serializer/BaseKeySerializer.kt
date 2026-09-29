@@ -1,3 +1,5 @@
+@file:Suppress("SpellCheckingInspection")
+
 package index.serializer
 
 import exception.IndexException

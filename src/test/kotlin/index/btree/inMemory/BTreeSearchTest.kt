@@ -1,3 +1,5 @@
+@file:Suppress("SpellCheckingInspection")
+
 package index.btree.inMemory
 
 import index.comparator.MultiColumnKeyComparator

@@ -1,7 +1,7 @@
 ### MySQL(InnoDB) — "모든 페이지는 index page"
 
-<img src="./img_1.png" width="550">
-<img src="./img_2.png" width="550">
+<img src="./img_1.png" width="550" alt="EMPTY">
+<img src="./img_2.png" width="550" alt="EMPTY">
 
 > index page의 실제 구조의 경우 정리된 공식 문서럴 찾기가 어려워 "[Jeremy Cole의 분석 글](https://blog.jcole.us/2013/01/07/the-physical-structure-of-innodb-index-pages/)"을 참고했다.
 
@@ -165,7 +165,7 @@ constexpr uint32_t PAGE_DIR_SLOT_MIN_N_OWNED = 4;
 static inline ulint page_dir_slot_get_n_owned(const page_dir_slot_t *slot);
 ```
 
-<img src="./img.png" width="550">
+<img src="./img.png" width="550" alt="EMPTY">
 
 - [참고](https://blog.jcole.us/2013/01/14/efficiently-traversing-innodb-btrees-with-the-page-directory/)
 

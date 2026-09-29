@@ -216,8 +216,8 @@ open class SlottedPage(
      *
      * Safe even when the src/dst ranges overlap
      * - the whole range is first copied into a plain JVM
-     * - heap array ([temp]) before being written back, so the overlap corruption that `ByteBuffer.put`
-     * - can cause via its internal memcpy (BUG-010) can't happen in the first place.
+     * - heap array (`temp`) before being written back, so the overlap corruption that `ByteBuffer.put`
+     * - can cause via its internal `memcpy` (BUG-010) can't happen in the first place.
      * */
     private fun shiftSlot(src: Int, srcLength: Int, shiftLength: Int): Int {
         if (shiftLength == 0 || srcLength <= 0) return -1

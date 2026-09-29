@@ -6,7 +6,7 @@
 
 PostgreSQL 공식 문서에 정리되어 있는 레이아웃이다: [Database Page Layout](https://www.postgresql.org/docs/current/storage-page-layout.html).
 
-<img src="./img.png" width="550">
+<img src="./img.png" width="550" alt="EMPTY">
 
 
 | | PostgreSQL |
@@ -78,7 +78,7 @@ PostgreSQL은 MVCC를 쓰기 때문에 각 튜플이 `t_xmin`(이 row를 만든 
 
 **"hint"라고 부르는 이유**: 이 비트를 잃어버려도(디스크 반영 전에 크래시 나도) 데이터 정합성엔 문제가 없다 — 다음에 읽는 쪽이 CLOG 조회를 다시 해서 비트를 재설정하면 그만이다. 그래서 WAL 로깅도 필요 없다 (`MarkBufferDirtyHint()`의 주석: "The caller does not write WAL"). 대량 INSERT/COPY 직후 첫 SELECT를 돌리면 갑자기 디스크 쓰기가 늘어나는 PostgreSQL의 유명한 현상이, 바로 이 hint bit를 그때 처음 세팅하면서 페이지들이 dirty로 표시되기 때문이다.
 
-**Content lock과의 연결**: hint bit 갱신은 원래(PG16까지) 아주 약한 락 요구사항만 있었는데("share든 exclusive든 상관없다"), 이게 buffer flush 도중 페이지가 바뀔 수 있다는 문제로 이어져서 체크섬 활성화 시 페이지 복사가 필요했다. PostgreSQL 19에서 도입된 `SHARE_EXCLUSIVE` content lock 모드가 바로 이 문제를 해결한다. 자세한 내용은 [postgres-content-lock.md](../buffer-pool/postgres-content-lock.md) 참고.
+**Content lock과의 연결**: hint bit 갱신은 원래(PG16까지) 아주 약한 락 요구사항만 있었는데("share든 exclusive든 상관없다"), 이게 buffer flush 도중 페이지가 바뀔 수 있다는 문제로 이어져서 체크섬 활성화 시 페이지 복사가 필요했다. PostgreSQL 19에서 도입된 `SHARE_EXCLUSIVE` content lock 모드가 바로 이 문제를 해결한다. 자세한 내용은 [postgres-content-lock.md](./content-lock.md) 참고.
 
 ### Heap Page vs Index Page — 같은 틀, 다른 내용물
 

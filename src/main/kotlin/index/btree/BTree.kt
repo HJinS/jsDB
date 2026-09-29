@@ -248,7 +248,7 @@ class BTree(
      * is empty).
      *
      * For a range/prefix scan instead of an exact match, use the other `search` overload that takes
-     * a [direction] and returns a [Cursor].
+     * a `direction` and returns a [Cursor].
      *
      * @param key Already-serialized key bytes.
      */
