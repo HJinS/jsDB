@@ -247,11 +247,12 @@ class BufferPoolManager(
     }
 
     /**
-     * Called from [PageLock.close] when a page is done being used. Looks up the frame -> decrements
-     * pinCount -> records [isDirty] (only ever set to true here; never cleared back to false by
-     * this call).
+     * Called from [PageLock.close] when a page is done being used. Looks up the frame and
+     * decrements pinCount. Doesn't touch [Frame.isDirty] itself - that's set immediately by
+     * [PageLock.asWriteView]/[PageLock.setDirty] as soon as a mutation happens, not deferred to
+     * unpin time (issue #47).
      */
-    fun unpinPage(pageId: Long, isDirty: Boolean) {
+    fun unpinPage(pageId: Long) {
         val frame: Frame
         val frameId: Int
 
@@ -268,7 +269,6 @@ class BufferPoolManager(
             frame = frames[frameId]
             if (frame.pinCount.get() <= 0) return
             val pinCount = frame.pinCount.decrementAndGet()
-            if (isDirty) frame.isDirty.set(true)
             if (pinCount == 0) replacer.unpin(frameId)
         } finally {
             globalLatch.unlock()
@@ -347,6 +347,23 @@ class BufferPoolManager(
 
     /** Total page count on disk (regardless of caching status; delegates to [DiskManager]). */
     fun getNumPages() = diskManager.getNumPages()
+
+    fun flushAllPage(){
+        frames.forEach { frame ->
+            if(frame.isDirty.get()){
+                frame.latch.readLock().lock()
+                try{
+                    // Deliberately check isDirty flag again.
+                    if(frame.isDirty.get()){
+                        diskManager.writePage(frame.pageId.get(), frame.data)
+                        frame.isDirty.set(false)
+                    }
+                } finally {
+                    frame.latch.readLock().unlock()
+                }
+            }
+        }
+    }
 
     private fun getFreeFrameId() =
         if (freeList.isEmpty()) replacer.evict() else freeList.removeFirst()

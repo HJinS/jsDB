@@ -88,15 +88,17 @@ class DataBase(private val config: SimpleConfig) {
     }
 
     /**
-     * Closes the underlying file handle.
-     *
-     * Does **not** flush the buffer pool first — [storageEngine.BufferPoolManager] has no "flush
-     * all" operation, so any dirty page not already flushed individually may not reach disk before
-     * the file closes. Whether a subsequent re-open preserves all writes made before this call is
-     * not yet verified. See issue #47.
+     * Flushes every dirty page still in the buffer pool, then closes the underlying file handle
+     * (which itself forces the write to the storage device - see [storageEngine.DiskManager.close]).
+     * Wrapped in the same write lock as every DDL method, so it waits for (and blocks) any other
+     * in-flight DDL/DML rather than racing a flush against a page some other thread is still
+     * mutating. Only covers a normal shutdown; no WAL, so crash safety is out of scope (issue #47).
      */
     fun close() {
-        diskManager.close()
+        lock.write{
+            bufferPoolManager.flushAllPage()
+            diskManager.close()
+        }
     }
 
     /**

@@ -75,9 +75,13 @@ class DiskManager(storageConfig: StorageConfig, indexConfig: IndexConfig) {
     }
 
     /**
-     * Close the file channel.
+     * Forces any writes still sitting in the OS page cache out to the storage device (`fsync`,
+     * including file metadata like length - the file grows as pages are allocated), then closes
+     * the channel. Only covers a normal shutdown; no WAL, so it says nothing about crash safety
+     * (see issue #47).
      * */
     fun close(){
+        fileChannel.force(true)
         fileChannel.close()
     }
 }
