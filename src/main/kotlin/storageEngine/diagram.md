@@ -41,7 +41,7 @@ classDiagram
         -replacer: MidPointReplacer
         -diskManager: DiskManager
         +fetchPage(pageId): PageLock
-        +unpinPage(pageId, isDirty)
+        +unpinPage(pageId)
         -evict()
     }
 

@@ -115,6 +115,41 @@ class StorageManagerTest: BehaviorSpec({
                 retryLock.frame.pinCount.get() shouldBe 0
             }
         }
+
+        // Issue #47: PageLock.asWriteView/setDirty now reflect Frame.isDirty immediately, not
+        // deferred to close() - verified here via the exact sequence the issue called out:
+        // newPage(..., LockMode.READ) does asWriteView then downgradeLock() internally, before
+        // this test calls flushPage() itself, before close(). With the old deferred-propagation
+        // behavior, Frame.isDirty would still be false at the flushPage() call, so it would
+        // silently skip writing - this test reads straight from disk (bypassing the buffer pool
+        // entirely) to prove the write actually landed.
+        `when`("newPage with ${LockMode.READ} (asWriteView + downgradeLock happen inside), then flushPage before close") {
+            val newPageId = 1000L
+            val pageLock = bufferPoolManager.newPage(newPageId)
+            pageLock.asWriteView { buffer ->
+                SlottedPage(indexConfig, newPageId, buffer).apply {
+                    initData()
+                    type = PageType.LEAF_NODE
+                }
+            }
+            pageLock.downgradeLock()
+
+            then("the lock is already downgraded to read, as the scenario requires") {
+                pageLock.frame.latch.isWriteLocked shouldBe false
+            }
+
+            then("flushPage before close() still persists the write to disk") {
+                bufferPoolManager.flushPage(newPageId)
+
+                val diskBuffer = java.nio.ByteBuffer.allocate(indexConfig.pageSize)
+                diskManager.readPage(newPageId, diskBuffer)
+                val diskPage = SlottedPage(indexConfig, newPageId, diskBuffer)
+                diskPage.type shouldBe PageType.LEAF_NODE
+                diskPage.pageId shouldBe newPageId
+
+                pageLock.close()
+            }
+        }
     }
 }){
     companion object {

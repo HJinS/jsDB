@@ -107,7 +107,7 @@ class BufferPoolManagerTest: BehaviorSpec({
         }
         `when`("unpin page which doesn't exist"){
             then("should throw PageNotFoundInCacheException"){
-                shouldThrow<StorageEngineException.PageNotFoundInCache> { bufferPoolManager.unpinPage(4L, true) }
+                shouldThrow<StorageEngineException.PageNotFoundInCache> { bufferPoolManager.unpinPage(4L) }
             }
         }
         `when`("flush page which doesn't exist"){
@@ -367,6 +367,46 @@ class BufferPoolManagerTest: BehaviorSpec({
                 verify(exactly = 1) { diskManager.writePage(victimPageId, any()) }
                 newLock.close()
                 newFrame.pinCount.get() shouldBe 0
+            }
+        }
+    }
+
+    // Issue #47: BufferPoolManager.flushAllPage() - unlike flushPage, sweeps every frame in the
+    // pool once, writing back only the ones still dirty.
+    given("a BufferPoolManager with a mix of dirty and clean frames"){
+        val replacer = FrameNodePolicy(midpointLruConfig)
+        val bufferPoolManager = BufferPoolManager(diskManager, replacer, indexConfig, 4)
+        clearMocks(diskManager)
+
+        val dirtyLock1 = bufferPoolManager.newPage(200L) // dirty from the moment it's created
+        val dirtyLock2 = bufferPoolManager.newPage(201L)
+        val cleanLock = bufferPoolManager.fetchPage(202L, LockMode.READ) // plain read, never dirtied
+        dirtyLock1.close()
+        dirtyLock2.close()
+        cleanLock.close()
+        clearMocks(diskManager)
+
+        `when`("calling flushAllPage"){
+            bufferPoolManager.flushAllPage()
+
+            then("only the frames that were actually dirty get written to disk"){
+                verify(exactly = 1) { diskManager.writePage(200L, dirtyLock1.frame.data) }
+                verify(exactly = 1) { diskManager.writePage(201L, dirtyLock2.frame.data) }
+                verify(exactly = 0) { diskManager.writePage(202L, any()) }
+            }
+            then("every frame is clean afterward"){
+                dirtyLock1.frame.isDirty.get() shouldBe false
+                dirtyLock2.frame.isDirty.get() shouldBe false
+                cleanLock.frame.isDirty.get() shouldBe false
+            }
+        }
+
+        `when`("calling flushAllPage again with nothing dirty"){
+            clearMocks(diskManager)
+            bufferPoolManager.flushAllPage()
+
+            then("no writes happen at all"){
+                verify(exactly = 0) { diskManager.writePage(any(), any()) }
             }
         }
     }

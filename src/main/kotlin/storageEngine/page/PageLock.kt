@@ -44,7 +44,7 @@ class PageLock(
     /** [unlock]s, then unpins the frame (marking it dirty in the buffer pool if [asWriteView] was ever used). */
     override fun close() {
         unlock()
-        bufferPoolManager.unpinPage(frame.pageId.get(), isDirty)
+        bufferPoolManager.unpinPage(frame.pageId.get())
     }
 
     /**
@@ -69,12 +69,14 @@ class PageLock(
      * */
     inline fun <T> asWriteView(viewFactory: (ByteBuffer) -> T): T {
         this.isDirty = true
+        frame.isDirty.set(true)
         return viewFactory(frame.data)
     }
 
     /** Marks the frame dirty without going through [asWriteView] (e.g. after a raw buffer mutation). */
     fun setDirty(){
         this.isDirty = true
+        frame.isDirty.set(true)
     }
 
     /**
