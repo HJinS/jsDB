@@ -91,6 +91,29 @@ class BTreeTest :
     BehaviorSpec({
         timeout = 5 * 60 * 1000L // 5 minutes — deadlock / infinite loop guard
 
+        // Constructing DiskManager touches the backing file immediately (RandomAccessFile(path,
+        // "rw") creates it) - doing that eagerly in the companion object meant the file got
+        // created the moment Kotest instantiated this spec to discover its tests, even on a
+        // filtered run (e.g. --tests) that never selects this spec's tests to execute - and since
+        // afterSpec only fires for specs that are actually run, that file was never cleaned up.
+        // beforeSpec only runs when this spec's tests are actually selected, matching afterSpec's
+        // own timing, so the companion's dependents are now `lateinit var` assigned here instead
+        // of eager `val`.
+        beforeSpec {
+            diskManager = DiskManager(config.storageConfig, config.indexConfig)
+            val lruPolicy = FrameNodePolicy(config.storageConfig.midPointLruConfig)
+            bufferPoolManager =
+                BufferPoolManager(
+                    diskManager,
+                    lruPolicy,
+                    config.indexConfig,
+                    config.storageConfig.poolSize,
+                )
+            metaPageManager = MetaPageManager(bufferPoolManager)
+            freeSpaceManager = FreeSpaceManager(bufferPoolManager)
+            storageManager = StorageManager(freeSpaceManager, bufferPoolManager, config.indexConfig)
+        }
+
         afterSpec {
             diskManager.close()
             File(config.storageConfig.dbPath).delete()
@@ -1057,18 +1080,11 @@ class BTreeTest :
     companion object {
         val config =
             SimpleConfig(StorageConfig(dbPath = "test-btree-${Uuid.random()}.db", poolSize = 100))
-        val diskManager = DiskManager(config.storageConfig, config.indexConfig)
-        val lruPolicy = FrameNodePolicy(config.storageConfig.midPointLruConfig)
-        val bufferPoolManager =
-            BufferPoolManager(
-                diskManager,
-                lruPolicy,
-                config.indexConfig,
-                config.storageConfig.poolSize,
-            )
-        val metaPageManager = MetaPageManager(bufferPoolManager)
-        val freeSpaceManager = FreeSpaceManager(bufferPoolManager)
-        val storageManager = StorageManager(freeSpaceManager, bufferPoolManager, config.indexConfig)
+        lateinit var diskManager: DiskManager
+        lateinit var bufferPoolManager: BufferPoolManager
+        lateinit var metaPageManager: MetaPageManager
+        lateinit var freeSpaceManager: FreeSpaceManager
+        lateinit var storageManager: StorageManager
         var metaInitialized = false
 
         inline fun <reified T : Any> initData(schema: IndexKeySchema): TypedBTree<T> {

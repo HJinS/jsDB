@@ -21,6 +21,28 @@ import java.io.File
 import kotlin.uuid.Uuid
 
 class StorageManagerTest: BehaviorSpec({
+    lateinit var diskManager: DiskManager
+    lateinit var bufferPoolManager: BufferPoolManager
+    lateinit var freeSpaceManager: FreeSpaceManager
+    lateinit var storageManager: StorageManager
+    lateinit var metaPageManager: MetaPageManager
+
+    // Constructing DiskManager touches the backing file immediately (RandomAccessFile(path, "rw")
+    // creates it) - doing that eagerly in the companion object meant the file got created the
+    // moment Kotest instantiated this spec to discover its tests, even on a filtered run
+    // (e.g. --tests) that never selects this spec's tests to execute - and since afterSpec only
+    // fires for specs that are actually run, that file was never cleaned up. beforeSpec only runs
+    // when this spec's tests are actually selected, matching afterSpec's own timing.
+    beforeSpec {
+        diskManager = DiskManager(config.storageConfig, config.indexConfig)
+        val replacer = FrameNodePolicy(config.storageConfig.midPointLruConfig)
+        bufferPoolManager =
+            BufferPoolManager(diskManager, replacer, config.indexConfig, config.storageConfig.poolSize)
+        freeSpaceManager = FreeSpaceManager(bufferPoolManager)
+        storageManager = StorageManager(freeSpaceManager, bufferPoolManager, config.indexConfig)
+        metaPageManager = MetaPageManager(bufferPoolManager)
+    }
+
     afterSpec {
         diskManager.close()
         val file = File(config.storageConfig.dbPath)
@@ -161,11 +183,5 @@ class StorageManagerTest: BehaviorSpec({
             )
         )
         val indexConfig = config.indexConfig
-        private val diskManager = DiskManager(config.storageConfig, config.indexConfig)
-        private val replacer = FrameNodePolicy(config.storageConfig.midPointLruConfig)
-        private val bufferPoolManager = BufferPoolManager(diskManager, replacer, config.indexConfig, config.storageConfig.poolSize)
-        private val freeSpaceManager = FreeSpaceManager(bufferPoolManager)
-        private val storageManager = StorageManager(freeSpaceManager, bufferPoolManager, config.indexConfig)
-        private val metaPageManager = MetaPageManager(bufferPoolManager)
     }
 }
