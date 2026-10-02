@@ -17,6 +17,8 @@ import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
 import io.mockk.verify
+import io.mockk.clearMocks
+import java.util.concurrent.locks.ReentrantReadWriteLock
 import schema.Bound
 import schema.ColumnOrder
 import schema.ColumnType
@@ -27,7 +29,6 @@ import schema.IndexRow
 import schema.Row
 import schema.RowColumn
 import schema.RowSchema
-import java.util.concurrent.locks.ReentrantReadWriteLock
 
 class TableTest :
     BehaviorSpec({
@@ -445,7 +446,11 @@ class TableTest :
 
         given("a table with no row at the primary key being deleted") {
             val primaryBtree = mockk<BTree>()
-            val table = Table(rowSchema, primaryHandle(primaryBtree), emptyMap(),
+            val table =
+                Table(
+                    rowSchema,
+                    primaryHandle(primaryBtree),
+                    emptyMap(),
                     testReadLock,
                 )
             every {
@@ -496,7 +501,11 @@ class TableTest :
         given("an inclusive range scan whose cursor walks one entry past the upper bound") {
             val primaryBtree = mockk<BTree>()
             val cursor = mockk<Cursor>()
-            val table = Table(rowSchema, primaryHandle(primaryBtree), emptyMap(),
+            val table =
+                Table(
+                    rowSchema,
+                    primaryHandle(primaryBtree),
+                    emptyMap(),
                     testReadLock,
                 )
 
@@ -539,7 +548,11 @@ class TableTest :
         given("a range scan with no lower bound") {
             val primaryBtree = mockk<BTree>()
             val cursor = mockk<Cursor>()
-            val table = Table(rowSchema, primaryHandle(primaryBtree), emptyMap(),
+            val table =
+                Table(
+                    rowSchema,
+                    primaryHandle(primaryBtree),
+                    emptyMap(),
                     testReadLock,
                 )
 
@@ -577,7 +590,11 @@ class TableTest :
         given("a range scan with no upper bound") {
             val primaryBtree = mockk<BTree>()
             val cursor = mockk<Cursor>()
-            val table = Table(rowSchema, primaryHandle(primaryBtree), emptyMap(),
+            val table =
+                Table(
+                    rowSchema,
+                    primaryHandle(primaryBtree),
+                    emptyMap(),
                     testReadLock,
                 )
 
@@ -615,7 +632,11 @@ class TableTest :
         }
 
         given("a range scan on an unknown index name") {
-            val table = Table(rowSchema, primaryHandle(mockk<BTree>()), emptyMap(),
+            val table =
+                Table(
+                    rowSchema,
+                    primaryHandle(mockk<BTree>()),
+                    emptyMap(),
                     testReadLock,
                 )
 
@@ -852,7 +873,9 @@ class TableTest :
             }
         }
 
-        given("a prefix search that matches several rows with varied trailing column and row data") {
+        given(
+            "a prefix search that matches several rows with varied trailing column and row data"
+        ) {
             val primaryBtree = mockk<BTree>()
             val compositeBtree = mockk<BTree>()
             val cursor = mockk<Cursor>()
@@ -873,11 +896,10 @@ class TableTest :
                     Triple(20L, 102L, "b@x.com"),
                     Triple(10L, 103L, null),
                 )
-            val entries =
-                hits.map { (col2, id, _) ->
-                    compositeKeySerializer.serialize(listOf(1L, col2)) to
-                        compositeValueSerializer.serialize(listOf(id))
-                }
+            val entries = hits.map { (col2, id, _) ->
+                compositeKeySerializer.serialize(listOf(1L, col2)) to
+                    compositeValueSerializer.serialize(listOf(id))
+            }
             // The btree isn't only holding col1 = 1 data — a col1 = 2 row sits right after it in
             // byte order, standing in for "whatever comes next in the real tree". Without this,
             // the test can't tell a real stop-condition break from the cursor simply running out
@@ -904,20 +926,24 @@ class TableTest :
                 primaryBtree.search(eqBytes(primaryKeySerializer.serialize(listOf(outOfPrefixId))))
             } returns primaryValueSerializer.serialize(listOf(outOfPrefixId, "outside@x.com"))
 
-            `when`("selecting by the col1 = 1 prefix"){
+            `when`("selecting by the col1 = 1 prefix") {
                 val result = table.selectByPrefix("composite_idx", listOf(1L), emptyList())
 
-                then("every row sharing the prefix comes back, each resolved through the primary index"){
+                then(
+                    "every row sharing the prefix comes back, each resolved through the primary index"
+                ) {
                     result.map { it["id"] to it["email"] } shouldBe
                         listOf(101L to "a@x.com", 102L to "b@x.com", 103L to null)
                 }
-                then("the col1 = 2 row that follows the prefix in the tree is excluded"){
+                then("the col1 = 2 row that follows the prefix in the tree is excluded") {
                     result.map { it["id"] } shouldNotContain outOfPrefixId
                     verify(exactly = 0) {
-                        primaryBtree.search(eqBytes(primaryKeySerializer.serialize(listOf(outOfPrefixId))))
+                        primaryBtree.search(
+                            eqBytes(primaryKeySerializer.serialize(listOf(outOfPrefixId)))
+                        )
                     }
                 }
-                then("both bounds are seeked/stopped as the same inclusive col1 = 1 value"){
+                then("both bounds are seeked/stopped as the same inclusive col1 = 1 value") {
                     verify {
                         compositeBtree.search(
                             eqBytes(compositeKeySerializer.serialize(listOf(1L))),
@@ -927,5 +953,384 @@ class TableTest :
                     }
                 }
             }
+        }
+
+        given("an inclusive range scan over a primary index with limit and offset") {
+            val primaryBtree = mockk<BTree>()
+            val cursor = mockk<Cursor>()
+            val table = Table(rowSchema, primaryHandle(primaryBtree), emptyMap(), testReadLock)
+
+            val entryCount = 100
+            val entries =
+                (1L..entryCount).map {
+                    primaryKeySerializer.serialize(listOf(it)) to
+                        primaryValueSerializer.serialize(listOf(it, "$it@x.com"))
+                }
+            // Bound(null, ...) is unbounded on both sides, so takeWhile's bound check can never
+            // stop the scan on its own - termination here depends entirely on step() eventually
+            // returning null. returnsMany repeats its *last* value forever once the list runs out
+            // instead of returning null, so the trailing null is required, not optional (without
+            // it, a filter that only a few entries can ever satisfy - like "filter id=10" below -
+            // makes drop()/take() pull forever past the 100 scripted entries: an infinite loop that
+            // OOMs on the endlessly-allocated Row objects, not a hang that just times out).
+            every { cursor.step() } returnsMany (entries + null)
+            every { cursor.close() } just Runs
+            every {
+                primaryBtree.search(
+                    null,
+                    ScanDirection.FORWARD,
+                    false,
+                )
+            } returns cursor
+
+            `when`("scanning with limit 10") {
+                val result =
+                    table.selectByRange(
+                        "pk_idx",
+                        Bound(null, isInclusive = true),
+                        Bound(null, isInclusive = true),
+                        emptyList(),
+                        null,
+                        10,
+                        null,
+                    )
+                then("only 10 items are returned, in order") {
+                    result.map { it["id"] } shouldBe (1L..10L).toList()
+                }
+            }
+            clearMocks(cursor)
+            every { cursor.step() } returnsMany (entries + null)
+            every { cursor.close() } just Runs
+
+
+            `when`("scanning with limit 10 and offset 20") {
+                val result =
+                    table.selectByRange(
+                        "pk_idx",
+                        Bound(null, isInclusive = true),
+                        Bound(null, isInclusive = true),
+                        emptyList(),
+                        null,
+                        10,
+                        20,
+                    )
+                then("the first 20 items are dropped and 10 items are returned") {
+                    result.map { it["id"] } shouldBe (21L..30L).toList()
+                }
+            }
+            clearMocks(cursor)
+            every { cursor.step() } returnsMany (entries + null)
+            every { cursor.close() } just Runs
+
+            `when`("scanning with limit 10 and offset 20 and filter id=10") {
+                val result =
+                    table.selectByRange(
+                        "pk_idx",
+                        Bound(null, isInclusive = true),
+                        Bound(null, isInclusive = true),
+                        emptyList(),
+                        { row -> (row["id"] as Long) == 10L },
+                        10,
+                        20,
+                    )
+                then("no item should be returned") {
+                    result.isEmpty() shouldBe true
+                }
+            }
+            clearMocks(cursor)
+            every { cursor.step() } returnsMany (entries + null)
+            every { cursor.close() } just Runs
+
+            `when`("scanning with limit 10 and offset 20 and filter id=40") {
+                val result =
+                    table.selectByRange(
+                        "pk_idx",
+                        Bound(null, isInclusive = true),
+                        Bound(null, isInclusive = true),
+                        emptyList(),
+                        { row -> (row["id"] as Long) == 40L },
+                        10,
+                        20,
+                    )
+                then("no item should be returned") {
+                    result.isEmpty() shouldBe true
+                }
+            }
+
+            clearMocks(cursor)
+            every { cursor.step() } returnsMany (entries + null)
+            every { cursor.close() } just Runs
+
+            `when`("scanning with limit 10, no offset, and filter id=40") {
+                val result =
+                    table.selectByRange(
+                        "pk_idx",
+                        Bound(null, isInclusive = true),
+                        Bound(null, isInclusive = true),
+                        emptyList(),
+                        { row -> (row["id"] as Long) == 40L },
+                        10,
+                        null,
+                    )
+                then("exactly one item is returned") {
+                    result.isEmpty() shouldBe false
+                    result.size shouldBe 1
+                }
+            }
+
+            clearMocks(cursor)
+            val descendingEntries =
+                (entryCount downTo 1L).map {
+                    primaryKeySerializer.serialize(listOf(it)) to
+                        primaryValueSerializer.serialize(listOf(it, "$it@x.com"))
+                }
+            every { cursor.step() } returnsMany (descendingEntries + null)
+            every { cursor.close() } just Runs
+            every {
+                primaryBtree.search(null, ScanDirection.BACKWARD, false)
+            } returns cursor
+
+            `when`("scanning backward (orderBy id descending) with limit 10") {
+                val result =
+                    table.selectByRange(
+                        "pk_idx",
+                        Bound(null, isInclusive = true),
+                        Bound(null, isInclusive = true),
+                        listOf(ColumnOrder("id", descending = true)),
+                        null,
+                        10,
+                        null,
+                    )
+                then("the 10 largest ids come back in descending order") {
+                    result.map { it["id"] } shouldBe (100L downTo 91L).toList()
+                }
+            }
+
+            clearMocks(cursor)
+            every { cursor.step() } returnsMany (descendingEntries + null)
+            every { cursor.close() } just Runs
+
+            `when`(
+                "scanning backward (orderBy id descending) with limit 5, offset 10, and filter id % 2 == 0"
+            ) {
+                val result =
+                    table.selectByRange(
+                        "pk_idx",
+                        Bound(null, isInclusive = true),
+                        Bound(null, isInclusive = true),
+                        listOf(ColumnOrder("id", descending = true)),
+                        { row -> (row["id"] as Long) % 2 == 0L },
+                        5,
+                        10,
+                    )
+                then("the next 5 even ids after skipping the first 10 even ids, still descending") {
+                    // Descending evens are 100, 98, 96, ..., 2 (50 total). Skipping the first 10
+                    // (100 down to 82) leaves 80 as the next one, so the 5 taken are 80..72.
+                    result.map { it["id"] } shouldBe listOf(80L, 78L, 76L, 74L, 72L)
+                }
+            }
+        }
+
+        given("an inclusive range scan over a secondary index with limit and offset") {
+            val primaryBtree = mockk<BTree>()
+            val secondaryBtree = mockk<BTree>()
+            val cursor = mockk<Cursor>()
+            val table =
+                Table(
+                    rowSchema,
+                    primaryHandle(primaryBtree),
+                    mapOf("email_idx" to secondaryHandle(secondaryBtree)),
+                    testReadLock,
+                )
+
+            val entryCount = 30
+            // Zero-padded so the email's byte-comparable order matches numeric id order too -
+            // keeps the expected results below easy to compute by hand.
+            fun emailFor(id: Long) = "user%02d@x.com".format(id)
+
+            val entries =
+                (1L..entryCount).map { id ->
+                    secondaryKeySerializer.serialize(listOf(emailFor(id))) to
+                        secondaryValueSerializer.serialize(listOf(id))
+                }
+            // Each secondary-index hit only carries the primary key as its value - extractData
+            // takes a second hop through the primary index to resolve the full row, so every id
+            // needs its own primaryBtree stub too (same two-step lookup as the composite-index
+            // prefix search above).
+            for (id in 1L..entryCount) {
+                every {
+                    primaryBtree.search(eqBytes(primaryKeySerializer.serialize(listOf(id))))
+                } returns primaryValueSerializer.serialize(listOf(id, emailFor(id)))
+            }
+            every { cursor.step() } returnsMany (entries + null)
+            every { cursor.close() } just Runs
+            every {
+                secondaryBtree.search(null, ScanDirection.FORWARD, false)
+            } returns cursor
+
+            `when`("scanning with limit 5 and offset 10") {
+                val result =
+                    table.selectByRange(
+                        "email_idx",
+                        Bound(null, isInclusive = true),
+                        Bound(null, isInclusive = true),
+                        emptyList(),
+                        null,
+                        5,
+                        10,
+                    )
+                then("the 5 rows right after the first 10, resolved through the primary index") {
+                    result.map { it["email"] } shouldBe (11L..15L).map { emailFor(it) }
+                }
+            }
+
+            clearMocks(cursor)
+            val descendingEntries =
+                (entryCount downTo 1L).map { id ->
+                    secondaryKeySerializer.serialize(listOf(emailFor(id))) to
+                        secondaryValueSerializer.serialize(listOf(id))
+                }
+            every { cursor.step() } returnsMany (descendingEntries + null)
+            every { cursor.close() } just Runs
+            every {
+                secondaryBtree.search(null, ScanDirection.BACKWARD, false)
+            } returns cursor
+
+            `when`(
+                "scanning backward (orderBy email descending) with limit 5, offset 10, and filter on even id"
+            ) {
+                val result =
+                    table.selectByRange(
+                        "email_idx",
+                        Bound(null, isInclusive = true),
+                        Bound(null, isInclusive = true),
+                        listOf(ColumnOrder("email", descending = true)),
+                        { row -> (row["id"] as Long) % 2 == 0L },
+                        5,
+                        10,
+                    )
+                then("the next 5 even ids after skipping the first 10 even ids, still descending by email") {
+                    // Descending ids are 30, 29, ..., 1; evens among them are 30, 28, ..., 2 (15
+                    // total). Skipping the first 10 (30 down to 12) leaves 10 as the next one, so
+                    // the 5 taken are 10, 8, 6, 4, 2.
+                    result.map { it["id"] } shouldBe listOf(10L, 8L, 6L, 4L, 2L)
+                }
+            }
+        }
+
+        given("a full scan with limit and offset") {
+            val primaryBtree = mockk<BTree>()
+            val cursor = mockk<Cursor>()
+            val table =
+                Table(
+                    rowSchema,
+                    primaryHandle(primaryBtree),
+                    emptyMap(),
+                    testReadLock,
+                )
+
+            val entryCount = 100
+
+            val entries =
+                (1L..entryCount).map { id ->
+                    primaryKeySerializer.serialize(listOf(id)) to
+                        primaryValueSerializer.serialize(listOf(id, "$id@x.com"))
+                }
+            every { cursor.step() } returnsMany (entries + null)
+            every { cursor.close() } just Runs
+            every {
+                primaryBtree.search(null, ScanDirection.FORWARD, false)
+            } returns cursor
+
+            `when`("scanning with limit 5 and offset 10") {
+                val result = table.fullScan(emptyList(), null, 5, 10)
+                then("the 5 rows right after the first 10, resolved through the primary index") {
+                    result.map { it["id"] } shouldBe (11L..15L).toList()
+                }
+            }
+
+            clearMocks(cursor)
+            every { cursor.step() } returnsMany (entries + null)
+            every { cursor.close() } just Runs
+            
+            `when`(
+                "scanning forward with no limit, offset, filter, order"
+            ) {
+                val result =
+                    table.fullScan(
+                        emptyList(),
+                        null,
+                        null,
+                        null,
+                    )
+                then("all rows ascending by id should be returned.") {
+                    result.map { it["id"] } shouldBe (1L..100L).toList()
+                }
+            }
+
+            clearMocks(cursor)
+            every { cursor.step() } returnsMany (entries + null)
+            every { cursor.close() } just Runs
+
+            `when`(
+                "scanning forward with no limit, offset, filter, orderBy ascending by id"
+            ) {
+                val result =
+                    table.fullScan(
+                        listOf(ColumnOrder("id", descending = false)),
+                        null,
+                        null,
+                        null,
+                    )
+                then("all rows ascending by id should be returned.") {
+                    result.map { it["id"] } shouldBe (1L..100L).toList()
+                }
+            }
+
+            clearMocks(cursor)
+            val descendingEntries =
+                (entryCount downTo 1L).map { id ->
+                    primaryKeySerializer.serialize(listOf(id)) to
+                        primaryValueSerializer.serialize(listOf(id, "$id@x.com"))
+                }
+            every { cursor.step() } returnsMany (descendingEntries + null)
+            every { cursor.close() } just Runs
+            every {
+                primaryBtree.search(null, ScanDirection.BACKWARD, false)
+            } returns cursor
+
+            `when`(
+                "scanning backward with limit 5, offset 10, and filter on even id"
+            ) {
+                val result =
+                    table.fullScan(
+                        listOf(ColumnOrder("id", descending = true)),
+                        { row -> (row["id"] as Long) % 2 == 0L },
+                        5,
+                        10,
+                    )
+                then("the next 5 even ids after skipping the first 10 even ids, still descending by id") {
+                    result.map { it["id"] } shouldBe (80L downTo 72L).filter{ value -> value % 2 == 0L }.toList()
+                }
+            }
+
+            clearMocks(cursor)
+            every { cursor.step() } returnsMany (descendingEntries + null)
+            every { cursor.close() } just Runs
+            `when`(
+                "scanning backward with no limit, offset, filter"
+            ) {
+                val result =
+                    table.fullScan(
+                        listOf(ColumnOrder("id", descending = true)),
+                        null,
+                        null,
+                        null,
+                    )
+                then("all rows descending by id should be returned.") {
+                    result.map { it["id"] } shouldBe (100L downTo 1L).toList()
+                }
+            }
+
         }
     })
