@@ -4,6 +4,8 @@ package util
  * Only the codes defined by the SQL standard (SQLSTATE) that correspond to situations this
  * project actually throws.
  * Class 02 (No Data): no row to select/update/delete.
+ * Class 0A (Feature Not Supported): valid request this engine doesn't implement yet (e.g. updating
+ *   a primary key column).
  * Class 23 (Integrity Constraint Violation): NOT NULL, UNIQUE, etc. violated.
  * Class 2B (Dependent Privilege Descriptors Still Exist): can't drop an object directly because
  *   something else still depends on it (e.g. a table's primary index — only removable via DROP
@@ -14,6 +16,7 @@ package util
  * */
 enum class SqlState(val code: String) {
     NO_DATA("02000"),
+    FEATURE_NOT_SUPPORTED("0A000"),
     NOT_NULL_VIOLATION("23502"),
     UNIQUE_VIOLATION("23505"),
     DEPENDENT_OBJECTS_STILL_EXIST("2BP01"),

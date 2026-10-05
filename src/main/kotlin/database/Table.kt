@@ -1,5 +1,6 @@
 package database
 
+import exception.DatabaseException
 import exception.TableException
 import index.btree.ScanDirection
 import index.serializer.KeySerializer
@@ -13,6 +14,7 @@ import schema.RowSchema
 import util.EntityType
 import util.SQLErrorDetail
 import util.requireOrThrow
+import java.nio.ByteBuffer
 import java.util.Arrays
 import java.util.concurrent.locks.Lock
 import kotlin.concurrent.withLock
@@ -52,6 +54,16 @@ class Table(
      */
     fun insertRow(row: Row) {
         readLock.withLock {
+            val violatedColumns = row.checkNullViolations()
+            requireOrThrow(violatedColumns.isEmpty()) {
+                DatabaseException.NotNullViolation(
+                    SQLErrorDetail(
+                        entityType = EntityType.COLUMN,
+                        tableName = primaryIndex.metadata.tableName,
+                        columnNames = violatedColumns
+                    )
+                )
+            }
             val primaryTree = primaryIndex.btree
             val primaryKey = primaryIndex.extractKey(row)
             val primarySerialized = primaryIndex.keySerializer.serialize(primaryKey)
@@ -268,7 +280,15 @@ class Table(
     }
 
     /**
-     * Updates [row] in place, keyed by its (unchanging) primary key.
+     * Replaces the row stored at [key] with [newRow].
+     *
+     * [key] identifies the existing row; [newRow] must carry that same primary key. Changing a
+     * primary key is not supported yet - it would mean moving the row within the clustered index
+     * and rewriting every secondary index's stored pointer to it - so it is rejected rather than
+     * silently overwriting whichever row happens to sit at the new key.
+     *
+     * Every check (NOT NULL, unchanged primary key, unique secondary keys) runs before the first
+     * write, so a rejected update leaves everything unchanged.
      *
      * For every secondary index, the value written back is [IndexHandle.valueSerializer]- encoded —
      * the *same* encoding [insertRow] uses and [extractData] expects when resolving a secondary hit
@@ -278,33 +298,39 @@ class Table(
      * fine right up until a later [selectByIndex] tried to decode them with
      * [IndexHandle.valueSerializer] and either threw or returned garbage. A test that asserted on
      * the exact bytes written to a mocked secondary btree is what caught it.
+     *
+     * @throws exception.DatabaseException.NotNullViolation if [newRow] has a null in a NOT NULL column.
+     * @throws TableException.PrimaryKeyUpdateNotSupported if [newRow]'s primary key differs from [key].
+     * @throws TableException.RowNotFound if no row exists at [key].
+     * @throws TableException.UniqueViolation if [newRow] gives a unique secondary index a key that
+     *  another row already holds.
      */
-    fun updateRow(row: Row) {
+    fun updateRow(key: List<Any?>, newRow: Row) {
         readLock.withLock {
+            validateUpdate(key, newRow)
             val primaryTree = primaryIndex.btree
-            val primaryKey = primaryIndex.extractKey(row)
-            val primaryKeySerialized = primaryIndex.keySerializer.serialize(primaryKey)
-            val oldRow =
-                primaryTree.search(primaryKeySerialized)?.let { extractData(primaryIndex, it) }
-                    ?: throw TableException.RowNotFound(
-                        SQLErrorDetail(
-                            entityType = EntityType.ROW,
-                            tableName = primaryIndex.metadata.tableName,
-                        )
+            val newPkKeySerialized = primaryIndex.keySerializer.serialize(primaryIndex.extractKey(newRow))
+            val oldRow = primaryTree.search(newPkKeySerialized)?.let { extractData(primaryIndex, it) }
+                ?: throw TableException.RowNotFound(
+                    SQLErrorDetail(
+                        entityType = EntityType.ROW,
+                        tableName = primaryIndex.metadata.tableName,
                     )
+                )
+            checkUniqueness(listOf(oldRow to newRow))
 
             primaryTree.update(
-                primaryKeySerialized,
-                primaryKeySerialized,
-                primaryIndex.valueSerializer.serialize(row.toList()),
+                newPkKeySerialized,
+                newPkKeySerialized,
+                primaryIndex.valueSerializer.serialize(newRow.toList()),
             )
 
             for ((_, handle) in secondaryIndexes) {
                 val oldKey = handle.extractKey(oldRow)
                 val oldKeySerialized = handle.keySerializer.serialize(oldKey)
-                val newKey = handle.extractKey(row)
+                val newKey = handle.extractKey(newRow)
                 val newKeySerialized = handle.keySerializer.serialize(newKey)
-                val indexValueSerialized = handle.valueSerializer.serialize(primaryKey)
+                val indexValueSerialized = handle.valueSerializer.serialize(key)
                 if (oldKeySerialized.contentEquals(newKeySerialized)) {
                     handle.btree.update(oldKeySerialized, oldKeySerialized, indexValueSerialized)
                 } else {
@@ -312,6 +338,71 @@ class Table(
                     handle.btree.insert(newKeySerialized, indexValueSerialized)
                 }
             }
+        }
+    }
+
+    /**
+     * Updates every row matching [lowerBound]/[upperBound]/[filter] on [indexName] by replacing it
+     * with `assign(row)`, and returns how many rows were actually updated.
+     *
+     * Parameters other than [assign] mean exactly what they do in [selectByRange] (see its doc for
+     * the bound/prefix contract and the [filter] split), and the same two-phase approach as
+     * [deleteWhere] applies: matching rows are collected first (the cursor is closed by then), and
+     * only afterwards updated one by one, so rewriting an index entry can never disturb a scan
+     * still walking that index.
+     *
+     * @param assign Builds the replacement [Row] for one collected row; deciding what to assign (SET
+     * clause evaluation) is the caller's job. The replacement must keep the row's primary key and
+     * satisfy NOT NULL.
+     *
+     * ### Validation before any write
+     * `assign` is applied to every collected row first, and the results are checked - NOT NULL, an
+     * unchanged primary key, and unique secondary keys (see [updateRow]) - before the first row is
+     * written. A violation in any of them therefore propagates out of this function with nothing
+     * modified. `assign` runs exactly once per collected row.
+     *
+     * The unique check also covers the batch against itself: two rows given the same new key are
+     * rejected up front rather than the second one failing after the first was written. It is
+     * conservative about swaps and shifts - a row taking a key that another row in the same batch
+     * is giving up is rejected as well, since the check looks at the indexes as they are before any
+     * row is written.
+     *
+     * ### Count
+     * A row that vanished between collection and its update (another thread deleted it first)
+     * throws [TableException.RowNotFound] from [updateRow]; that row is skipped and not counted.
+     * Any other exception propagates. Like [deleteWhere], the count is best-effort under concurrent
+     * writers.
+     *
+     * ### Limitations (no WAL, no row locks)
+     * - Not atomic once writing starts: only the checks above are done up front. A storage error
+     *   partway through, or another thread changing a row or index in between, can still leave the
+     *   earlier rows already updated.
+     * - [filter] and the bounds are evaluated only at collection time, and [assign] receives the
+     *   row as it was then, not as it is when [updateRow] re-reads it.
+     */
+    fun updateWhere(
+        indexName: String,
+        lowerBound: Bound<List<Any?>>,
+        upperBound: Bound<List<Any?>>,
+        filter: ((Row) -> Boolean)? = null,
+        assign: (Row) -> Row,
+    ): Int {
+        readLock.withLock {
+            val targetRows = selectByRange(indexName, lowerBound, upperBound, emptyList(), filter, null, null)
+            val updates = targetRows.map { oldRow -> Triple(primaryIndex.extractKey(oldRow), oldRow, assign(oldRow)) }
+            updates.forEach { (key, _, newRow) -> validateUpdate(key, newRow) }
+            checkUniqueness(updates.map { (_, oldRow, newRow) -> oldRow to newRow })
+
+            var affectedRowCount = 0
+            updates.forEach { (key, _, newRow) ->
+                try {
+                    updateRow(key, newRow)
+                    affectedRowCount++
+                } catch (e: TableException.RowNotFound) {
+                    logger.debug { "updateWhere: row already deleted by another thread, skipped (table=${primaryIndex.metadata.tableName}, key=$key)" }
+                }
+            }
+            return affectedRowCount
         }
     }
 
@@ -622,6 +713,79 @@ class Table(
                 value
             }
         return Row(rowSchema, primaryIndex.valueSerializer.deserialize(rowValue).first)
+    }
+
+    /**
+     * The checks [updateRow] can make from its two arguments alone, without reading any index:
+     * [newRow] satisfies NOT NULL, and carries the same primary key as [key]. Split out so
+     * [updateWhere] can run them for every row before writing any of them.
+     *
+     * @throws DatabaseException.NotNullViolation if [newRow] has a null in a NOT NULL column.
+     * @throws TableException.PrimaryKeyUpdateNotSupported if [newRow]'s primary key differs from [key].
+     */
+    private fun validateUpdate(key: List<Any?>, newRow: Row) {
+        val violatedColumns = newRow.checkNullViolations()
+        requireOrThrow(violatedColumns.isEmpty()) {
+            DatabaseException.NotNullViolation(
+                SQLErrorDetail(
+                    entityType = EntityType.COLUMN,
+                    tableName = primaryIndex.metadata.tableName,
+                    columnNames = violatedColumns,
+                )
+            )
+        }
+        val oldPkKeySerialized = primaryIndex.keySerializer.serialize(key)
+        val newPkKeySerialized =
+            primaryIndex.keySerializer.serialize(primaryIndex.extractKey(newRow))
+        requireOrThrow(Arrays.compareUnsigned(oldPkKeySerialized, newPkKeySerialized) == 0) {
+            TableException.PrimaryKeyUpdateNotSupported(
+                SQLErrorDetail(
+                    reason = "primary key columns cannot be updated yet",
+                    entityType = EntityType.PRIMARY_KEY,
+                    tableName = primaryIndex.metadata.tableName,
+                    columnNames = primaryIndex.columnNames,
+                )
+            )
+        }
+    }
+
+    /**
+     * Rejects [changes] - `(oldRow, newRow)` pairs about to be written - if any of them would give a
+     * unique secondary index a key it already holds, or if two of them would claim the same new key
+     * as each other. Reads the indexes but writes nothing, so a rejection leaves everything
+     * unchanged; [updateRow] passes a single pair, [updateWhere] the whole batch up front.
+     *
+     * Only a key that actually *changes* is checked (an unchanged key trivially still belongs to its
+     * own row). The check is against the indexes as they are now, so a batch that hands one row the
+     * key another row in the same batch is about to give up (swapping or shifting keys) is rejected
+     * too, even though writing the rows in the right order could have worked.
+     *
+     * @throws TableException.UniqueViolation naming the first violated index.
+     */
+    private fun checkUniqueness(changes: List<Pair<Row, Row>>) {
+        for ((_, handle) in secondaryIndexes) {
+            if (!handle.metadata.isUnique) continue
+            val claimedKeys = HashSet<ByteBuffer>()
+            for ((oldRow, newRow) in changes) {
+                val oldKeySerialized = handle.keySerializer.serialize(handle.extractKey(oldRow))
+                val newKeySerialized = handle.keySerializer.serialize(handle.extractKey(newRow))
+                if (oldKeySerialized.contentEquals(newKeySerialized)) continue
+                requireOrThrow(
+                    claimedKeys.add(ByteBuffer.wrap(newKeySerialized)) && handle.btree.search(
+                        newKeySerialized
+                    ) == null
+                ) {
+                    TableException.UniqueViolation(
+                        SQLErrorDetail(
+                            entityType = EntityType.INDEX,
+                            entityName = handle.metadata.indexName,
+                            tableName = handle.metadata.tableName,
+                            columnNames = handle.columnNames,
+                        )
+                    )
+                }
+            }
+        }
     }
 
 }

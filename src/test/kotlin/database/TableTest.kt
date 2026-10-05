@@ -1,5 +1,6 @@
 package database
 
+import exception.DatabaseException
 import exception.TableException
 import index.btree.BTree
 import index.btree.Cursor
@@ -11,6 +12,7 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.mockk.MockKMatcherScope
 import io.mockk.Runs
 import io.mockk.every
@@ -29,6 +31,7 @@ import schema.IndexRow
 import schema.Row
 import schema.RowColumn
 import schema.RowSchema
+import util.SqlState
 
 class TableTest :
     BehaviorSpec({
@@ -369,8 +372,56 @@ class TableTest :
             `when`("updating that row") {
                 then("RowNotFound should be thrown") {
                     shouldThrow<TableException.RowNotFound> {
-                        table.updateRow(Row(rowSchema, listOf(1L, "new@x.com")))
+                        table.updateRow(listOf(1L), Row(rowSchema, listOf(1L, "new@x.com")))
                     }
+                }
+            }
+        }
+
+        given("a table where the new row's primary key differs from the key being updated") {
+            val primaryBtree = mockk<BTree>()
+            val secondaryBtree = mockk<BTree>()
+            val table =
+                Table(
+                    rowSchema,
+                    primaryHandle(primaryBtree),
+                    mapOf("email_idx" to secondaryHandle(secondaryBtree)),
+                    testReadLock,
+                )
+
+            `when`("updating the row at id 1 with a new row whose id is 2") {
+                then("PrimaryKeyUpdateNotSupported is thrown with the FEATURE_NOT_SUPPORTED state") {
+                    val error = shouldThrow<TableException.PrimaryKeyUpdateNotSupported> {
+                        table.updateRow(
+                            listOf(1L),
+                            Row(rowSchema, listOf(2L, "a@x.com"))
+                        )
+                    }
+                    error.message shouldContain SqlState.FEATURE_NOT_SUPPORTED.code
+                }
+                then("no index is read or written, so the row already stored at id 2 is not overwritten") {
+                    verify(exactly = 0) { primaryBtree.search(any()) }
+                    verify(exactly = 0) { primaryBtree.update(any(), any(), any()) }
+                    verify(exactly = 0) { secondaryBtree.update(any(), any(), any()) }
+                    verify(exactly = 0) { secondaryBtree.delete(any()) }
+                    verify(exactly = 0) { secondaryBtree.insert(any(), any()) }
+                }
+            }
+        }
+
+        given("a table updated with a new row that has null in a NOT NULL column") {
+            val primaryBtree = mockk<BTree>()
+            val table = Table(rowSchema, primaryHandle(primaryBtree), emptyMap(), testReadLock)
+
+            `when`("updating with a null id") {
+                then("NotNullViolation naming that column is thrown before any index is touched") {
+                    val error = shouldThrow<DatabaseException.NotNullViolation> {
+                        table.updateRow(listOf(1L), Row(rowSchema, listOf(null, "a@x.com")))
+                    }
+                    error.message shouldContain "'id'"
+                    error.message shouldContain SqlState.NOT_NULL_VIOLATION.code
+                    verify(exactly = 0) { primaryBtree.search(any()) }
+                    verify(exactly = 0) { primaryBtree.update(any(), any(), any()) }
                 }
             }
         }
@@ -392,7 +443,7 @@ class TableTest :
             every { secondaryBtree.update(any(), any(), any()) } just Runs
 
             `when`("updating that row") {
-                table.updateRow(Row(rowSchema, listOf(1L, "a@x.com")))
+                table.updateRow(listOf(1L), Row(rowSchema, listOf(1L, "a@x.com")))
 
                 then("the secondary index should be updated in place, not deleted and reinserted") {
                     verify {
@@ -422,11 +473,13 @@ class TableTest :
                 primaryBtree.search(eqBytes(primaryKeySerializer.serialize(listOf(1L))))
             } returns primaryValueSerializer.serialize(listOf(1L, "old@x.com"))
             every { primaryBtree.update(any(), any(), any()) } just Runs
+            // email_idx is unique, so updateRow checks that the new email is not already taken.
+            every { secondaryBtree.search(eqBytes(secondaryKeySerializer.serialize(listOf("new@x.com")))) } returns null
             every { secondaryBtree.delete(any()) } just Runs
             every { secondaryBtree.insert(any(), any()) } just Runs
 
             `when`("updating that row") {
-                table.updateRow(Row(rowSchema, listOf(1L, "new@x.com")))
+                table.updateRow(listOf(1L), Row(rowSchema, listOf(1L, "new@x.com")))
 
                 then("the old secondary entry should be deleted and a new one inserted") {
                     verify {
@@ -1335,9 +1388,8 @@ class TableTest :
 
         }
 
-        fun primaryEntry(id: Long) =
-            primaryKeySerializer.serialize(listOf(id)) to
-                    primaryValueSerializer.serialize(listOf(id, "$id@x.com"))
+        fun primaryEntry(id: Long) = primaryKeySerializer.serialize(listOf(id)) to
+                primaryValueSerializer.serialize(listOf(id, "$id@x.com"))
 
         // deleteRow re-reads each row by primary key at delete time (and the secondary-index scan's
         // extractData does the same lookup), so both go through this one stub.
@@ -1535,6 +1587,394 @@ class TableTest :
                         )
                     }
                     verify(exactly = 0) { primaryBtree.delete(any()) }
+                }
+            }
+        }
+
+        given("updateWhere over the whole primary index with a filter matching some rows") {
+            val primaryBtree = mockk<BTree>()
+            val secondaryBtree = mockk<BTree>()
+            val cursor = mockk<Cursor>()
+            val table = Table(
+                rowSchema,
+                primaryHandle(primaryBtree),
+                mapOf("email_idx" to secondaryHandle(secondaryBtree)),
+                testReadLock,
+            )
+            val ids = 1L..5L
+            every { cursor.step() } returnsMany (ids.map { primaryEntry(it) } + null)
+            every { cursor.close() } just Runs
+            every { primaryBtree.search(null, ScanDirection.FORWARD, false) } returns cursor
+            ids.forEach { stubPrimaryLookup(primaryBtree, it) }
+            every { primaryBtree.update(any(), any(), any()) } just Runs
+            for (id in listOf(2L, 4L)) {
+                every { secondaryBtree.search(eqBytes(secondaryKeySerializer.serialize(listOf("new$id@x.com")))) } returns null
+            }
+            every { secondaryBtree.delete(any()) } just Runs
+            every { secondaryBtree.insert(any(), any()) } just Runs
+
+            `when`("changing the email of rows with an even id") {
+                val affected = table.updateWhere(
+                    "pk_idx",
+                    Bound(null, isInclusive = true),
+                    Bound(null, isInclusive = true),
+                    filter = { row -> (row["id"] as Long) % 2 == 0L },
+                    assign = { row -> Row(rowSchema, listOf(row["id"], "new${row["id"]}@x.com")) },
+                )
+
+                then("the returned count is the number of rows actually updated") {
+                    affected shouldBe 2
+                }
+                then("only the matching rows are rewritten in the primary index, with the assigned values") {
+                    for (id in listOf(2L, 4L)) {
+                        verify(exactly = 1) {
+                            primaryBtree.update(
+                                eqBytes(primaryKeySerializer.serialize(listOf(id))),
+                                eqBytes(primaryKeySerializer.serialize(listOf(id))),
+                                eqBytes(primaryValueSerializer.serialize(listOf(id, "new$id@x.com"))),
+                            )
+                        }
+                    }
+                    verify(exactly = 2) { primaryBtree.update(any(), any(), any()) }
+                }
+                then("each updated row's old secondary entry is replaced by one for the new email") {
+                    for (id in listOf(2L, 4L)) {
+                        verify(exactly = 1) {
+                            secondaryBtree.delete(
+                                eqBytes(secondaryKeySerializer.serialize(listOf("$id@x.com")))
+                            )
+                        }
+                        verify(exactly = 1) {
+                            secondaryBtree.insert(
+                                eqBytes(secondaryKeySerializer.serialize(listOf("new$id@x.com"))),
+                                eqBytes(secondaryValueSerializer.serialize(listOf(id))),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        given("updateWhere with a filter that matches nothing") {
+            val primaryBtree = mockk<BTree>()
+            val cursor = mockk<Cursor>()
+            val table = Table(rowSchema, primaryHandle(primaryBtree), emptyMap(), testReadLock)
+            every { cursor.step() } returnsMany ((1L..3L).map { primaryEntry(it) } + null)
+            every { cursor.close() } just Runs
+            every { primaryBtree.search(null, ScanDirection.FORWARD, false) } returns cursor
+
+            `when`("updating") {
+                val affected = table.updateWhere(
+                    "pk_idx",
+                    Bound(null, isInclusive = true),
+                    Bound(null, isInclusive = true),
+                    filter = { false },
+                    assign = { row -> row },
+                )
+
+                then("zero is returned, not an error") { affected shouldBe 0 }
+                then("nothing is written") {
+                    verify(exactly = 0) { primaryBtree.update(any(), any(), any()) }
+                }
+            }
+        }
+
+        given("updateWhere where a collected row is deleted by someone else before its turn") {
+            val primaryBtree = mockk<BTree>()
+            val cursor = mockk<Cursor>()
+            val table = Table(rowSchema, primaryHandle(primaryBtree), emptyMap(), testReadLock)
+            every { cursor.step() } returnsMany ((1L..3L).map { primaryEntry(it) } + null)
+            every { cursor.close() } just Runs
+            every { primaryBtree.search(null, ScanDirection.FORWARD, false) } returns cursor
+            stubPrimaryLookup(primaryBtree, 1L)
+            stubPrimaryLookup(primaryBtree, 2L)
+            // The scan above still saw id 3, but by the time updateRow re-reads it, it is gone.
+            every {
+                primaryBtree.search(eqBytes(primaryKeySerializer.serialize(listOf(3L))))
+            } returns null
+            every { primaryBtree.update(any(), any(), any()) } just Runs
+
+            `when`("updating everything") {
+                val affected = table.updateWhere(
+                    "pk_idx",
+                    Bound(null, isInclusive = true),
+                    Bound(null, isInclusive = true),
+                    assign = { row -> Row(rowSchema, listOf(row["id"], "changed@x.com")) },
+                )
+
+                then("no error is thrown and the vanished row is not counted") {
+                    affected shouldBe 2
+                }
+                then("the remaining rows are still updated, and the vanished one is not written") {
+                    verify(exactly = 2) { primaryBtree.update(any(), any(), any()) }
+                    verify(exactly = 0) {
+                        primaryBtree.update(
+                            eqBytes(primaryKeySerializer.serialize(listOf(3L))),
+                            any(),
+                            any(),
+                        )
+                    }
+                }
+            }
+        }
+
+        given("updateWhere whose assign changes the primary key") {
+            val primaryBtree = mockk<BTree>()
+            val cursor = mockk<Cursor>()
+            val table = Table(rowSchema, primaryHandle(primaryBtree), emptyMap(), testReadLock)
+            every { cursor.step() } returnsMany ((1L..2L).map { primaryEntry(it) } + null)
+            every { cursor.close() } just Runs
+            every { primaryBtree.search(null, ScanDirection.FORWARD, false) } returns cursor
+
+            `when`("updating") {
+                then("PrimaryKeyUpdateNotSupported propagates and nothing is written") {
+                    shouldThrow<TableException.PrimaryKeyUpdateNotSupported> {
+                        table.updateWhere(
+                            "pk_idx",
+                            Bound(null, isInclusive = true),
+                            Bound(null, isInclusive = true),
+                            assign = { row -> Row(rowSchema, listOf((row["id"] as Long) + 10, row["email"])) },
+                        )
+                    }
+                    verify(exactly = 0) { primaryBtree.update(any(), any(), any()) }
+                }
+            }
+        }
+
+        given("updateWhere whose assign leaves a NOT NULL column null") {
+            val primaryBtree = mockk<BTree>()
+            val cursor = mockk<Cursor>()
+            val table = Table(rowSchema, primaryHandle(primaryBtree), emptyMap(), testReadLock)
+            every { cursor.step() } returnsMany ((1L..2L).map { primaryEntry(it) } + null)
+            every { cursor.close() } just Runs
+            every { primaryBtree.search(null, ScanDirection.FORWARD, false) } returns cursor
+
+            `when`("updating") {
+                then("NotNullViolation propagates and nothing is written") {
+                    shouldThrow<DatabaseException.NotNullViolation> {
+                        table.updateWhere(
+                            "pk_idx",
+                            Bound(null, isInclusive = true),
+                            Bound(null, isInclusive = true),
+                            assign = { row -> Row(rowSchema, listOf(null, row["email"])) },
+                        )
+                    }
+                    verify(exactly = 0) { primaryBtree.update(any(), any(), any()) }
+                }
+            }
+        }
+
+        given("updateWhere whose assign violates a rule only for the last collected row") {
+            val primaryBtree = mockk<BTree>()
+            val cursor = mockk<Cursor>()
+            val table = Table(rowSchema, primaryHandle(primaryBtree), emptyMap(), testReadLock)
+            val ids = 1L..3L
+            every { cursor.step() } returnsMany (ids.map { primaryEntry(it) } + null)
+            every { cursor.close() } just Runs
+            every { primaryBtree.search(null, ScanDirection.FORWARD, false) } returns cursor
+            // Stubbed so that a regression (rows 1 and 2 written before row 3 is rejected) shows up
+            // as a failed verify below, not as an unrelated "no answer found" mock error.
+            ids.forEach { stubPrimaryLookup(primaryBtree, it) }
+            every { primaryBtree.update(any(), any(), any()) } just Runs
+
+            `when`("the third row's replacement changes its primary key") {
+                then("PrimaryKeyUpdateNotSupported is thrown and the two valid rows were not written either") {
+                    shouldThrow<TableException.PrimaryKeyUpdateNotSupported> {
+                        table.updateWhere(
+                            "pk_idx",
+                            Bound(null, isInclusive = true),
+                            Bound(null, isInclusive = true),
+                            assign = { row ->
+                                val id = row["id"] as Long
+                                Row(rowSchema, listOf(if (id == 3L) 99L else id, "changed@x.com"))
+                            },
+                        )
+                    }
+                    verify(exactly = 0) { primaryBtree.update(any(), any(), any()) }
+                }
+            }
+
+            clearMocks(cursor)
+            every { cursor.step() } returnsMany (ids.map { primaryEntry(it) } + null)
+            every { cursor.close() } just Runs
+
+            `when`("the third row's replacement has null in a NOT NULL column") {
+                then("NotNullViolation is thrown and the two valid rows were not written either") {
+                    shouldThrow<DatabaseException.NotNullViolation> {
+                        table.updateWhere(
+                            "pk_idx",
+                            Bound(null, isInclusive = true),
+                            Bound(null, isInclusive = true),
+                            assign = { row ->
+                                val id = row["id"] as Long
+                                Row(rowSchema, listOf(if (id == 3L) null else id, "changed@x.com"))
+                            },
+                        )
+                    }
+                    verify(exactly = 0) { primaryBtree.update(any(), any(), any()) }
+                }
+            }
+        }
+
+        given("a unique secondary index that already holds the email an update would move to") {
+            val primaryBtree = mockk<BTree>()
+            val secondaryBtree = mockk<BTree>()
+            val table = Table(
+                rowSchema,
+                primaryHandle(primaryBtree),
+                mapOf("email_idx" to secondaryHandle(secondaryBtree)),
+                testReadLock,
+            )
+            every {
+                primaryBtree.search(eqBytes(primaryKeySerializer.serialize(listOf(1L))))
+            } returns primaryValueSerializer.serialize(listOf(1L, "old@x.com"))
+            every {
+                secondaryBtree.search(eqBytes(secondaryKeySerializer.serialize(listOf("taken@x.com"))))
+            } returns secondaryValueSerializer.serialize(listOf(2L))
+            every { primaryBtree.update(any(), any(), any()) } just Runs
+            every { secondaryBtree.delete(any()) } just Runs
+            every { secondaryBtree.insert(any(), any()) } just Runs
+
+            `when`("updating row 1 to that email") {
+                then("UniqueViolation is thrown before anything is written, to any index") {
+                    shouldThrow<TableException.UniqueViolation> {
+                        table.updateRow(
+                            listOf(1L),
+                            Row(rowSchema, listOf(1L, "taken@x.com"))
+                        )
+                    }
+                    verify(exactly = 0) { primaryBtree.update(any(), any(), any()) }
+                    verify(exactly = 0) { secondaryBtree.delete(any()) }
+                    verify(exactly = 0) { secondaryBtree.insert(any(), any()) }
+                }
+            }
+        }
+
+        given("a non-unique secondary index whose key changes on update") {
+            val primaryBtree = mockk<BTree>()
+            val secondaryBtree = mockk<BTree>()
+            val table = Table(
+                rowSchema,
+                primaryHandle(primaryBtree),
+                mapOf("email_idx" to secondaryHandle(secondaryBtree, isUnique = false)),
+                testReadLock,
+            )
+            every {
+                primaryBtree.search(eqBytes(primaryKeySerializer.serialize(listOf(1L))))
+            } returns primaryValueSerializer.serialize(listOf(1L, "old@x.com"))
+            every { primaryBtree.update(any(), any(), any()) } just Runs
+            every { secondaryBtree.delete(any()) } just Runs
+            every { secondaryBtree.insert(any(), any()) } just Runs
+
+            `when`("updating row 1 to an email another row may share") {
+                table.updateRow(listOf(1L), Row(rowSchema, listOf(1L, "shared@x.com")))
+
+                then("the new key is not looked up, since duplicates are allowed") {
+                    verify(exactly = 0) { secondaryBtree.search(any()) }
+                    verify(exactly = 1) { secondaryBtree.insert(any(), any()) }
+                }
+            }
+        }
+
+        given("updateWhere that would give two rows the same unique secondary key") {
+            val primaryBtree = mockk<BTree>()
+            val secondaryBtree = mockk<BTree>()
+            val cursor = mockk<Cursor>()
+            val table = Table(
+                rowSchema,
+                primaryHandle(primaryBtree),
+                mapOf("email_idx" to secondaryHandle(secondaryBtree)),
+                testReadLock,
+            )
+            val ids = 1L..2L
+            every { cursor.step() } returnsMany (ids.map { primaryEntry(it) } + null)
+            every { cursor.close() } just Runs
+            every { primaryBtree.search(null, ScanDirection.FORWARD, false) } returns cursor
+            // Stubbed so a regression (row 1 written before row 2 is rejected) fails the verify
+            // below instead of surfacing as an unrelated "no answer found" mock error.
+            ids.forEach { stubPrimaryLookup(primaryBtree, it) }
+            // Nobody in the index holds the shared email yet - only the batch conflicts with itself.
+            every {
+                secondaryBtree.search(eqBytes(secondaryKeySerializer.serialize(listOf("same@x.com"))))
+            } returns null
+            every { primaryBtree.update(any(), any(), any()) } just Runs
+            every { secondaryBtree.delete(any()) } just Runs
+            every { secondaryBtree.insert(any(), any()) } just Runs
+
+            `when`("setting every matching row's email to the same value") {
+                then("UniqueViolation is thrown and not even the first row was written") {
+                    shouldThrow<TableException.UniqueViolation> {
+                        table.updateWhere(
+                            "pk_idx",
+                            Bound(null, isInclusive = true),
+                            Bound(null, isInclusive = true),
+                            assign = { row -> Row(rowSchema, listOf(row["id"], "same@x.com")) },
+                        )
+                    }
+                    verify(exactly = 0) { primaryBtree.update(any(), any(), any()) }
+                    verify(exactly = 0) { secondaryBtree.insert(any(), any()) }
+                }
+            }
+        }
+
+        given("updateWhere where only the last row's new key is taken by a row outside the batch") {
+            val primaryBtree = mockk<BTree>()
+            val secondaryBtree = mockk<BTree>()
+            val cursor = mockk<Cursor>()
+            val table = Table(
+                rowSchema,
+                primaryHandle(primaryBtree),
+                mapOf("email_idx" to secondaryHandle(secondaryBtree)),
+                testReadLock,
+            )
+            val ids = 1L..3L
+            every { cursor.step() } returnsMany (ids.map { primaryEntry(it) } + null)
+            every { cursor.close() } just Runs
+            every { primaryBtree.search(null, ScanDirection.FORWARD, false) } returns cursor
+            ids.forEach { stubPrimaryLookup(primaryBtree, it) }
+            for (id in listOf(1L, 2L)) {
+                every {
+                    secondaryBtree.search(eqBytes(secondaryKeySerializer.serialize(listOf("new$id@x.com"))))
+                } returns null
+            }
+            every {
+                secondaryBtree.search(eqBytes(secondaryKeySerializer.serialize(listOf("new3@x.com"))))
+            } returns secondaryValueSerializer.serialize(listOf(99L))
+            every { primaryBtree.update(any(), any(), any()) } just Runs
+            every { secondaryBtree.delete(any()) } just Runs
+            every { secondaryBtree.insert(any(), any()) } just Runs
+
+            `when`("renaming every matching row's email") {
+                then("UniqueViolation is thrown and the two rows before it were not written either") {
+                    shouldThrow<TableException.UniqueViolation> {
+                        table.updateWhere(
+                            "pk_idx",
+                            Bound(null, isInclusive = true),
+                            Bound(null, isInclusive = true),
+                            assign = { row -> Row(rowSchema, listOf(row["id"], "new${row["id"]}@x.com")) },
+                        )
+                    }
+                    verify(exactly = 0) { primaryBtree.update(any(), any(), any()) }
+                    verify(exactly = 0) { secondaryBtree.insert(any(), any()) }
+                }
+            }
+        }
+
+        given("updateWhere on an unknown index name") {
+            val primaryBtree = mockk<BTree>()
+            val table = Table(rowSchema, primaryHandle(primaryBtree), emptyMap(), testReadLock)
+
+            `when`("updating") {
+                then("UndefinedIndex is thrown before anything is written") {
+                    shouldThrow<TableException.UndefinedIndex> {
+                        table.updateWhere(
+                            "no_such_idx",
+                            Bound(null, isInclusive = true),
+                            Bound(null, isInclusive = true),
+                            assign = { row -> row },
+                        )
+                    }
+                    verify(exactly = 0) { primaryBtree.update(any(), any(), any()) }
                 }
             }
         }

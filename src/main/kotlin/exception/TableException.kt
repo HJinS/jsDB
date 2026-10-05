@@ -30,4 +30,7 @@ sealed class TableException(
 
     class CorruptedIndex(detail: SQLErrorDetail, cause: Throwable? = null):
         TableException(SqlState.INTERNAL_ERROR, detail, cause)
+
+    class PrimaryKeyUpdateNotSupported(detail: SQLErrorDetail, cause: Throwable? = null):
+        TableException(SqlState.FEATURE_NOT_SUPPORTED, detail, cause)
 }

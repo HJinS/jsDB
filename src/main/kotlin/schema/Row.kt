@@ -7,4 +7,7 @@ class Row(private val schema: RowSchema, private val values: List<Any?>) {
 
     /** The row's raw positional values, e.g. for re-serializing via `ValueSerializer`. */
     fun toList(): List<Any?> = values
+
+    fun checkNullViolations(): List<String> =
+        schema.rowColumns.filterIndexed { idx, col -> !col.nullable && values[idx] == null }.map { it.name }
 }
