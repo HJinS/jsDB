@@ -515,7 +515,7 @@ class TableTest :
             val entries =
                 listOf(1L, 2L, 3L, 4L).map {
                     primaryKeySerializer.serialize(listOf(it)) to
-                        primaryValueSerializer.serialize(listOf(it, "$it@x.com"))
+                            primaryValueSerializer.serialize(listOf(it, "$it@x.com"))
                 }
             every { cursor.step() } returnsMany entries
             every { cursor.close() } just Runs
@@ -558,13 +558,13 @@ class TableTest :
 
             val entry =
                 primaryKeySerializer.serialize(listOf(2L)) to
-                    primaryValueSerializer.serialize(listOf(2L, "b@x.com"))
+                        primaryValueSerializer.serialize(listOf(2L, "b@x.com"))
             // A row past the upper bound sits right after it in the mocked sequence, so the test
             // can tell "the stop condition actually excluded id = 6" apart from "the cursor just
             // happened to run out of scripted entries on its own".
             val outOfBoundEntry =
                 primaryKeySerializer.serialize(listOf(6L)) to
-                    primaryValueSerializer.serialize(listOf(6L, "f@x.com"))
+                        primaryValueSerializer.serialize(listOf(6L, "f@x.com"))
             every { cursor.step() } returnsMany listOf(entry, outOfBoundEntry, null)
             every { cursor.close() } just Runs
             every { primaryBtree.search(null, ScanDirection.FORWARD, false) } returns cursor
@@ -601,7 +601,7 @@ class TableTest :
             val entries =
                 listOf(1L, 2L).map {
                     primaryKeySerializer.serialize(listOf(it)) to
-                        primaryValueSerializer.serialize(listOf(it, "$it@x.com"))
+                            primaryValueSerializer.serialize(listOf(it, "$it@x.com"))
                 }
             every { cursor.step() } returnsMany (entries + null)
             every { cursor.close() } just Runs
@@ -668,7 +668,7 @@ class TableTest :
 
             val entry =
                 secondaryKeySerializer.serialize(listOf("a@x.com")) to
-                    secondaryValueSerializer.serialize(listOf(1L))
+                        secondaryValueSerializer.serialize(listOf(1L))
             every { cursor.step() } returnsMany listOf(entry, null)
             every { cursor.close() } just Runs
             every {
@@ -714,7 +714,7 @@ class TableTest :
 
             val entry =
                 secondaryKeySerializer.serialize(listOf("a@x.com")) to
-                    secondaryValueSerializer.serialize(listOf(1L))
+                        secondaryValueSerializer.serialize(listOf(1L))
             every { cursor.step() } returns entry
             every { cursor.close() } just Runs
             every {
@@ -898,7 +898,7 @@ class TableTest :
                 )
             val entries = hits.map { (col2, id, _) ->
                 compositeKeySerializer.serialize(listOf(1L, col2)) to
-                    compositeValueSerializer.serialize(listOf(id))
+                        compositeValueSerializer.serialize(listOf(id))
             }
             // The btree isn't only holding col1 = 1 data — a col1 = 2 row sits right after it in
             // byte order, standing in for "whatever comes next in the real tree". Without this,
@@ -907,7 +907,7 @@ class TableTest :
             val outOfPrefixId = 999L
             val outOfPrefixEntry =
                 compositeKeySerializer.serialize(listOf(2L, 50L)) to
-                    compositeValueSerializer.serialize(listOf(outOfPrefixId))
+                        compositeValueSerializer.serialize(listOf(outOfPrefixId))
             every { cursor.step() } returnsMany (entries + outOfPrefixEntry + null)
             every { cursor.close() } just Runs
             every {
@@ -933,7 +933,7 @@ class TableTest :
                     "every row sharing the prefix comes back, each resolved through the primary index"
                 ) {
                     result.map { it["id"] to it["email"] } shouldBe
-                        listOf(101L to "a@x.com", 102L to "b@x.com", 103L to null)
+                            listOf(101L to "a@x.com", 102L to "b@x.com", 103L to null)
                 }
                 then("the col1 = 2 row that follows the prefix in the tree is excluded") {
                     result.map { it["id"] } shouldNotContain outOfPrefixId
@@ -964,7 +964,7 @@ class TableTest :
             val entries =
                 (1L..entryCount).map {
                     primaryKeySerializer.serialize(listOf(it)) to
-                        primaryValueSerializer.serialize(listOf(it, "$it@x.com"))
+                            primaryValueSerializer.serialize(listOf(it, "$it@x.com"))
                 }
             // Bound(null, ...) is unbounded on both sides, so takeWhile's bound check can never
             // stop the scan on its own - termination here depends entirely on step() eventually
@@ -1082,7 +1082,7 @@ class TableTest :
             val descendingEntries =
                 (entryCount downTo 1L).map {
                     primaryKeySerializer.serialize(listOf(it)) to
-                        primaryValueSerializer.serialize(listOf(it, "$it@x.com"))
+                            primaryValueSerializer.serialize(listOf(it, "$it@x.com"))
                 }
             every { cursor.step() } returnsMany (descendingEntries + null)
             every { cursor.close() } just Runs
@@ -1144,6 +1144,7 @@ class TableTest :
                 )
 
             val entryCount = 30
+
             // Zero-padded so the email's byte-comparable order matches numeric id order too -
             // keeps the expected results below easy to compute by hand.
             fun emailFor(id: Long) = "user%02d@x.com".format(id)
@@ -1151,7 +1152,7 @@ class TableTest :
             val entries =
                 (1L..entryCount).map { id ->
                     secondaryKeySerializer.serialize(listOf(emailFor(id))) to
-                        secondaryValueSerializer.serialize(listOf(id))
+                            secondaryValueSerializer.serialize(listOf(id))
                 }
             // Each secondary-index hit only carries the primary key as its value - extractData
             // takes a second hop through the primary index to resolve the full row, so every id
@@ -1188,7 +1189,7 @@ class TableTest :
             val descendingEntries =
                 (entryCount downTo 1L).map { id ->
                     secondaryKeySerializer.serialize(listOf(emailFor(id))) to
-                        secondaryValueSerializer.serialize(listOf(id))
+                            secondaryValueSerializer.serialize(listOf(id))
                 }
             every { cursor.step() } returnsMany (descendingEntries + null)
             every { cursor.close() } just Runs
@@ -1234,7 +1235,7 @@ class TableTest :
             val entries =
                 (1L..entryCount).map { id ->
                     primaryKeySerializer.serialize(listOf(id)) to
-                        primaryValueSerializer.serialize(listOf(id, "$id@x.com"))
+                            primaryValueSerializer.serialize(listOf(id, "$id@x.com"))
                 }
             every { cursor.step() } returnsMany (entries + null)
             every { cursor.close() } just Runs
@@ -1252,7 +1253,7 @@ class TableTest :
             clearMocks(cursor)
             every { cursor.step() } returnsMany (entries + null)
             every { cursor.close() } just Runs
-            
+
             `when`(
                 "scanning forward with no limit, offset, filter, order"
             ) {
@@ -1291,7 +1292,7 @@ class TableTest :
             val descendingEntries =
                 (entryCount downTo 1L).map { id ->
                     primaryKeySerializer.serialize(listOf(id)) to
-                        primaryValueSerializer.serialize(listOf(id, "$id@x.com"))
+                            primaryValueSerializer.serialize(listOf(id, "$id@x.com"))
                 }
             every { cursor.step() } returnsMany (descendingEntries + null)
             every { cursor.close() } just Runs
@@ -1310,7 +1311,7 @@ class TableTest :
                         10,
                     )
                 then("the next 5 even ids after skipping the first 10 even ids, still descending by id") {
-                    result.map { it["id"] } shouldBe (80L downTo 72L).filter{ value -> value % 2 == 0L }.toList()
+                    result.map { it["id"] } shouldBe (80L downTo 72L).filter { value -> value % 2 == 0L }.toList()
                 }
             }
 
@@ -1336,7 +1337,7 @@ class TableTest :
 
         fun primaryEntry(id: Long) =
             primaryKeySerializer.serialize(listOf(id)) to
-                primaryValueSerializer.serialize(listOf(id, "$id@x.com"))
+                    primaryValueSerializer.serialize(listOf(id, "$id@x.com"))
 
         // deleteRow re-reads each row by primary key at delete time (and the secondary-index scan's
         // extractData does the same lookup), so both go through this one stub.
@@ -1486,10 +1487,10 @@ class TableTest :
                 )
             val ids = 1L..3L
             every { cursor.step() } returnsMany
-                (ids.map {
-                    secondaryKeySerializer.serialize(listOf("$it@x.com")) to
-                        secondaryValueSerializer.serialize(listOf(it))
-                } + null)
+                    (ids.map {
+                        secondaryKeySerializer.serialize(listOf("$it@x.com")) to
+                                secondaryValueSerializer.serialize(listOf(it))
+                    } + null)
             every { cursor.close() } just Runs
             every { secondaryBtree.search(null, ScanDirection.FORWARD, false) } returns cursor
             ids.forEach { stubPrimaryLookup(primaryBtree, it) }

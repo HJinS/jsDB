@@ -381,12 +381,12 @@ class Table(
         readLock.withLock {
             val targetRows = selectByRange(indexName, lowerBound, upperBound, emptyList(), filter, null, null)
             var affectedRowCount = 0
-            targetRows.forEach { row->
+            targetRows.forEach { row ->
                 val key = primaryIndex.extractKey(row)
-                try{
+                try {
                     deleteRow(key)
                     affectedRowCount++
-                } catch(e: TableException.RowNotFound){
+                } catch (e: TableException.RowNotFound) {
                     logger.debug { "deleteWhere: row already deleted by another thread, skipped (table=${primaryIndex.metadata.tableName}, key=$key)" }
                 }
             }
