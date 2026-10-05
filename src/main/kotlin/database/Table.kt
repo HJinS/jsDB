@@ -4,9 +4,6 @@ import exception.TableException
 import index.btree.ScanDirection
 import index.serializer.KeySerializer
 import io.github.oshai.kotlinlogging.KotlinLogging
-import java.util.Arrays
-import java.util.concurrent.locks.Lock
-import kotlin.concurrent.withLock
 import schema.Bound
 import schema.ColumnOrder
 import schema.IndexColumn
@@ -16,6 +13,9 @@ import schema.RowSchema
 import util.EntityType
 import util.SQLErrorDetail
 import util.requireOrThrow
+import java.util.Arrays
+import java.util.concurrent.locks.Lock
+import kotlin.concurrent.withLock
 
 private val logger = KotlinLogging.logger {}
 
