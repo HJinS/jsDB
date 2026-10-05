@@ -1333,4 +1333,208 @@ class TableTest :
             }
 
         }
+
+        fun primaryEntry(id: Long) =
+            primaryKeySerializer.serialize(listOf(id)) to
+                primaryValueSerializer.serialize(listOf(id, "$id@x.com"))
+
+        // deleteRow re-reads each row by primary key at delete time (and the secondary-index scan's
+        // extractData does the same lookup), so both go through this one stub.
+        fun stubPrimaryLookup(primaryBtree: BTree, id: Long) {
+            every {
+                primaryBtree.search(eqBytes(primaryKeySerializer.serialize(listOf(id))))
+            } returns primaryValueSerializer.serialize(listOf(id, "$id@x.com"))
+        }
+
+        given("deleteWhere over the whole primary index with a filter matching some rows") {
+            val primaryBtree = mockk<BTree>()
+            val secondaryBtree = mockk<BTree>()
+            val cursor = mockk<Cursor>()
+            val table =
+                Table(
+                    rowSchema,
+                    primaryHandle(primaryBtree),
+                    mapOf("email_idx" to secondaryHandle(secondaryBtree)),
+                    testReadLock,
+                )
+            val ids = 1L..5L
+            every { cursor.step() } returnsMany (ids.map { primaryEntry(it) } + null)
+            every { cursor.close() } just Runs
+            every { primaryBtree.search(null, ScanDirection.FORWARD, false) } returns cursor
+            ids.forEach { stubPrimaryLookup(primaryBtree, it) }
+            every { secondaryBtree.delete(any()) } just Runs
+            every { primaryBtree.delete(any()) } just Runs
+
+            `when`("deleting the rows with an even id") {
+                val affected =
+                    table.deleteWhere(
+                        "pk_idx",
+                        Bound(null, isInclusive = true),
+                        Bound(null, isInclusive = true),
+                        filter = { row -> (row["id"] as Long) % 2 == 0L },
+                    )
+
+                then("the returned count is the number of rows actually deleted") {
+                    affected shouldBe 2
+                }
+                then("only the matching rows are removed from the primary index") {
+                    for (id in listOf(2L, 4L)) {
+                        verify(exactly = 1) {
+                            primaryBtree.delete(eqBytes(primaryKeySerializer.serialize(listOf(id))))
+                        }
+                    }
+                    for (id in listOf(1L, 3L, 5L)) {
+                        verify(exactly = 0) {
+                            primaryBtree.delete(eqBytes(primaryKeySerializer.serialize(listOf(id))))
+                        }
+                    }
+                }
+                then("the matching rows are removed from the secondary index by their stored keys") {
+                    for (id in listOf(2L, 4L)) {
+                        verify(exactly = 1) {
+                            secondaryBtree.delete(
+                                eqBytes(secondaryKeySerializer.serialize(listOf("$id@x.com")))
+                            )
+                        }
+                    }
+                    verify(exactly = 2) { secondaryBtree.delete(any()) }
+                }
+            }
+        }
+
+        given("deleteWhere with a filter that matches nothing") {
+            val primaryBtree = mockk<BTree>()
+            val secondaryBtree = mockk<BTree>()
+            val cursor = mockk<Cursor>()
+            val table =
+                Table(
+                    rowSchema,
+                    primaryHandle(primaryBtree),
+                    mapOf("email_idx" to secondaryHandle(secondaryBtree)),
+                    testReadLock,
+                )
+            every { cursor.step() } returnsMany ((1L..3L).map { primaryEntry(it) } + null)
+            every { cursor.close() } just Runs
+            every { primaryBtree.search(null, ScanDirection.FORWARD, false) } returns cursor
+
+            `when`("deleting") {
+                val affected =
+                    table.deleteWhere(
+                        "pk_idx",
+                        Bound(null, isInclusive = true),
+                        Bound(null, isInclusive = true),
+                        filter = { false },
+                    )
+
+                then("zero is returned, not an error") { affected shouldBe 0 }
+                then("nothing is deleted from either index") {
+                    verify(exactly = 0) { primaryBtree.delete(any()) }
+                    verify(exactly = 0) { secondaryBtree.delete(any()) }
+                }
+            }
+        }
+
+        given("deleteWhere where a collected row is deleted by someone else before its turn") {
+            val primaryBtree = mockk<BTree>()
+            val cursor = mockk<Cursor>()
+            val table = Table(rowSchema, primaryHandle(primaryBtree), emptyMap(), testReadLock)
+            every { cursor.step() } returnsMany ((1L..3L).map { primaryEntry(it) } + null)
+            every { cursor.close() } just Runs
+            every { primaryBtree.search(null, ScanDirection.FORWARD, false) } returns cursor
+            stubPrimaryLookup(primaryBtree, 1L)
+            stubPrimaryLookup(primaryBtree, 2L)
+            // The scan above still saw id 3, but by the time deleteRow re-reads it, it is gone.
+            every {
+                primaryBtree.search(eqBytes(primaryKeySerializer.serialize(listOf(3L))))
+            } returns null
+            every { primaryBtree.delete(any()) } just Runs
+
+            `when`("deleting everything") {
+                val affected =
+                    table.deleteWhere(
+                        "pk_idx",
+                        Bound(null, isInclusive = true),
+                        Bound(null, isInclusive = true),
+                    )
+
+                then("no error is thrown and the vanished row is not counted") {
+                    affected shouldBe 2
+                }
+                then("the remaining rows are still deleted, and the vanished one is not touched") {
+                    for (id in listOf(1L, 2L)) {
+                        verify(exactly = 1) {
+                            primaryBtree.delete(eqBytes(primaryKeySerializer.serialize(listOf(id))))
+                        }
+                    }
+                    verify(exactly = 0) {
+                        primaryBtree.delete(eqBytes(primaryKeySerializer.serialize(listOf(3L))))
+                    }
+                }
+            }
+        }
+
+        given("deleteWhere driven by a secondary index scan") {
+            val primaryBtree = mockk<BTree>()
+            val secondaryBtree = mockk<BTree>()
+            val cursor = mockk<Cursor>()
+            val table =
+                Table(
+                    rowSchema,
+                    primaryHandle(primaryBtree),
+                    mapOf("email_idx" to secondaryHandle(secondaryBtree)),
+                    testReadLock,
+                )
+            val ids = 1L..3L
+            every { cursor.step() } returnsMany
+                (ids.map {
+                    secondaryKeySerializer.serialize(listOf("$it@x.com")) to
+                        secondaryValueSerializer.serialize(listOf(it))
+                } + null)
+            every { cursor.close() } just Runs
+            every { secondaryBtree.search(null, ScanDirection.FORWARD, false) } returns cursor
+            ids.forEach { stubPrimaryLookup(primaryBtree, it) }
+            every { secondaryBtree.delete(any()) } just Runs
+            every { primaryBtree.delete(any()) } just Runs
+
+            `when`("deleting every row found through email_idx") {
+                val affected =
+                    table.deleteWhere(
+                        "email_idx",
+                        Bound(null, isInclusive = true),
+                        Bound(null, isInclusive = true),
+                    )
+
+                then("every scanned row is counted") { affected shouldBe 3 }
+                then("each row is removed from both the secondary and the primary index") {
+                    for (id in ids) {
+                        verify(exactly = 1) {
+                            secondaryBtree.delete(
+                                eqBytes(secondaryKeySerializer.serialize(listOf("$id@x.com")))
+                            )
+                        }
+                        verify(exactly = 1) {
+                            primaryBtree.delete(eqBytes(primaryKeySerializer.serialize(listOf(id))))
+                        }
+                    }
+                }
+            }
+        }
+
+        given("deleteWhere on an unknown index name") {
+            val primaryBtree = mockk<BTree>()
+            val table = Table(rowSchema, primaryHandle(primaryBtree), emptyMap(), testReadLock)
+
+            `when`("deleting") {
+                then("UndefinedIndex is thrown before anything is deleted") {
+                    shouldThrow<TableException.UndefinedIndex> {
+                        table.deleteWhere(
+                            "no_such_idx",
+                            Bound(null, isInclusive = true),
+                            Bound(null, isInclusive = true),
+                        )
+                    }
+                    verify(exactly = 0) { primaryBtree.delete(any()) }
+                }
+            }
+        }
     })

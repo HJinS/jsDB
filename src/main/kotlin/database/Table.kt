@@ -17,6 +17,8 @@ import util.EntityType
 import util.SQLErrorDetail
 import util.requireOrThrow
 
+private val logger = KotlinLogging.logger {}
+
 /**
  * Row-level CRUD for one table, built on top of its indexes' byte-only [index.btree.BTree]s. This
  * is the boundary where domain values meet bytes: [IndexHandle]'s serializers are only ever called
@@ -161,7 +163,6 @@ class Table(
         offset: Int? = null,
     ): List<Row> {
         readLock.withLock {
-            val logger = KotlinLogging.logger {}
             val index = resolveIndex(indexName)
             val keyColumns = index.metadata.keyColumns
             val prefixLen = resolveEqualPrefixLen(lowerBound, upperBound)
@@ -191,21 +192,22 @@ class Table(
                 index.btree.search(serializedStartBound, scanDirection, start.value != null)
                     ?: return emptyList()
             val result = mutableListOf<Row>()
-            logger.info{ "$scanDirection $filter $limit $offset" }
+            logger.info { "$scanDirection $filter $limit $offset" }
             cursor.use { currentCursor ->
                 generateSequence { currentCursor.step() }
                     .takeWhile { (currentKey, _) ->
                         serializedEndBound == null ||
-                            when (scanDirection) {
-                                ScanDirection.FORWARD ->
-                                    Arrays.compareUnsigned(currentKey, serializedEndBound) < 0
-                                ScanDirection.BACKWARD ->
-                                    Arrays.compareUnsigned(currentKey, serializedEndBound) >= 0
-                            }
+                                when (scanDirection) {
+                                    ScanDirection.FORWARD ->
+                                        Arrays.compareUnsigned(currentKey, serializedEndBound) < 0
+
+                                    ScanDirection.BACKWARD ->
+                                        Arrays.compareUnsigned(currentKey, serializedEndBound) >= 0
+                                }
                     }
-                    .map { (_, currentValue) -> extractData(index, currentValue)}
-                    .let { sequence -> if(filter != null) sequence.filter(filter) else sequence }
-                    .onEach { row -> logger.info { "before filter: ${row["id"]}" } }  
+                    .map { (_, currentValue) -> extractData(index, currentValue) }
+                    .let { sequence -> if (filter != null) sequence.filter(filter) else sequence }
+                    .onEach { row -> logger.info { "before filter: ${row["id"]}" } }
                     .drop(offset ?: 0)
                     .let { sequence -> if (limit != null) sequence.take(limit) else sequence }
                     .forEach { row -> result.add(row) }
@@ -313,7 +315,14 @@ class Table(
         }
     }
 
-    /** Deletes the row at [key] from the primary index and every secondary index. */
+    /**
+     * Deletes the row at [key] from the primary index and every secondary index.
+     *
+     * The row is read first, because the secondary index keys to remove are derived from its
+     * current column values.
+     *
+     * @throws TableException.RowNotFound if no row exists at [key].
+     */
     fun deleteRow(key: List<Any?>) {
         readLock.withLock {
             val primaryTree = primaryIndex.btree
@@ -332,6 +341,56 @@ class Table(
                 handle.btree.delete(indexKeySerialized)
             }
             primaryTree.delete(keySerialized)
+        }
+    }
+
+    /**
+     * Deletes every row matching [lowerBound]/[upperBound]/[filter] on [indexName], and returns how
+     * many rows were actually deleted.
+     *
+     * Parameters mean exactly what they do in [selectByRange] (see its doc for the bound/prefix
+     * contract and the [filter] split); a full-table delete is the same degenerate case as
+     * [fullScan] - the primary index with `Bound(null, ...)` on both sides. Which index and bounds
+     * to use is the caller's (eventually the query planner's) decision, not this function's.
+     *
+     * ### Two phases
+     * Matching rows are first collected into a list via [selectByRange] (which closes its cursor
+     * before returning), and only then deleted one by one through [deleteRow]. Deleting while the
+     * cursor is still open is not an option: the cursor holds a read latch on its current leaf,
+     * which [index.btree.BTree.delete] would need to write-latch.
+     *
+     * ### Count
+     * Each row is deleted via [deleteRow] by primary key, which re-reads it at delete time. A row
+     * that vanished between collection and deletion (another thread deleted it first)
+     * throws [TableException.RowNotFound]; that is swallowed and not counted, since the row is gone
+     * either way. Any other exception propagates. The count is best-effort: [deleteRow]'s lookup
+     * and delete are not atomic, so two threads deleting the same row at once can both count it.
+     *
+     * ### Limitations (no WAL, no row locks)
+     * - Not atomic: an exception partway through leaves the earlier rows already deleted.
+     * - [filter] and the bounds are evaluated only at collection time. A row updated by another
+     *   thread in between, so that it no longer matches, is still deleted; a row inserted in
+     *   between is missed.
+     */
+    fun deleteWhere(
+        indexName: String,
+        lowerBound: Bound<List<Any?>>,
+        upperBound: Bound<List<Any?>>,
+        filter: ((Row) -> Boolean)? = null
+    ): Int {
+        readLock.withLock {
+            val targetRows = selectByRange(indexName, lowerBound, upperBound, emptyList(), filter, null, null)
+            var affectedRowCount = 0
+            targetRows.forEach { row->
+                val key = primaryIndex.extractKey(row)
+                try{
+                    deleteRow(key)
+                    affectedRowCount++
+                } catch(e: TableException.RowNotFound){
+                    logger.debug { "deleteWhere: row already deleted by another thread, skipped (table=${primaryIndex.metadata.tableName}, key=$key)" }
+                }
+            }
+            return affectedRowCount
         }
     }
 
@@ -382,12 +441,14 @@ class Table(
                             ScanDirection.FORWARD -> keySerializer.serialize(bound)
                             ScanDirection.BACKWARD -> keySerializer.serializeUpper(bound)
                         }
+
                     false ->
                         when (direction) {
                             ScanDirection.FORWARD -> keySerializer.serializeUpper(bound)
                             ScanDirection.BACKWARD -> keySerializer.serialize(bound)
                         }
                 }
+
             false ->
                 when (isInclusive) {
                     true ->
@@ -395,6 +456,7 @@ class Table(
                             ScanDirection.FORWARD -> keySerializer.serializeUpper(bound)
                             ScanDirection.BACKWARD -> keySerializer.serialize(bound)
                         }
+
                     false ->
                         when (direction) {
                             ScanDirection.FORWARD -> keySerializer.serialize(bound)
@@ -561,4 +623,5 @@ class Table(
             }
         return Row(rowSchema, primaryIndex.valueSerializer.deserialize(rowValue).first)
     }
+
 }
