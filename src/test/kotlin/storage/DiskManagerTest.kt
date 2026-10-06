@@ -13,6 +13,18 @@ import kotlin.uuid.Uuid
 
 
 class DiskManagerTest: BehaviorSpec({
+    lateinit var diskManager: DiskManager
+
+    // Constructing DiskManager touches the backing file immediately (RandomAccessFile(path, "rw")
+    // creates it) - doing that eagerly in the companion object meant the file got created the
+    // moment Kotest instantiated this spec to discover its tests, even on a filtered run
+    // (e.g. --tests) that never selects this spec's tests to execute - and since afterSpec only
+    // fires for specs that are actually run, that file was never cleaned up. beforeSpec only runs
+    // when this spec's tests are actually selected, matching afterSpec's own timing.
+    beforeSpec {
+        diskManager = DiskManager(config.storageConfig, config.indexConfig)
+    }
+
     afterSpec {
         diskManager.close()
         val file = File(DBPATH)
@@ -71,6 +83,5 @@ class DiskManagerTest: BehaviorSpec({
         private val config = SimpleConfig(storageConfig = StorageConfig(dbPath = "./js-test-disk-manager-${Uuid.random()}.db"))
         private val DBPATH = config.storageConfig.dbPath
         private val PAGE_SIZE = config.indexConfig.pageSize
-        private val diskManager = DiskManager(config.storageConfig, config.indexConfig)
     }
 }

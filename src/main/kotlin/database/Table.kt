@@ -1,9 +1,10 @@
 package database
 
+import exception.DatabaseException
 import exception.TableException
 import index.btree.ScanDirection
 import index.serializer.KeySerializer
-import java.util.Arrays
+import io.github.oshai.kotlinlogging.KotlinLogging
 import schema.Bound
 import schema.ColumnOrder
 import schema.IndexColumn
@@ -13,8 +14,12 @@ import schema.RowSchema
 import util.EntityType
 import util.SQLErrorDetail
 import util.requireOrThrow
+import java.nio.ByteBuffer
+import java.util.Arrays
 import java.util.concurrent.locks.Lock
 import kotlin.concurrent.withLock
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * Row-level CRUD for one table, built on top of its indexes' byte-only [index.btree.BTree]s. This
@@ -23,18 +28,18 @@ import kotlin.concurrent.withLock
  * layer itself never sees a typed key or value.
  *
  * Index-organized: the primary index's leaves store the full row
- * ([IndexHandle.valueSerializer]-encoded); every secondary index instead stores the primary key,
- * so a secondary hit needs one extra lookup through the primary index (see [extractData]).
+ * ([IndexHandle.valueSerializer]-encoded); every secondary index instead stores the primary key, so
+ * a secondary hit needs one extra lookup through the primary index (see [extractData]).
  *
  * @property rowSchema The table's column layout, shared by every row this instance produces.
  * @property primaryIndex The clustered index rows are actually stored under.
  * @property secondaryIndexes Every other index on this table, keyed by index name.
- * */
+ */
 class Table(
     private val rowSchema: RowSchema,
     private val primaryIndex: IndexHandle,
     private val secondaryIndexes: Map<String, IndexHandle>,
-    private val readLock: Lock
+    private val readLock: Lock,
 ) {
 
     /**
@@ -48,7 +53,17 @@ class Table(
      * same purpose (see the note there for why this mattered).
      */
     fun insertRow(row: Row) {
-        readLock.withLock { 
+        readLock.withLock {
+            val violatedColumns = row.checkNullViolations()
+            requireOrThrow(violatedColumns.isEmpty()) {
+                DatabaseException.NotNullViolation(
+                    SQLErrorDetail(
+                        entityType = EntityType.COLUMN,
+                        tableName = primaryIndex.metadata.tableName,
+                        columnNames = violatedColumns
+                    )
+                )
+            }
             val primaryTree = primaryIndex.btree
             val primaryKey = primaryIndex.extractKey(row)
             val primarySerialized = primaryIndex.keySerializer.serialize(primaryKey)
@@ -90,7 +105,7 @@ class Table(
 
     /** Point lookup by primary key. Returns null if no row is stored under [key]. */
     fun selectByKey(key: List<Any?>): Row? {
-        readLock.withLock { 
+        readLock.withLock {
             val primaryTree = primaryIndex.btree
             val keySerialized = primaryIndex.keySerializer.serialize(key)
             val searchResult = primaryTree.search(keySerialized)
@@ -123,8 +138,10 @@ class Table(
      * represents one contiguous byte interval, so independent ranges on two columns (`5 < col1 < 10
      * AND 10 < col2 < 20`) describe a rectangle in (col1, col2) space, not an interval — no [Bound]
      * pair can capture that. This function can only narrow the scan using the first range-bearing
-     * column; any further per-column range condition has to be applied by the caller as a
-     * post-filter on the returned rows.
+     * column; any further per-column condition the index can't express - including one on a column
+     * it doesn't even contain - is the [filter] parameter's job (the standard "index scan + filter"
+     * / "residual predicate" split real query planners make: whatever a chosen index's key range
+     * can't capture becomes a row-by-row filter on top of it).
      *
      * ### How open/closed becomes bytes
      * [Bound.isInclusive] never changes the comparator used while scanning — that stays one fixed
@@ -132,62 +149,103 @@ class Table(
      * method builds the boundary bytes: `x <= v` is expressed as `x < successor(v)`, so inclusive
      * vs. exclusive only changes whether [serializeBound] calls `serialize` or `serializeUpper` for
      * that side. See [serializeBound] for the full seek/stop × inclusive/exclusive table.
+     *
+     * ### [filter], [limit], [offset]
+     * Deciding *which* conditions become [lowerBound]/[upperBound] versus [filter] is entirely the
+     * caller's (eventually the query planner's) job - this function never checks whether [filter]
+     * overlaps with the bounds, since a planner that splits the WHERE clause correctly never hands
+     * it a redundant condition in the first place.
+     *
+     * All three run inside this same locked, single-pass scan rather than as separate steps the
+     * caller applies afterward - standard SQL semantics require `WHERE` (here, bounds + [filter])
+     * to apply before `LIMIT`/`OFFSET`, and this function never returns a lazy stream a caller could
+     * keep pulling from outside the lock (see this doc's first paragraph), so there's nowhere else
+     * for that ordering to happen. Applied in sequence: bound check -> [filter] -> [offset] ->
+     * [limit]. With a [filter], every scanned row is reconstructed ([extractData]) so the filter can
+     * see it, and [offset] counts only the rows that pass it. Without a [filter], [offset] skips
+     * raw cursor entries *before* reconstruction, so a skipped row costs one cursor step and
+     * nothing more (for a secondary index, no primary-index lookup). Either way a large [offset]
+     * still means stepping over that many entries; only [limit] ends the scan early, after which
+     * the cursor is not pulled from any further.
+     *
+     * `null` means "no limit" / "no offset"; `0` is valid (`limit = 0` returns nothing, without
+     * pulling from the cursor at all). A negative value is rejected up front, before any index is
+     * touched, rather than being reinterpreted as 0 or "unlimited".
+     *
+     * @throws TableException.NegativeLimit if [limit] is negative.
+     * @throws TableException.NegativeOffset if [offset] is negative.
      */
     fun selectByRange(
         indexName: String,
         lowerBound: Bound<List<Any?>>,
         upperBound: Bound<List<Any?>>,
         orderBy: List<ColumnOrder>,
+        filter: ((Row) -> Boolean)? = null,
+        limit: Int? = null,
+        offset: Int? = null,
     ): List<Row> {
-        readLock.withLock { 
+        requireOrThrow(limit == null || limit >= 0) {
+            TableException.NegativeLimit(
+                SQLErrorDetail(
+                    reason = "LIMIT must not be negative (got $limit)",
+                    entityType = EntityType.TABLE,
+                    entityName = primaryIndex.metadata.tableName,
+                )
+            )
+        }
+        requireOrThrow(offset == null || offset >= 0) {
+            TableException.NegativeOffset(
+                SQLErrorDetail(
+                    reason = "OFFSET must not be negative (got $offset)",
+                    entityType = EntityType.TABLE,
+                    entityName = primaryIndex.metadata.tableName,
+                )
+            )
+        }
+        readLock.withLock {
             val index = resolveIndex(indexName)
             val keyColumns = index.metadata.keyColumns
             val prefixLen = resolveEqualPrefixLen(lowerBound, upperBound)
             val scanDirection = resolveScanDirection(keyColumns, orderBy, prefixLen)
             val (start, end) = resolveBoundOrder(lowerBound, upperBound, scanDirection)
-            val serializedStartBound =
-                start.value?.let {
-                    serializeBound(
-                        index.keySerializer,
-                        start.value,
-                        scanDirection,
-                        start.isInclusive,
-                        true,
-                    )
-                }
-            val serializedEndBound =
-                end.value?.let {
-                    serializeBound(
-                        index.keySerializer,
-                        end.value,
-                        scanDirection,
-                        end.isInclusive,
-                        false,
-                    )
-                }
+            val serializedStartBound = start.value?.let {
+                serializeBound(
+                    index.keySerializer,
+                    start.value,
+                    scanDirection,
+                    start.isInclusive,
+                    true,
+                )
+            }
+            val serializedEndBound = end.value?.let {
+                serializeBound(
+                    index.keySerializer,
+                    end.value,
+                    scanDirection,
+                    end.isInclusive,
+                    false,
+                )
+            }
             val cursor =
-                index.btree.search(serializedStartBound, scanDirection, start.value != null)
-                    ?: return emptyList()
+                index.btree.search(serializedStartBound, scanDirection, start.value != null) ?: return emptyList()
             val result = mutableListOf<Row>()
-            cursor.use {
-                while (true) {
-                    val entry = it.step() ?: break
-                    val (currentKey, currentValue) = entry
-                    if (serializedEndBound != null) {
-                        val result = Arrays.compareUnsigned(currentKey, serializedEndBound)
-                        when (scanDirection) {
-                            ScanDirection.FORWARD ->
-                                when {
-                                    result >= 0 -> break
+            cursor.use { currentCursor ->
+                generateSequence { currentCursor.step() }
+                    .takeWhile { (currentKey, _) ->
+                        serializedEndBound == null ||
+                                when (scanDirection) {
+                                    ScanDirection.FORWARD -> Arrays.compareUnsigned(currentKey, serializedEndBound) < 0
+                                    ScanDirection.BACKWARD -> Arrays.compareUnsigned(
+                                        currentKey,
+                                        serializedEndBound
+                                    ) >= 0
                                 }
-                            ScanDirection.BACKWARD ->
-                                when {
-                                    result < 0 -> break
-                                }
-                        }
                     }
-                    result.add(extractData(index, currentValue))
-                }
+                    .let { sequence -> if (filter == null) sequence.drop(offset ?: 0) else sequence }
+                    .map { (_, currentValue) -> extractData(index, currentValue) }
+                    .let { sequence -> if (filter != null) sequence.filter(filter).drop(offset ?: 0) else sequence }
+                    .let { sequence -> if (limit != null) sequence.take(limit) else sequence }
+                    .forEach { row -> result.add(row) }
             }
             return result.toList()
         }
@@ -204,10 +262,8 @@ class Table(
         prefix: List<Any?>,
         orderBy: List<ColumnOrder>,
     ): List<Row> {
-        readLock.withLock {
-            val bound = Bound(prefix, isInclusive = true)
-            return selectByRange(indexName, bound, bound, orderBy)
-        }
+        val bound = Bound(prefix, isInclusive = true)
+        return selectByRange(indexName, bound, bound, orderBy)
     }
 
     /**
@@ -218,7 +274,7 @@ class Table(
      * index-consistency failure rather than a plain miss.
      */
     fun selectByIndex(indexName: String, key: List<Any?>): Row? {
-        readLock.withLock { 
+        readLock.withLock {
             val index = resolveIndex(indexName)
             val keySerialized = index.keySerializer.serialize(key)
             val searchedPrimaryKey = index.btree.search(keySerialized) ?: return null
@@ -227,7 +283,35 @@ class Table(
     }
 
     /**
-     * Updates [row] in place, keyed by its (unchanging) primary key.
+     * Scans every row of the table (via the primary index) when no index can narrow the WHERE
+     * clause down to a range - again not a separate mechanism, just [selectByRange] with
+     * `Bound(null, ...)` on both sides, the same degenerate-case pattern [selectByPrefix] uses.
+     * `isInclusive` on that unbounded [Bound] is irrelevant and ignored (see [Bound]'s own doc).
+     *
+     * @param filter Applied to every scanned row, before [offset]/[limit] - see [selectByRange]'s
+     *   doc for why that order matters and why this has to live in the same locked pass as the
+     *   scan itself rather than as a separate post-processing step by the caller.
+     */
+    fun fullScan(
+        orderBy: List<ColumnOrder>,
+        filter: ((Row) -> Boolean)? = null,
+        limit: Int? = null,
+        offset: Int? = null,
+    ): List<Row> {
+        val bound = Bound<List<Any?>>(null, isInclusive = true)
+        return selectByRange(primaryIndex.metadata.indexName, bound, bound, orderBy, filter, limit, offset)
+    }
+
+    /**
+     * Replaces the row stored at [key] with [newRow].
+     *
+     * [key] identifies the existing row; [newRow] must carry that same primary key. Changing a
+     * primary key is not supported yet - it would mean moving the row within the clustered index
+     * and rewriting every secondary index's stored pointer to it - so it is rejected rather than
+     * silently overwriting whichever row happens to sit at the new key.
+     *
+     * Every check (NOT NULL, unchanged primary key, unique secondary keys) runs before the first
+     * write, so a rejected update leaves everything unchanged.
      *
      * For every secondary index, the value written back is [IndexHandle.valueSerializer]- encoded —
      * the *same* encoding [insertRow] uses and [extractData] expects when resolving a secondary hit
@@ -237,33 +321,39 @@ class Table(
      * fine right up until a later [selectByIndex] tried to decode them with
      * [IndexHandle.valueSerializer] and either threw or returned garbage. A test that asserted on
      * the exact bytes written to a mocked secondary btree is what caught it.
+     *
+     * @throws exception.DatabaseException.NotNullViolation if [newRow] has a null in a NOT NULL column.
+     * @throws TableException.PrimaryKeyUpdateNotSupported if [newRow]'s primary key differs from [key].
+     * @throws TableException.RowNotFound if no row exists at [key].
+     * @throws TableException.UniqueViolation if [newRow] gives a unique secondary index a key that
+     *  another row already holds.
      */
-    fun updateRow(row: Row) {
-        readLock.withLock { 
+    fun updateRow(key: List<Any?>, newRow: Row) {
+        readLock.withLock {
+            validateUpdate(key, newRow)
             val primaryTree = primaryIndex.btree
-            val primaryKey = primaryIndex.extractKey(row)
-            val primaryKeySerialized = primaryIndex.keySerializer.serialize(primaryKey)
-            val oldRow =
-                primaryTree.search(primaryKeySerialized)?.let { extractData(primaryIndex, it) }
-                    ?: throw TableException.RowNotFound(
-                        SQLErrorDetail(
-                            entityType = EntityType.ROW,
-                            tableName = primaryIndex.metadata.tableName,
-                        )
+            val newPkKeySerialized = primaryIndex.keySerializer.serialize(primaryIndex.extractKey(newRow))
+            val oldRow = primaryTree.search(newPkKeySerialized)?.let { extractData(primaryIndex, it) }
+                ?: throw TableException.RowNotFound(
+                    SQLErrorDetail(
+                        entityType = EntityType.ROW,
+                        tableName = primaryIndex.metadata.tableName,
                     )
+                )
+            checkUniqueness(listOf(oldRow to newRow))
 
             primaryTree.update(
-                primaryKeySerialized,
-                primaryKeySerialized,
-                primaryIndex.valueSerializer.serialize(row.toList()),
+                newPkKeySerialized,
+                newPkKeySerialized,
+                primaryIndex.valueSerializer.serialize(newRow.toList()),
             )
 
             for ((_, handle) in secondaryIndexes) {
                 val oldKey = handle.extractKey(oldRow)
                 val oldKeySerialized = handle.keySerializer.serialize(oldKey)
-                val newKey = handle.extractKey(row)
+                val newKey = handle.extractKey(newRow)
                 val newKeySerialized = handle.keySerializer.serialize(newKey)
-                val indexValueSerialized = handle.valueSerializer.serialize(primaryKey)
+                val indexValueSerialized = handle.valueSerializer.serialize(key)
                 if (oldKeySerialized.contentEquals(newKeySerialized)) {
                     handle.btree.update(oldKeySerialized, oldKeySerialized, indexValueSerialized)
                 } else {
@@ -274,9 +364,81 @@ class Table(
         }
     }
 
-    /** Deletes the row at [key] from the primary index and every secondary index. */
+    /**
+     * Updates every row matching [lowerBound]/[upperBound]/[filter] on [indexName] by replacing it
+     * with `assign(row)`, and returns how many rows were actually updated.
+     *
+     * Parameters other than [assign] mean exactly what they do in [selectByRange] (see its doc for
+     * the bound/prefix contract and the [filter] split), and the same two-phase approach as
+     * [deleteWhere] applies: matching rows are collected first (the cursor is closed by then), and
+     * only afterwards updated one by one, so rewriting an index entry can never disturb a scan
+     * still walking that index.
+     *
+     * @param assign Builds the replacement [Row] for one collected row; deciding what to assign (SET
+     * clause evaluation) is the caller's job. The replacement must keep the row's primary key and
+     * satisfy NOT NULL.
+     *
+     * ### Validation before any write
+     * `assign` is applied to every collected row first, and the results are checked - NOT NULL, an
+     * unchanged primary key, and unique secondary keys (see [updateRow]) - before the first row is
+     * written. A violation in any of them therefore propagates out of this function with nothing
+     * modified. `assign` runs exactly once per collected row.
+     *
+     * The unique check also covers the batch against itself: two rows given the same new key are
+     * rejected up front rather than the second one failing after the first was written. It is
+     * conservative about swaps and shifts - a row taking a key that another row in the same batch
+     * is giving up is rejected as well, since the check looks at the indexes as they are before any
+     * row is written.
+     *
+     * ### Count
+     * A row that vanished between collection and its update (another thread deleted it first)
+     * throws [TableException.RowNotFound] from [updateRow]; that row is skipped and not counted.
+     * Any other exception propagates. Like [deleteWhere], the count is best-effort under concurrent
+     * writers.
+     *
+     * ### Limitations (no WAL, no row locks)
+     * - Not atomic once writing starts: only the checks above are done up front. A storage error
+     *   partway through, or another thread changing a row or index in between, can still leave the
+     *   earlier rows already updated.
+     * - [filter] and the bounds are evaluated only at collection time, and [assign] receives the
+     *   row as it was then, not as it is when [updateRow] re-reads it.
+     */
+    fun updateWhere(
+        indexName: String,
+        lowerBound: Bound<List<Any?>>,
+        upperBound: Bound<List<Any?>>,
+        filter: ((Row) -> Boolean)? = null,
+        assign: (Row) -> Row,
+    ): Int {
+        readLock.withLock {
+            val targetRows = selectByRange(indexName, lowerBound, upperBound, emptyList(), filter, null, null)
+            val updates = targetRows.map { oldRow -> Triple(primaryIndex.extractKey(oldRow), oldRow, assign(oldRow)) }
+            updates.forEach { (key, _, newRow) -> validateUpdate(key, newRow) }
+            checkUniqueness(updates.map { (_, oldRow, newRow) -> oldRow to newRow })
+
+            var affectedRowCount = 0
+            updates.forEach { (key, _, newRow) ->
+                try {
+                    updateRow(key, newRow)
+                    affectedRowCount++
+                } catch (e: TableException.RowNotFound) {
+                    logger.debug { "updateWhere: row already deleted by another thread, skipped (table=${primaryIndex.metadata.tableName}, key=$key)" }
+                }
+            }
+            return affectedRowCount
+        }
+    }
+
+    /**
+     * Deletes the row at [key] from the primary index and every secondary index.
+     *
+     * The row is read first, because the secondary index keys to remove are derived from its
+     * current column values.
+     *
+     * @throws TableException.RowNotFound if no row exists at [key].
+     */
     fun deleteRow(key: List<Any?>) {
-        readLock.withLock { 
+        readLock.withLock {
             val primaryTree = primaryIndex.btree
             val keySerialized = primaryIndex.keySerializer.serialize(key)
             val oldRow =
@@ -293,6 +455,56 @@ class Table(
                 handle.btree.delete(indexKeySerialized)
             }
             primaryTree.delete(keySerialized)
+        }
+    }
+
+    /**
+     * Deletes every row matching [lowerBound]/[upperBound]/[filter] on [indexName], and returns how
+     * many rows were actually deleted.
+     *
+     * Parameters mean exactly what they do in [selectByRange] (see its doc for the bound/prefix
+     * contract and the [filter] split); a full-table delete is the same degenerate case as
+     * [fullScan] - the primary index with `Bound(null, ...)` on both sides. Which index and bounds
+     * to use is the caller's (eventually the query planner's) decision, not this function's.
+     *
+     * ### Two phases
+     * Matching rows are first collected into a list via [selectByRange] (which closes its cursor
+     * before returning), and only then deleted one by one through [deleteRow]. Deleting while the
+     * cursor is still open is not an option: the cursor holds a read latch on its current leaf,
+     * which [index.btree.BTree.delete] would need to write-latch.
+     *
+     * ### Count
+     * Each row is deleted via [deleteRow] by primary key, which re-reads it at delete time. A row
+     * that vanished between collection and deletion (another thread deleted it first)
+     * throws [TableException.RowNotFound]; that is swallowed and not counted, since the row is gone
+     * either way. Any other exception propagates. The count is best-effort: [deleteRow]'s lookup
+     * and delete are not atomic, so two threads deleting the same row at once can both count it.
+     *
+     * ### Limitations (no WAL, no row locks)
+     * - Not atomic: an exception partway through leaves the earlier rows already deleted.
+     * - [filter] and the bounds are evaluated only at collection time. A row updated by another
+     *   thread in between, so that it no longer matches, is still deleted; a row inserted in
+     *   between is missed.
+     */
+    fun deleteWhere(
+        indexName: String,
+        lowerBound: Bound<List<Any?>>,
+        upperBound: Bound<List<Any?>>,
+        filter: ((Row) -> Boolean)? = null
+    ): Int {
+        readLock.withLock {
+            val targetRows = selectByRange(indexName, lowerBound, upperBound, emptyList(), filter, null, null)
+            var affectedRowCount = 0
+            targetRows.forEach { row ->
+                val key = primaryIndex.extractKey(row)
+                try {
+                    deleteRow(key)
+                    affectedRowCount++
+                } catch (e: TableException.RowNotFound) {
+                    logger.debug { "deleteWhere: row already deleted by another thread, skipped (table=${primaryIndex.metadata.tableName}, key=$key)" }
+                }
+            }
+            return affectedRowCount
         }
     }
 
@@ -343,12 +555,14 @@ class Table(
                             ScanDirection.FORWARD -> keySerializer.serialize(bound)
                             ScanDirection.BACKWARD -> keySerializer.serializeUpper(bound)
                         }
+
                     false ->
                         when (direction) {
                             ScanDirection.FORWARD -> keySerializer.serializeUpper(bound)
                             ScanDirection.BACKWARD -> keySerializer.serialize(bound)
                         }
                 }
+
             false ->
                 when (isInclusive) {
                     true ->
@@ -356,6 +570,7 @@ class Table(
                             ScanDirection.FORWARD -> keySerializer.serializeUpper(bound)
                             ScanDirection.BACKWARD -> keySerializer.serialize(bound)
                         }
+
                     false ->
                         when (direction) {
                             ScanDirection.FORWARD -> keySerializer.serialize(bound)
@@ -522,4 +737,78 @@ class Table(
             }
         return Row(rowSchema, primaryIndex.valueSerializer.deserialize(rowValue).first)
     }
+
+    /**
+     * The checks [updateRow] can make from its two arguments alone, without reading any index:
+     * [newRow] satisfies NOT NULL, and carries the same primary key as [key]. Split out so
+     * [updateWhere] can run them for every row before writing any of them.
+     *
+     * @throws DatabaseException.NotNullViolation if [newRow] has a null in a NOT NULL column.
+     * @throws TableException.PrimaryKeyUpdateNotSupported if [newRow]'s primary key differs from [key].
+     */
+    private fun validateUpdate(key: List<Any?>, newRow: Row) {
+        val violatedColumns = newRow.checkNullViolations()
+        requireOrThrow(violatedColumns.isEmpty()) {
+            DatabaseException.NotNullViolation(
+                SQLErrorDetail(
+                    entityType = EntityType.COLUMN,
+                    tableName = primaryIndex.metadata.tableName,
+                    columnNames = violatedColumns,
+                )
+            )
+        }
+        val oldPkKeySerialized = primaryIndex.keySerializer.serialize(key)
+        val newPkKeySerialized =
+            primaryIndex.keySerializer.serialize(primaryIndex.extractKey(newRow))
+        requireOrThrow(Arrays.compareUnsigned(oldPkKeySerialized, newPkKeySerialized) == 0) {
+            TableException.PrimaryKeyUpdateNotSupported(
+                SQLErrorDetail(
+                    reason = "primary key columns cannot be updated yet",
+                    entityType = EntityType.PRIMARY_KEY,
+                    tableName = primaryIndex.metadata.tableName,
+                    columnNames = primaryIndex.columnNames,
+                )
+            )
+        }
+    }
+
+    /**
+     * Rejects [changes] - `(oldRow, newRow)` pairs about to be written - if any of them would give a
+     * unique secondary index a key it already holds, or if two of them would claim the same new key
+     * as each other. Reads the indexes but writes nothing, so a rejection leaves everything
+     * unchanged; [updateRow] passes a single pair, [updateWhere] the whole batch up front.
+     *
+     * Only a key that actually *changes* is checked (an unchanged key trivially still belongs to its
+     * own row). The check is against the indexes as they are now, so a batch that hands one row the
+     * key another row in the same batch is about to give up (swapping or shifting keys) is rejected
+     * too, even though writing the rows in the right order could have worked.
+     *
+     * @throws TableException.UniqueViolation naming the first violated index.
+     */
+    private fun checkUniqueness(changes: List<Pair<Row, Row>>) {
+        for ((_, handle) in secondaryIndexes) {
+            if (!handle.metadata.isUnique) continue
+            val claimedKeys = HashSet<ByteBuffer>()
+            for ((oldRow, newRow) in changes) {
+                val oldKeySerialized = handle.keySerializer.serialize(handle.extractKey(oldRow))
+                val newKeySerialized = handle.keySerializer.serialize(handle.extractKey(newRow))
+                if (oldKeySerialized.contentEquals(newKeySerialized)) continue
+                requireOrThrow(
+                    claimedKeys.add(ByteBuffer.wrap(newKeySerialized)) && handle.btree.search(
+                        newKeySerialized
+                    ) == null
+                ) {
+                    TableException.UniqueViolation(
+                        SQLErrorDetail(
+                            entityType = EntityType.INDEX,
+                            entityName = handle.metadata.indexName,
+                            tableName = handle.metadata.tableName,
+                            columnNames = handle.columnNames,
+                        )
+                    )
+                }
+            }
+        }
+    }
+
 }
