@@ -161,9 +161,19 @@ class Table(
      * to apply before `LIMIT`/`OFFSET`, and this function never returns a lazy stream a caller could
      * keep pulling from outside the lock (see this doc's first paragraph), so there's nowhere else
      * for that ordering to happen. Applied in sequence: bound check -> [filter] -> [offset] ->
-     * [limit]. A dropped ([offset]-skipped or [filter]-rejected) row never pays for row
-     * reconstruction it doesn't need, and once [limit] rows are collected, the scan stops pulling
-     * from the cursor entirely rather than walking the rest of the range.
+     * [limit]. With a [filter], every scanned row is reconstructed ([extractData]) so the filter can
+     * see it, and [offset] counts only the rows that pass it. Without a [filter], [offset] skips
+     * raw cursor entries *before* reconstruction, so a skipped row costs one cursor step and
+     * nothing more (for a secondary index, no primary-index lookup). Either way a large [offset]
+     * still means stepping over that many entries; only [limit] ends the scan early, after which
+     * the cursor is not pulled from any further.
+     *
+     * `null` means "no limit" / "no offset"; `0` is valid (`limit = 0` returns nothing, without
+     * pulling from the cursor at all). A negative value is rejected up front, before any index is
+     * touched, rather than being reinterpreted as 0 or "unlimited".
+     *
+     * @throws TableException.NegativeLimit if [limit] is negative.
+     * @throws TableException.NegativeOffset if [offset] is negative.
      */
     fun selectByRange(
         indexName: String,
@@ -174,53 +184,66 @@ class Table(
         limit: Int? = null,
         offset: Int? = null,
     ): List<Row> {
+        requireOrThrow(limit == null || limit >= 0) {
+            TableException.NegativeLimit(
+                SQLErrorDetail(
+                    reason = "LIMIT must not be negative (got $limit)",
+                    entityType = EntityType.TABLE,
+                    entityName = primaryIndex.metadata.tableName,
+                )
+            )
+        }
+        requireOrThrow(offset == null || offset >= 0) {
+            TableException.NegativeOffset(
+                SQLErrorDetail(
+                    reason = "OFFSET must not be negative (got $offset)",
+                    entityType = EntityType.TABLE,
+                    entityName = primaryIndex.metadata.tableName,
+                )
+            )
+        }
         readLock.withLock {
             val index = resolveIndex(indexName)
             val keyColumns = index.metadata.keyColumns
             val prefixLen = resolveEqualPrefixLen(lowerBound, upperBound)
             val scanDirection = resolveScanDirection(keyColumns, orderBy, prefixLen)
             val (start, end) = resolveBoundOrder(lowerBound, upperBound, scanDirection)
-            val serializedStartBound =
-                start.value?.let {
-                    serializeBound(
-                        index.keySerializer,
-                        start.value,
-                        scanDirection,
-                        start.isInclusive,
-                        true,
-                    )
-                }
-            val serializedEndBound =
-                end.value?.let {
-                    serializeBound(
-                        index.keySerializer,
-                        end.value,
-                        scanDirection,
-                        end.isInclusive,
-                        false,
-                    )
-                }
+            val serializedStartBound = start.value?.let {
+                serializeBound(
+                    index.keySerializer,
+                    start.value,
+                    scanDirection,
+                    start.isInclusive,
+                    true,
+                )
+            }
+            val serializedEndBound = end.value?.let {
+                serializeBound(
+                    index.keySerializer,
+                    end.value,
+                    scanDirection,
+                    end.isInclusive,
+                    false,
+                )
+            }
             val cursor =
-                index.btree.search(serializedStartBound, scanDirection, start.value != null)
-                    ?: return emptyList()
+                index.btree.search(serializedStartBound, scanDirection, start.value != null) ?: return emptyList()
             val result = mutableListOf<Row>()
-            logger.info { "$scanDirection $filter $limit $offset" }
             cursor.use { currentCursor ->
                 generateSequence { currentCursor.step() }
                     .takeWhile { (currentKey, _) ->
                         serializedEndBound == null ||
                                 when (scanDirection) {
-                                    ScanDirection.FORWARD ->
-                                        Arrays.compareUnsigned(currentKey, serializedEndBound) < 0
-
-                                    ScanDirection.BACKWARD ->
-                                        Arrays.compareUnsigned(currentKey, serializedEndBound) >= 0
+                                    ScanDirection.FORWARD -> Arrays.compareUnsigned(currentKey, serializedEndBound) < 0
+                                    ScanDirection.BACKWARD -> Arrays.compareUnsigned(
+                                        currentKey,
+                                        serializedEndBound
+                                    ) >= 0
                                 }
                     }
+                    .let { sequence -> if (filter == null) sequence.drop(offset ?: 0) else sequence }
                     .map { (_, currentValue) -> extractData(index, currentValue) }
-                    .let { sequence -> if (filter != null) sequence.filter(filter) else sequence }
-                    .onEach { row -> logger.info { "before filter: ${row["id"]}" } }
-                    .drop(offset ?: 0)
+                    .let { sequence -> if (filter != null) sequence.filter(filter).drop(offset ?: 0) else sequence }
                     .let { sequence -> if (limit != null) sequence.take(limit) else sequence }
                     .forEach { row -> result.add(row) }
             }

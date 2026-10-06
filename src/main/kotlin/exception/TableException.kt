@@ -16,6 +16,12 @@ sealed class TableException(
     class UniqueViolation(detail: SQLErrorDetail, cause: Throwable? = null):
         TableException(SqlState.UNIQUE_VIOLATION, detail, cause)
 
+    class NegativeLimit(detail: SQLErrorDetail, cause: Throwable? = null):
+        TableException(SqlState.INVALID_ROW_COUNT_IN_LIMIT_CLAUSE, detail, cause)
+
+    class NegativeOffset(detail: SQLErrorDetail, cause: Throwable? = null):
+        TableException(SqlState.INVALID_ROW_COUNT_IN_RESULT_OFFSET_CLAUSE, detail, cause)
+
     class UndefinedIndex(detail: SQLErrorDetail, cause: Throwable? = null):
         TableException(SqlState.UNDEFINED_OBJECT, detail, cause)
 
