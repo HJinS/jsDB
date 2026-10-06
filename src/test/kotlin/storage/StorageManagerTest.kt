@@ -3,8 +3,8 @@ package storage
 import config.MidpointLruConfig
 import config.SimpleConfig
 import config.StorageConfig
+import helper.shouldThrowCode
 import index.btree.node.Node
-import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import storageEngine.BufferPoolManager
@@ -15,6 +15,7 @@ import storageEngine.StorageManager
 import exception.StorageEngineException
 import storageEngine.lru.FrameNodePolicy
 import storageEngine.page.SlottedPage
+import util.ErrorCode
 import util.LockMode
 import util.PageType
 import java.io.File
@@ -69,7 +70,7 @@ class StorageManagerTest: BehaviorSpec({
         }
         `when`("fetch pageId 0L"){
             then("should throw InvalidPageIdException"){
-                shouldThrow<StorageEngineException.InvalidPageId> { storageManager.fetchPage(0L, LockMode.READ) }
+                shouldThrowCode<StorageEngineException>(ErrorCode.INVALID_PAGE_ID) { storageManager.fetchPage(0L, LockMode.READ) }
             }
         }
         `when`("fetch pageId 1L"){
@@ -86,7 +87,7 @@ class StorageManagerTest: BehaviorSpec({
         }
         `when`("delete page 0L"){
             then("should throw InvalidPageIdException"){
-                shouldThrow<StorageEngineException.InvalidPageId> { storageManager.deletePage(0L) }
+                shouldThrowCode<StorageEngineException>(ErrorCode.INVALID_PAGE_ID) { storageManager.deletePage(0L) }
             }
         }
 
@@ -125,7 +126,7 @@ class StorageManagerTest: BehaviorSpec({
             }
             rawPageLock.close()
             then("should throw InvalidPageType without leaking the underlying pin/lock"){
-                shouldThrow<StorageEngineException.InvalidPageType> {
+                shouldThrowCode<StorageEngineException>(ErrorCode.INVALID_PAGE_TYPE) {
                     storageManager.fetchPage(invalidPageId, LockMode.READ)
                 }
                 // If the pin/lock had leaked, this fresh fetch would see pinCount 2 (the leaked

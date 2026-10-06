@@ -2,10 +2,11 @@ package index.btree.node
 
 import config.IndexConfig
 import exception.IndexException
+import exception.catchCode
 import util.EngineErrorDetail
 import index.btree.BTreeOptMode
-import exception.StorageEngineException
 import storageEngine.page.SlottedPage
+import util.ErrorCode
 import util.PageType
 import kotlin.math.floor
 
@@ -22,7 +23,7 @@ abstract class Node(
             return when(page.type){
                 PageType.LEAF_NODE -> LeafNode(indexConfig, page)
                 PageType.INTERNAL_NODE -> InternalNode(indexConfig, page)
-                else -> throw IndexException.InvalidNodeType(
+                else -> throw IndexException(ErrorCode.INVALID_NODE_TYPE,
                     EngineErrorDetail(
                         pageType = page.type,
                         reason = "Invalid node type"
@@ -91,12 +92,15 @@ abstract class Node(
     }
 
     fun isLeft(targetPageId: Long, parentNode: InternalNode, keyIdx: Int): Boolean{
-        return try {
+        return catchCode(
+            ErrorCode.SLOT_OUT_OF_BOUND,
+            onCaught = {
+                val leftChildId = parentNode.childPageId(keyIdx - 1)
+                targetPageId != leftChildId
+            },
+        ) {
             val rightChildId = parentNode.childPageId(keyIdx + 1)
             targetPageId == rightChildId
-        } catch (_: StorageEngineException.SlotOutOfBound){
-            val leftChildId = parentNode.childPageId(keyIdx-1)
-            targetPageId != leftChildId
         }
     }
 
@@ -175,7 +179,7 @@ abstract class Node(
     fun isSafeNode(optMode: BTreeOptMode, key: ByteArray?=null, value: ByteArray?=null) = when(optMode){
         BTreeOptMode.INSERT -> {
             if(!(key != null && value != null))
-                throw IndexException.InvalidSafeCheck(
+                throw IndexException(ErrorCode.INVALID_SAFE_CHECK,
                     EngineErrorDetail(
                         reason = "Key, Value must be provided for safe check when optMode is Insert or Update"
                     )
@@ -185,7 +189,7 @@ abstract class Node(
         BTreeOptMode.DELETE -> hasSurplusKey
         BTreeOptMode.UPDATE -> {
             if(!(key != null && value != null))
-                throw IndexException.InvalidSafeCheck(
+                throw IndexException(ErrorCode.INVALID_SAFE_CHECK,
                     EngineErrorDetail(
                         reason = "Key, Value must be provided for safe check when optMode is Insert or Update"
                     )

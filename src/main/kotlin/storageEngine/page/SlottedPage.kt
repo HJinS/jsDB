@@ -1,6 +1,7 @@
 package storageEngine.page
 
 import config.IndexConfig
+import util.ErrorCode
 import util.decodeVarInt
 import util.encodeVarInt
 import exception.StorageEngineException
@@ -126,14 +127,14 @@ open class SlottedPage(
      * - looks up its `(offset, length)` in the slot array, then parses
      * - the `keyLen | key | valueLen | value` layout [insertRecord] wrote.
      *
-     * @throws StorageEngineException.SlotOutOfBound if [slotId] is outside `0..<recordCount`, or 
+     * @throws StorageEngineException ([ErrorCode.SLOT_OUT_OF_BOUND]) if [slotId] is outside `0..<recordCount`, or 
      * if the slot's `length` is 0 — a slot number that's structurally in range but was never actually written.
      * - (bounds check added in BUG-019, see `history/bugs/`)
 
      * */
     fun getData(slotId: Int): Pair<ByteArray, ByteArray>{
         if(slotId !in 0..<recordCount)
-            throw StorageEngineException.SlotOutOfBound(
+            throw StorageEngineException(ErrorCode.SLOT_OUT_OF_BOUND,
                 EngineErrorDetail(
                     pageId = pageId,
                     pageType = type,
@@ -145,7 +146,7 @@ open class SlottedPage(
         val length = data.getShort(slotLocation + 2)
 
         if(length.toInt() == 0)
-            throw StorageEngineException.SlotOutOfBound(
+            throw StorageEngineException(ErrorCode.SLOT_OUT_OF_BOUND,
                 EngineErrorDetail(
                     pageId = pageId,
                     pageType = type,
@@ -236,7 +237,7 @@ open class SlottedPage(
             writeView.position(dstOffset)
             writeView.put(temp)
         } catch (e: Exception) {
-            throw StorageEngineException.SlotShift(
+            throw StorageEngineException(ErrorCode.SLOT_SHIFT,
                 EngineErrorDetail(
                     pageId = pageId,
                     pageType = type,
@@ -249,7 +250,7 @@ open class SlottedPage(
 
     /**
      * Inserts a new record at [slotId] (shifting later slots later, see [insertSlot]).
-     * If there isn't enough contiguous free space, tries [compaction] once before giving up with [StorageEngineException.PageFull].
+     * If there isn't enough contiguous free space, tries [compaction] once before giving up with [StorageEngineException] ([ErrorCode.PAGE_FULL]).
      *
      * @return [slotId] itself, echoed back.
      * */
@@ -267,7 +268,7 @@ open class SlottedPage(
         if (freeSpace < needed) {
             compaction()
             if (freeSpace < needed)
-                throw StorageEngineException.PageFull(
+                throw StorageEngineException(ErrorCode.PAGE_FULL,
                     EngineErrorDetail(
                         pageId = pageId,
                         reason = "Page full maybe too large record data: $totalDataLength"

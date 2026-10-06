@@ -2,16 +2,17 @@ package catalog
 
 import catalog.data.ColumnRaw
 import catalog.data.IndexRaw
+import helper.shouldThrowCode
 import schema.IndexRow
 import catalog.data.TableRaw
 import schema.TableRow
 import exception.CatalogException
 import schema.ColumnType
 import schema.IndexColumn
-import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
-import util.SqlState
+import util.EntityType
+import util.ErrorCode
 
 class CatalogMapperTest: BehaviorSpec({
     given("An indexRow"){
@@ -70,8 +71,9 @@ class CatalogMapperTest: BehaviorSpec({
         )
         `when`("Convert invalid list to indexRow(invalid type)"){
             then("CorruptedRow should be thrown"){
-                val e= shouldThrow<CatalogException.CorruptedRow> { IndexRaw(invalidRaw).toRow() }
-                e.message shouldBe "[${SqlState.INTERNAL_ERROR.code}] Catalog row '${CatalogBoot.INDEX_CATALOG_NAME}'"
+                val e= shouldThrowCode<CatalogException>(ErrorCode.CORRUPTED_ROW) { IndexRaw(invalidRaw).toRow() }
+                e.detail.entityType shouldBe EntityType.CATALOG_ROW
+                e.detail.entityName shouldBe CatalogBoot.INDEX_CATALOG_NAME
             }
         }
         val invalidRaw2 = listOf(
@@ -84,8 +86,9 @@ class CatalogMapperTest: BehaviorSpec({
         )
         `when`("Convert invalid list to indexRow(out of bound)"){
             then("CorruptedRow should be thrown"){
-                val e = shouldThrow<CatalogException.CorruptedRow> { IndexRaw(invalidRaw2).toRow() }
-                e.message shouldBe "[${SqlState.INTERNAL_ERROR.code}] Catalog row '${CatalogBoot.INDEX_CATALOG_NAME}'"
+                val e = shouldThrowCode<CatalogException>(ErrorCode.CORRUPTED_ROW) { IndexRaw(invalidRaw2).toRow() }
+                e.detail.entityType shouldBe EntityType.CATALOG_ROW
+                e.detail.entityName shouldBe CatalogBoot.INDEX_CATALOG_NAME
             }
         }
     }
@@ -115,8 +118,9 @@ class CatalogMapperTest: BehaviorSpec({
         )
         `when`("Convert invalid list to tableRow(invalid type)"){
             then("CorruptedRow should be thrown"){
-                val e = shouldThrow<CatalogException.CorruptedRow> { TableRaw(invalidRaw).toRow() }
-                e.message shouldBe "[${SqlState.INTERNAL_ERROR.code}] Catalog row '${CatalogBoot.TABLE_CATALOG_NAME}'"
+                val e = shouldThrowCode<CatalogException>(ErrorCode.CORRUPTED_ROW) { TableRaw(invalidRaw).toRow() }
+                e.detail.entityType shouldBe EntityType.CATALOG_ROW
+                e.detail.entityName shouldBe CatalogBoot.TABLE_CATALOG_NAME
             }
         }
         val invalidRaw2 = listOf(
@@ -125,8 +129,9 @@ class CatalogMapperTest: BehaviorSpec({
         )
         `when`("Convert invalid list to tableRow(out of bound)"){
             then("CorruptedRow should be thrown"){
-                val e = shouldThrow<CatalogException.CorruptedRow> { TableRaw(invalidRaw2).toRow() }
-                e.message shouldBe "[${SqlState.INTERNAL_ERROR.code}] Catalog row '${CatalogBoot.TABLE_CATALOG_NAME}'"
+                val e = shouldThrowCode<CatalogException>(ErrorCode.CORRUPTED_ROW) { TableRaw(invalidRaw2).toRow() }
+                e.detail.entityType shouldBe EntityType.CATALOG_ROW
+                e.detail.entityName shouldBe CatalogBoot.TABLE_CATALOG_NAME
             }
         }
     }
@@ -158,8 +163,9 @@ class CatalogMapperTest: BehaviorSpec({
         )
         `when`("Convert invalid list to columnRow(invalid type)"){
             then("CorruptedRow should be thrown"){
-                val e = shouldThrow<CatalogException.CorruptedRow> { ColumnRaw(invalidRaw).toRow() }
-                e.message shouldBe "[${SqlState.INTERNAL_ERROR.code}] Catalog row '${CatalogBoot.COLUMN_CATALOG_NAME}'"
+                val e = shouldThrowCode<CatalogException>(ErrorCode.CORRUPTED_ROW) { ColumnRaw(invalidRaw).toRow() }
+                e.detail.entityType shouldBe EntityType.CATALOG_ROW
+                e.detail.entityName shouldBe CatalogBoot.COLUMN_CATALOG_NAME
             }
         }
         val invalidRaw2 = listOf(
@@ -168,8 +174,9 @@ class CatalogMapperTest: BehaviorSpec({
         )
         `when`("Convert invalid list to columnRow(out of bound)"){
             then("CorruptedRow should be thrown"){
-                val e = shouldThrow<CatalogException.CorruptedRow> { ColumnRaw(invalidRaw2).toRow() }
-                e.message shouldBe "[${SqlState.INTERNAL_ERROR.code}] Catalog row '${CatalogBoot.COLUMN_CATALOG_NAME}'"
+                val e = shouldThrowCode<CatalogException>(ErrorCode.CORRUPTED_ROW) { ColumnRaw(invalidRaw2).toRow() }
+                e.detail.entityType shouldBe EntityType.CATALOG_ROW
+                e.detail.entityName shouldBe CatalogBoot.COLUMN_CATALOG_NAME
             }
         }
 
@@ -178,8 +185,9 @@ class CatalogMapperTest: BehaviorSpec({
         )
         `when`("Convert invalid list to columnRow(invalid column type)"){
             then("CorruptedRow should be thrown"){
-                val e = shouldThrow<CatalogException.CorruptedRow> { ColumnRaw(invalidRaw3).toRow() }
-                e.message shouldBe "[${SqlState.INTERNAL_ERROR.code}] Catalog row '${CatalogBoot.COLUMN_CATALOG_NAME}'"
+                val e = shouldThrowCode<CatalogException>(ErrorCode.CORRUPTED_ROW) { ColumnRaw(invalidRaw3).toRow() }
+                e.detail.entityType shouldBe EntityType.CATALOG_ROW
+                e.detail.entityName shouldBe CatalogBoot.COLUMN_CATALOG_NAME
             }
         }
     }

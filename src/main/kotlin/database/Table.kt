@@ -2,6 +2,7 @@ package database
 
 import exception.DatabaseException
 import exception.TableException
+import exception.catchCode
 import index.btree.ScanDirection
 import index.serializer.KeySerializer
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -12,6 +13,7 @@ import schema.IndexHandle
 import schema.Row
 import schema.RowSchema
 import util.EntityType
+import util.ErrorCode
 import util.SQLErrorDetail
 import util.requireOrThrow
 import java.nio.ByteBuffer
@@ -56,7 +58,7 @@ class Table(
         readLock.withLock {
             val violatedColumns = row.checkNullViolations()
             requireOrThrow(violatedColumns.isEmpty()) {
-                DatabaseException.NotNullViolation(
+                DatabaseException(ErrorCode.NOT_NULL_VIOLATION,
                     SQLErrorDetail(
                         entityType = EntityType.COLUMN,
                         tableName = primaryIndex.metadata.tableName,
@@ -68,7 +70,7 @@ class Table(
             val primaryKey = primaryIndex.extractKey(row)
             val primarySerialized = primaryIndex.keySerializer.serialize(primaryKey)
             if (primaryTree.search(primarySerialized) != null)
-                throw TableException.UniqueViolation(
+                throw TableException(ErrorCode.UNIQUE_VIOLATION,
                     SQLErrorDetail(
                         entityType = EntityType.PRIMARY_INDEX,
                         entityName = primaryIndex.metadata.indexName,
@@ -81,7 +83,7 @@ class Table(
                 val indexKey = handle.extractKey(row)
                 val indexSerialized = handle.keySerializer.serialize(indexKey)
                 if (handle.metadata.isUnique && handle.btree.search(indexSerialized) != null) {
-                    throw TableException.UniqueViolation(
+                    throw TableException(ErrorCode.UNIQUE_VIOLATION,
                         SQLErrorDetail(
                             entityType = EntityType.INDEX,
                             entityName = handle.metadata.indexName,
@@ -172,8 +174,8 @@ class Table(
      * pulling from the cursor at all). A negative value is rejected up front, before any index is
      * touched, rather than being reinterpreted as 0 or "unlimited".
      *
-     * @throws TableException.NegativeLimit if [limit] is negative.
-     * @throws TableException.NegativeOffset if [offset] is negative.
+     * @throws TableException ([ErrorCode.NEGATIVE_LIMIT]) if [limit] is negative.
+     * @throws TableException ([ErrorCode.NEGATIVE_OFFSET]) if [offset] is negative.
      */
     fun selectByRange(
         indexName: String,
@@ -185,7 +187,7 @@ class Table(
         offset: Int? = null,
     ): List<Row> {
         requireOrThrow(limit == null || limit >= 0) {
-            TableException.NegativeLimit(
+            TableException(ErrorCode.NEGATIVE_LIMIT,
                 SQLErrorDetail(
                     reason = "LIMIT must not be negative (got $limit)",
                     entityType = EntityType.TABLE,
@@ -194,7 +196,7 @@ class Table(
             )
         }
         requireOrThrow(offset == null || offset >= 0) {
-            TableException.NegativeOffset(
+            TableException(ErrorCode.NEGATIVE_OFFSET,
                 SQLErrorDetail(
                     reason = "OFFSET must not be negative (got $offset)",
                     entityType = EntityType.TABLE,
@@ -270,7 +272,7 @@ class Table(
      * Point lookup through a secondary index: resolves [key] to the primary key it stores, then
      * re-reads the row from the primary index. Returns null if [key] isn't in [indexName] at all (a
      * normal miss); if the secondary hit points at a primary key that no longer exists, that's
-     * [extractData] throwing [TableException.CorruptedIndex] instead, since that's an
+     * [extractData] throwing [TableException] ([ErrorCode.CORRUPTED_INDEX]) instead, since that's an
      * index-consistency failure rather than a plain miss.
      */
     fun selectByIndex(indexName: String, key: List<Any?>): Row? {
@@ -322,10 +324,10 @@ class Table(
      * [IndexHandle.valueSerializer] and either threw or returned garbage. A test that asserted on
      * the exact bytes written to a mocked secondary btree is what caught it.
      *
-     * @throws exception.DatabaseException.NotNullViolation if [newRow] has a null in a NOT NULL column.
-     * @throws TableException.PrimaryKeyUpdateNotSupported if [newRow]'s primary key differs from [key].
-     * @throws TableException.RowNotFound if no row exists at [key].
-     * @throws TableException.UniqueViolation if [newRow] gives a unique secondary index a key that
+     * @throws exception.DatabaseException ([ErrorCode.NOT_NULL_VIOLATION]) if [newRow] has a null in a NOT NULL column.
+     * @throws TableException ([ErrorCode.PRIMARY_KEY_UPDATE_NOT_SUPPORTED]) if [newRow]'s primary key differs from [key].
+     * @throws TableException ([ErrorCode.ROW_NOT_FOUND]) if no row exists at [key].
+     * @throws TableException ([ErrorCode.UNIQUE_VIOLATION]) if [newRow] gives a unique secondary index a key that
      *  another row already holds.
      */
     fun updateRow(key: List<Any?>, newRow: Row) {
@@ -334,7 +336,7 @@ class Table(
             val primaryTree = primaryIndex.btree
             val newPkKeySerialized = primaryIndex.keySerializer.serialize(primaryIndex.extractKey(newRow))
             val oldRow = primaryTree.search(newPkKeySerialized)?.let { extractData(primaryIndex, it) }
-                ?: throw TableException.RowNotFound(
+                ?: throw TableException(ErrorCode.ROW_NOT_FOUND,
                     SQLErrorDetail(
                         entityType = EntityType.ROW,
                         tableName = primaryIndex.metadata.tableName,
@@ -392,7 +394,7 @@ class Table(
      *
      * ### Count
      * A row that vanished between collection and its update (another thread deleted it first)
-     * throws [TableException.RowNotFound] from [updateRow]; that row is skipped and not counted.
+     * throws [TableException] ([ErrorCode.ROW_NOT_FOUND]) from [updateRow]; that row is skipped and not counted.
      * Any other exception propagates. Like [deleteWhere], the count is best-effort under concurrent
      * writers.
      *
@@ -418,11 +420,14 @@ class Table(
 
             var affectedRowCount = 0
             updates.forEach { (key, _, newRow) ->
-                try {
+                catchCode(
+                    ErrorCode.ROW_NOT_FOUND,
+                    onCaught = {
+                        logger.debug { "updateWhere: row already deleted by another thread, skipped (table=${primaryIndex.metadata.tableName}, key=$key)" }
+                    },
+                ) {
                     updateRow(key, newRow)
                     affectedRowCount++
-                } catch (e: TableException.RowNotFound) {
-                    logger.debug { "updateWhere: row already deleted by another thread, skipped (table=${primaryIndex.metadata.tableName}, key=$key)" }
                 }
             }
             return affectedRowCount
@@ -435,7 +440,7 @@ class Table(
      * The row is read first, because the secondary index keys to remove are derived from its
      * current column values.
      *
-     * @throws TableException.RowNotFound if no row exists at [key].
+     * @throws TableException ([ErrorCode.ROW_NOT_FOUND]) if no row exists at [key].
      */
     fun deleteRow(key: List<Any?>) {
         readLock.withLock {
@@ -443,7 +448,7 @@ class Table(
             val keySerialized = primaryIndex.keySerializer.serialize(key)
             val oldRow =
                 primaryTree.search(keySerialized)?.let { extractData(primaryIndex, it) }
-                    ?: throw TableException.RowNotFound(
+                    ?: throw TableException(ErrorCode.ROW_NOT_FOUND,
                         SQLErrorDetail(
                             entityType = EntityType.ROW,
                             tableName = primaryIndex.metadata.tableName,
@@ -476,7 +481,7 @@ class Table(
      * ### Count
      * Each row is deleted via [deleteRow] by primary key, which re-reads it at delete time. A row
      * that vanished between collection and deletion (another thread deleted it first)
-     * throws [TableException.RowNotFound]; that is swallowed and not counted, since the row is gone
+     * throws [TableException] ([ErrorCode.ROW_NOT_FOUND]); that is swallowed and not counted, since the row is gone
      * either way. Any other exception propagates. The count is best-effort: [deleteRow]'s lookup
      * and delete are not atomic, so two threads deleting the same row at once can both count it.
      *
@@ -497,11 +502,14 @@ class Table(
             var affectedRowCount = 0
             targetRows.forEach { row ->
                 val key = primaryIndex.extractKey(row)
-                try {
+                catchCode(
+                    ErrorCode.ROW_NOT_FOUND,
+                    onCaught = {
+                        logger.debug { "deleteWhere: row already deleted by another thread, skipped (table=${primaryIndex.metadata.tableName}, key=$key)" }
+                    },
+                ) {
                     deleteRow(key)
                     affectedRowCount++
-                } catch (e: TableException.RowNotFound) {
-                    logger.debug { "deleteWhere: row already deleted by another thread, skipped (table=${primaryIndex.metadata.tableName}, key=$key)" }
                 }
             }
             return affectedRowCount
@@ -648,7 +656,7 @@ class Table(
 
         val freeColumns = keyColumns.drop(equalPrefixLen)
         requireOrThrow(orderBy.size <= freeColumns.size) {
-            TableException.TooManyOrderColumns(
+            TableException(ErrorCode.TOO_MANY_ORDER_COLUMNS,
                 SQLErrorDetail(
                     entityType = EntityType.INDEX_KEY_COLUMN,
                     reason = "orderBy가 index의범위 컬럼 개수보다 많음",
@@ -661,7 +669,7 @@ class Table(
         val paired = relevant.zip(orderBy)
 
         requireOrThrow(paired.all { (col, order) -> col.name == order.name }) {
-            TableException.OrderColumnMismatch(
+            TableException(ErrorCode.ORDER_COLUMN_MISMATCH,
                 SQLErrorDetail(
                     entityType = EntityType.INDEX_KEY_COLUMN,
                     reason = "orderBy는 index의 범위 컬럼 맨 앞부터 순서대로 지정해야 함(중간 생략 불가)",
@@ -677,7 +685,7 @@ class Table(
             allMatch -> ScanDirection.FORWARD
             allReversed -> ScanDirection.BACKWARD
             else ->
-                throw TableException.UnsupportedSortDirection(
+                throw TableException(ErrorCode.UNSUPPORTED_SORT_DIRECTION,
                     SQLErrorDetail(
                         entityType = EntityType.INDEX_KEY_COLUMN,
                         reason = "인덱스 선언과 일부만 일치하는 정렬 방향은 지원하지 않음",
@@ -697,7 +705,7 @@ class Table(
             ?: run {
                 if (primaryIndex.metadata.indexName == indexName) primaryIndex
                 else
-                    throw TableException.UndefinedIndex(
+                    throw TableException(ErrorCode.UNDEFINED_INDEX,
                         SQLErrorDetail(
                             entityType = EntityType.INDEX,
                             entityName = indexName,
@@ -715,8 +723,8 @@ class Table(
      * what [insertRow] and [updateRow] write there) — so it has to be resolved through
      * [primaryIndex] to get the actual row. If that lookup comes back empty, the secondary index is
      * pointing at a primary key that no longer exists — a storage-engine-level inconsistency rather
-     * than anything a caller's query could have caused, hence [TableException.CorruptedIndex]
-     * rather than [TableException.RowNotFound].
+     * than anything a caller's query could have caused, hence [TableException] ([ErrorCode.CORRUPTED_INDEX])
+     * rather than [TableException] ([ErrorCode.ROW_NOT_FOUND]).
      */
     private fun extractData(index: IndexHandle, value: ByteArray): Row {
         val rowValue =
@@ -724,7 +732,7 @@ class Table(
                 val primaryKey = index.valueSerializer.deserialize(value).first
                 val primaryKeySerialized = primaryIndex.keySerializer.serialize(primaryKey)
                 primaryIndex.btree.search(primaryKeySerialized)
-                    ?: throw TableException.CorruptedIndex(
+                    ?: throw TableException(ErrorCode.CORRUPTED_INDEX,
                         SQLErrorDetail(
                             entityType = EntityType.INDEX,
                             entityName = index.metadata.indexName,
@@ -743,13 +751,13 @@ class Table(
      * [newRow] satisfies NOT NULL, and carries the same primary key as [key]. Split out so
      * [updateWhere] can run them for every row before writing any of them.
      *
-     * @throws DatabaseException.NotNullViolation if [newRow] has a null in a NOT NULL column.
-     * @throws TableException.PrimaryKeyUpdateNotSupported if [newRow]'s primary key differs from [key].
+     * @throws DatabaseException ([ErrorCode.NOT_NULL_VIOLATION]) if [newRow] has a null in a NOT NULL column.
+     * @throws TableException ([ErrorCode.PRIMARY_KEY_UPDATE_NOT_SUPPORTED]) if [newRow]'s primary key differs from [key].
      */
     private fun validateUpdate(key: List<Any?>, newRow: Row) {
         val violatedColumns = newRow.checkNullViolations()
         requireOrThrow(violatedColumns.isEmpty()) {
-            DatabaseException.NotNullViolation(
+            DatabaseException(ErrorCode.NOT_NULL_VIOLATION,
                 SQLErrorDetail(
                     entityType = EntityType.COLUMN,
                     tableName = primaryIndex.metadata.tableName,
@@ -761,7 +769,7 @@ class Table(
         val newPkKeySerialized =
             primaryIndex.keySerializer.serialize(primaryIndex.extractKey(newRow))
         requireOrThrow(Arrays.compareUnsigned(oldPkKeySerialized, newPkKeySerialized) == 0) {
-            TableException.PrimaryKeyUpdateNotSupported(
+            TableException(ErrorCode.PRIMARY_KEY_UPDATE_NOT_SUPPORTED,
                 SQLErrorDetail(
                     reason = "primary key columns cannot be updated yet",
                     entityType = EntityType.PRIMARY_KEY,
@@ -783,7 +791,7 @@ class Table(
      * key another row in the same batch is about to give up (swapping or shifting keys) is rejected
      * too, even though writing the rows in the right order could have worked.
      *
-     * @throws TableException.UniqueViolation naming the first violated index.
+     * @throws TableException ([ErrorCode.UNIQUE_VIOLATION]) naming the first violated index.
      */
     private fun checkUniqueness(changes: List<Pair<Row, Row>>) {
         for ((_, handle) in secondaryIndexes) {
@@ -798,7 +806,7 @@ class Table(
                         newKeySerialized
                     ) == null
                 ) {
-                    TableException.UniqueViolation(
+                    TableException(ErrorCode.UNIQUE_VIOLATION,
                         SQLErrorDetail(
                             entityType = EntityType.INDEX,
                             entityName = handle.metadata.indexName,

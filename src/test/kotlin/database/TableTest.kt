@@ -2,12 +2,12 @@ package database
 
 import exception.DatabaseException
 import exception.TableException
+import helper.shouldThrowCode
 import index.btree.BTree
 import index.btree.Cursor
 import index.btree.ScanDirection
 import index.serializer.BinaryRowSerializer
 import index.serializer.MultiColumnKeySerializer
-import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.nulls.shouldNotBeNull
@@ -31,7 +31,7 @@ import schema.IndexRow
 import schema.Row
 import schema.RowColumn
 import schema.RowSchema
-import util.SqlState
+import util.ErrorCode
 
 class TableTest :
     BehaviorSpec({
@@ -183,10 +183,9 @@ class TableTest :
             `when`("inserting a row with that primary key") {
                 then("UniqueViolation should be thrown, carrying the UNIQUE_VIOLATION state") {
                     val error =
-                        shouldThrow<TableException.UniqueViolation> {
+                        shouldThrowCode<TableException>(ErrorCode.UNIQUE_VIOLATION) {
                             table.insertRow(Row(rowSchema, listOf(1L, "a@x.com")))
                         }
-                    error.message shouldContain SqlState.UNIQUE_VIOLATION.code
                 }
             }
         }
@@ -205,11 +204,10 @@ class TableTest :
             `when`("inserting a row whose id is null") {
                 then("NotNullViolation naming that column is thrown before any index is touched") {
                     val error =
-                        shouldThrow<DatabaseException.NotNullViolation> {
+                        shouldThrowCode<DatabaseException>(ErrorCode.NOT_NULL_VIOLATION) {
                             table.insertRow(Row(rowSchema, listOf(null, "a@x.com")))
                         }
-                    error.message shouldContain "'id'"
-                    error.message shouldContain SqlState.NOT_NULL_VIOLATION.code
+                    error.detail.columnNames shouldBe listOf("id")
                     verify(exactly = 0) { primaryBtree.search(any()) }
                     verify(exactly = 0) { primaryBtree.insert(any(), any()) }
                     verify(exactly = 0) { secondaryBtree.insert(any(), any()) }
@@ -236,7 +234,7 @@ class TableTest :
 
             `when`("inserting a row with that secondary key") {
                 then("UniqueViolation should be thrown") {
-                    shouldThrow<TableException.UniqueViolation> {
+                    shouldThrowCode<TableException>(ErrorCode.UNIQUE_VIOLATION) {
                         table.insertRow(Row(rowSchema, listOf(1L, "a@x.com")))
                     }
                 }
@@ -377,7 +375,7 @@ class TableTest :
 
             `when`("selecting via that unknown index name") {
                 then("UndefinedIndex should be thrown") {
-                    shouldThrow<TableException.UndefinedIndex> {
+                    shouldThrowCode<TableException>(ErrorCode.UNDEFINED_INDEX) {
                         table.selectByIndex("no-such-index", listOf("x"))
                     }
                 }
@@ -399,7 +397,7 @@ class TableTest :
 
             `when`("updating that row") {
                 then("RowNotFound should be thrown") {
-                    shouldThrow<TableException.RowNotFound> {
+                    shouldThrowCode<TableException>(ErrorCode.ROW_NOT_FOUND) {
                         table.updateRow(listOf(1L), Row(rowSchema, listOf(1L, "new@x.com")))
                     }
                 }
@@ -419,13 +417,12 @@ class TableTest :
 
             `when`("updating the row at id 1 with a new row whose id is 2") {
                 then("PrimaryKeyUpdateNotSupported is thrown with the FEATURE_NOT_SUPPORTED state") {
-                    val error = shouldThrow<TableException.PrimaryKeyUpdateNotSupported> {
+                    val error = shouldThrowCode<TableException>(ErrorCode.PRIMARY_KEY_UPDATE_NOT_SUPPORTED) {
                         table.updateRow(
                             listOf(1L),
                             Row(rowSchema, listOf(2L, "a@x.com"))
                         )
                     }
-                    error.message shouldContain SqlState.FEATURE_NOT_SUPPORTED.code
                 }
                 then("no index is read or written, so the row already stored at id 2 is not overwritten") {
                     verify(exactly = 0) { primaryBtree.search(any()) }
@@ -443,11 +440,10 @@ class TableTest :
 
             `when`("updating with a null id") {
                 then("NotNullViolation naming that column is thrown before any index is touched") {
-                    val error = shouldThrow<DatabaseException.NotNullViolation> {
+                    val error = shouldThrowCode<DatabaseException>(ErrorCode.NOT_NULL_VIOLATION) {
                         table.updateRow(listOf(1L), Row(rowSchema, listOf(null, "a@x.com")))
                     }
-                    error.message shouldContain "'id'"
-                    error.message shouldContain SqlState.NOT_NULL_VIOLATION.code
+                    error.detail.columnNames shouldBe listOf("id")
                     verify(exactly = 0) { primaryBtree.search(any()) }
                     verify(exactly = 0) { primaryBtree.update(any(), any(), any()) }
                 }
@@ -540,7 +536,7 @@ class TableTest :
 
             `when`("deleting that row") {
                 then("RowNotFound should be thrown") {
-                    shouldThrow<TableException.RowNotFound> { table.deleteRow(listOf(1L)) }
+                    shouldThrowCode<TableException>(ErrorCode.ROW_NOT_FOUND) { table.deleteRow(listOf(1L)) }
                 }
             }
         }
@@ -721,7 +717,7 @@ class TableTest :
 
             `when`("selecting a range on that name") {
                 then("UndefinedIndex should be thrown") {
-                    shouldThrow<TableException.UndefinedIndex> {
+                    shouldThrowCode<TableException>(ErrorCode.UNDEFINED_INDEX) {
                         table.selectByRange(
                             "no-such-index",
                             Bound(listOf(1L), isInclusive = true),
@@ -809,7 +805,7 @@ class TableTest :
 
             `when`("selecting by that prefix") {
                 then("CorruptedIndex is thrown, and the cursor is still closed") {
-                    shouldThrow<TableException.CorruptedIndex> {
+                    shouldThrowCode<TableException>(ErrorCode.CORRUPTED_INDEX) {
                         table.selectByPrefix("email_idx", listOf("a@x.com"), emptyList())
                     }
                     verify { cursor.close() }
@@ -885,7 +881,7 @@ class TableTest :
 
             `when`("scanning with col1 matching declared order but col2 not") {
                 then("UnsupportedSortDirection is thrown") {
-                    shouldThrow<TableException.UnsupportedSortDirection> {
+                    shouldThrowCode<TableException>(ErrorCode.UNSUPPORTED_SORT_DIRECTION) {
                         table.selectByRange(
                             "composite_idx",
                             Bound(listOf(1L, 10L), isInclusive = true),
@@ -912,7 +908,7 @@ class TableTest :
 
             `when`("scanning with an orderBy naming a column beyond col1/col2") {
                 then("TooManyOrderColumns is thrown") {
-                    shouldThrow<TableException.TooManyOrderColumns> {
+                    shouldThrowCode<TableException>(ErrorCode.TOO_MANY_ORDER_COLUMNS) {
                         table.selectByRange(
                             "composite_idx",
                             Bound(listOf(1L, 10L), isInclusive = true),
@@ -940,7 +936,7 @@ class TableTest :
 
             `when`("scanning with orderBy starting from col2, skipping col1") {
                 then("OrderColumnMismatch is thrown") {
-                    shouldThrow<TableException.OrderColumnMismatch> {
+                    shouldThrowCode<TableException>(ErrorCode.ORDER_COLUMN_MISMATCH) {
                         table.selectByRange(
                             "composite_idx",
                             Bound(listOf(1L, 10L), isInclusive = true),
@@ -1240,8 +1236,8 @@ class TableTest :
             }
 
             `when`("scanning with negative limit, no offset") {
-                then("TableException.NegativeLimit should be thrown") {
-                    val e = shouldThrow<TableException.NegativeLimit> {
+                then("NEGATIVE_LIMIT should be thrown") {
+                    val e = shouldThrowCode<TableException>(ErrorCode.NEGATIVE_LIMIT) {
                         table.selectByRange(
                             "pk_idx",
                             Bound(null, isInclusive = true),
@@ -1252,13 +1248,14 @@ class TableTest :
                             null,
                         )
                     }
-                    e.message shouldBe "[${SqlState.INVALID_ROW_COUNT_IN_LIMIT_CLAUSE.code}] Table 'users': LIMIT must not be negative (got -1)"
+                    e.detail.entityName shouldBe "users"
+                    e.detail.reason shouldBe "LIMIT must not be negative (got -1)"
                 }
             }
 
             `when`("scanning with no limit, negative offset") {
-                then("TableException.NegativeOffset should be thrown") {
-                    val e = shouldThrow<TableException.NegativeOffset> {
+                then("NEGATIVE_OFFSET should be thrown") {
+                    val e = shouldThrowCode<TableException>(ErrorCode.NEGATIVE_OFFSET) {
                         table.selectByRange(
                             "pk_idx",
                             Bound(null, isInclusive = true),
@@ -1269,7 +1266,8 @@ class TableTest :
                             -1,
                         )
                     }
-                    e.message shouldBe "[${SqlState.INVALID_ROW_COUNT_IN_RESULT_OFFSET_CLAUSE.code}] Table 'users': OFFSET must not be negative (got -1)"
+                    e.detail.entityName shouldBe "users"
+                    e.detail.reason shouldBe "OFFSET must not be negative (got -1)"
                 }
             }
 
@@ -1720,7 +1718,7 @@ class TableTest :
 
             `when`("deleting") {
                 then("UndefinedIndex is thrown before anything is deleted") {
-                    shouldThrow<TableException.UndefinedIndex> {
+                    shouldThrowCode<TableException>(ErrorCode.UNDEFINED_INDEX) {
                         table.deleteWhere(
                             "no_such_idx",
                             Bound(null, isInclusive = true),
@@ -1869,7 +1867,7 @@ class TableTest :
 
             `when`("updating") {
                 then("PrimaryKeyUpdateNotSupported propagates and nothing is written") {
-                    shouldThrow<TableException.PrimaryKeyUpdateNotSupported> {
+                    shouldThrowCode<TableException>(ErrorCode.PRIMARY_KEY_UPDATE_NOT_SUPPORTED) {
                         table.updateWhere(
                             "pk_idx",
                             Bound(null, isInclusive = true),
@@ -1892,7 +1890,7 @@ class TableTest :
 
             `when`("updating") {
                 then("NotNullViolation propagates and nothing is written") {
-                    shouldThrow<DatabaseException.NotNullViolation> {
+                    shouldThrowCode<DatabaseException>(ErrorCode.NOT_NULL_VIOLATION) {
                         table.updateWhere(
                             "pk_idx",
                             Bound(null, isInclusive = true),
@@ -1920,7 +1918,7 @@ class TableTest :
 
             `when`("the third row's replacement changes its primary key") {
                 then("PrimaryKeyUpdateNotSupported is thrown and the two valid rows were not written either") {
-                    shouldThrow<TableException.PrimaryKeyUpdateNotSupported> {
+                    shouldThrowCode<TableException>(ErrorCode.PRIMARY_KEY_UPDATE_NOT_SUPPORTED) {
                         table.updateWhere(
                             "pk_idx",
                             Bound(null, isInclusive = true),
@@ -1941,7 +1939,7 @@ class TableTest :
 
             `when`("the third row's replacement has null in a NOT NULL column") {
                 then("NotNullViolation is thrown and the two valid rows were not written either") {
-                    shouldThrow<DatabaseException.NotNullViolation> {
+                    shouldThrowCode<DatabaseException>(ErrorCode.NOT_NULL_VIOLATION) {
                         table.updateWhere(
                             "pk_idx",
                             Bound(null, isInclusive = true),
@@ -1978,7 +1976,7 @@ class TableTest :
 
             `when`("updating row 1 to that email") {
                 then("UniqueViolation is thrown before anything is written, to any index") {
-                    shouldThrow<TableException.UniqueViolation> {
+                    shouldThrowCode<TableException>(ErrorCode.UNIQUE_VIOLATION) {
                         table.updateRow(
                             listOf(1L),
                             Row(rowSchema, listOf(1L, "taken@x.com"))
@@ -2044,7 +2042,7 @@ class TableTest :
 
             `when`("setting every matching row's email to the same value") {
                 then("UniqueViolation is thrown and not even the first row was written") {
-                    shouldThrow<TableException.UniqueViolation> {
+                    shouldThrowCode<TableException>(ErrorCode.UNIQUE_VIOLATION) {
                         table.updateWhere(
                             "pk_idx",
                             Bound(null, isInclusive = true),
@@ -2087,7 +2085,7 @@ class TableTest :
 
             `when`("renaming every matching row's email") {
                 then("UniqueViolation is thrown and the two rows before it were not written either") {
-                    shouldThrow<TableException.UniqueViolation> {
+                    shouldThrowCode<TableException>(ErrorCode.UNIQUE_VIOLATION) {
                         table.updateWhere(
                             "pk_idx",
                             Bound(null, isInclusive = true),
@@ -2107,7 +2105,7 @@ class TableTest :
 
             `when`("updating") {
                 then("UndefinedIndex is thrown before anything is written") {
-                    shouldThrow<TableException.UndefinedIndex> {
+                    shouldThrowCode<TableException>(ErrorCode.UNDEFINED_INDEX) {
                         table.updateWhere(
                             "no_such_idx",
                             Bound(null, isInclusive = true),
@@ -2126,20 +2124,18 @@ class TableTest :
 
             `when`("limit is negative") {
                 then("NegativeLimit is thrown before any index is touched") {
-                    val error = shouldThrow<TableException.NegativeLimit> {
+                    val error = shouldThrowCode<TableException>(ErrorCode.NEGATIVE_LIMIT) {
                         table.fullScan(emptyList(), null, -5, null)
                     }
-                    error.message shouldContain SqlState.INVALID_ROW_COUNT_IN_LIMIT_CLAUSE.code
                     verify(exactly = 0) { primaryBtree.search(any(), any(), any()) }
                 }
             }
 
             `when`("offset is negative") {
                 then("NegativeOffset is thrown before any index is touched") {
-                    val error = shouldThrow<TableException.NegativeOffset> {
+                    val error = shouldThrowCode<TableException>(ErrorCode.NEGATIVE_OFFSET) {
                         table.fullScan(emptyList(), null, null, -5)
                     }
-                    error.message shouldContain SqlState.INVALID_ROW_COUNT_IN_RESULT_OFFSET_CLAUSE.code
                     verify(exactly = 0) { primaryBtree.search(any(), any(), any()) }
                 }
             }

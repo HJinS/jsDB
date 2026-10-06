@@ -11,6 +11,7 @@ import index.serializer.ValueSerializer
 import java.util.EmptyStackException
 import java.util.Stack
 import kotlin.collections.plusAssign
+import util.ErrorCode
 
 
 /**
@@ -175,7 +176,7 @@ class BTree<K, V> (
             val (currentNode, currentNodeIdx) = try {
                 traceNode.pop()
             } catch (e: EmptyStackException) {
-                throw IndexException.InvalidTraceStack(
+                throw IndexException(ErrorCode.INVALID_TRACE_STACK,
                     EngineErrorDetail(
                         reason = "Unexpected node trace data invalid. IndexName: InMemoryBTree TargetTableName: Memory"
                     ),
@@ -276,7 +277,7 @@ class BTree<K, V> (
     fun traverse(): List<Pair<K, V>>{
         val result = mutableListOf<Pair<K, V>>()
         var currentNode: Node? = findLeftMostLeaf()
-            ?: throw IndexException.LeafNodeNotFound(
+            ?: throw IndexException(ErrorCode.LEAF_NODE_NOT_FOUND,
                 EngineErrorDetail(
                     reason = "Could not find leaf node for key: null"
                 )

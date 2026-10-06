@@ -5,6 +5,7 @@ import exception.StorageEngineException
 import storageEngine.page.PageLock
 import storageEngine.page.SlottedPage
 import util.EngineErrorDetail
+import util.ErrorCode
 import util.LockMode
 import util.PageType
 
@@ -44,7 +45,7 @@ class StorageManager(
      */
     fun fetchPage(pageId: Long, lockMode: LockMode): PageLock {
         if (pageId <= 0L)
-            throw StorageEngineException.InvalidPageId(
+            throw StorageEngineException(ErrorCode.INVALID_PAGE_ID,
                 EngineErrorDetail(
                     pageId = pageId,
                     reason = "Attempt to fetch invalid page",
@@ -60,7 +61,7 @@ class StorageManager(
         }
         if (needToThrow) {
             pageLock.close()
-            throw StorageEngineException.InvalidPageType(
+            throw StorageEngineException(ErrorCode.INVALID_PAGE_TYPE,
                 EngineErrorDetail(
                     pageId = pageId,
                     pageType = pageType,
@@ -80,7 +81,7 @@ class StorageManager(
      */
     fun deletePage(pageId: Long) {
         if (pageId <= 0L)
-            throw StorageEngineException.InvalidPageId(
+            throw StorageEngineException(ErrorCode.INVALID_PAGE_ID,
                 EngineErrorDetail(
                     pageId = pageId,
                     reason = "Attempt to fetch invalid page",

@@ -16,6 +16,7 @@ import schema.ColumnType
 import schema.Row
 import schema.RowColumn
 import schema.RowSchema
+import util.ErrorCode
 
 /**
  * Issue #42: DataBase-wide ReentrantReadWriteLock (DDL = write, DML = read).
@@ -128,10 +129,12 @@ class DataBaseConcurrencyTest :
                             try {
                                 db.createTable(tableName, "race-primary", columns)
                                 successes.incrementAndGet()
-                            } catch (_: DatabaseException.DuplicateTable) {
-                                duplicateFailures.incrementAndGet()
                             } catch (e: Throwable) {
-                                unexpected.add(e)
+                                if (e is DatabaseException && e.code == ErrorCode.DUPLICATE_TABLE) {
+                                    duplicateFailures.incrementAndGet()
+                                } else {
+                                    unexpected.add(e)
+                                }
                             }
                         }
                     }
@@ -179,13 +182,12 @@ class DataBaseConcurrencyTest :
                         try {
                             val reloaded = db.loadTable(tableName)
                             reloaded.selectByKey(listOf(1L))
-                        } catch (_: CatalogException.UndefinedTable) {
-                            // Expected once the drop has become visible - the table is gone.
-                            stop.set(true)
-                        } catch (_: DatabaseException.UndefinedObject) {
-                            stop.set(true)
                         } catch (e: Throwable) {
-                            unexpected.add(e)
+                            // Expected once the drop has become visible - the table is gone.
+                            val tableGone =
+                                (e is CatalogException && e.code == ErrorCode.UNDEFINED_TABLE) ||
+                                    (e is DatabaseException && e.code == ErrorCode.UNDEFINED_OBJECT)
+                            if (!tableGone) unexpected.add(e)
                             stop.set(true)
                         }
                     }

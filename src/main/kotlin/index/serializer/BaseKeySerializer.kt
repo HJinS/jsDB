@@ -7,6 +7,7 @@ import schema.ColumnType
 import schema.IndexColumn
 import schema.IndexKeySchema
 import util.EngineErrorDetail
+import util.ErrorCode
 import util.decodeSortableBoolean
 import util.decodeSortableByte
 import util.decodeSortableByteArray
@@ -157,7 +158,7 @@ abstract class BaseKeySerializer<K>(
             try {
                 bytesInverted[position++]
             } catch (exception: IndexOutOfBoundsException) {
-                throw IndexException.InvalidBytes(
+                throw IndexException(ErrorCode.INVALID_BYTES,
                     EngineErrorDetail(
                         reason = "Invalid bytes for serialization/deserialization.",
                     ),

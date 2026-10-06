@@ -8,6 +8,7 @@ import storageEngine.lru.ReplacementPolicy
 import storageEngine.page.Frame
 import storageEngine.page.PageLock
 import util.EngineErrorDetail
+import util.ErrorCode
 import util.INVALID_PAGE_ID
 import util.LockMode
 
@@ -98,7 +99,7 @@ class BufferPoolManager(
                 replacer.pin(frameId)
             }
         } catch (e: Exception) {
-            throw StorageEngineException.UnExpected(
+            throw StorageEngineException(ErrorCode.UNEXPECTED,
                 EngineErrorDetail(
                     pageId = pageId,
                     reason = "Something went wrong. Maybe buffer full exhausted.",
@@ -194,7 +195,7 @@ class BufferPoolManager(
             frame.pinCount.set(1)
             replacer.pin(frameId)
         } catch (e: Exception) {
-            throw StorageEngineException.UnExpected(
+            throw StorageEngineException(ErrorCode.UNEXPECTED,
                 EngineErrorDetail(
                     pageId = pageId,
                     reason = "Something went wrong. Maybe buffer full exhausted.",
@@ -218,7 +219,7 @@ class BufferPoolManager(
                 } finally {
                     globalLatch.unlock()
                 }
-                throw StorageEngineException.UnExpected(
+                throw StorageEngineException(ErrorCode.UNEXPECTED,
                     EngineErrorDetail(
                         pageId = pageId,
                         reason = "Failed to write back dirty victim page $victimPageId before reuse.",
@@ -235,7 +236,7 @@ class BufferPoolManager(
             }
         } catch (e: Exception) {
             frame.latch.writeLock().unlock()
-            throw StorageEngineException.UnExpected(
+            throw StorageEngineException(ErrorCode.UNEXPECTED,
                 EngineErrorDetail(
                     pageId = pageId,
                     reason = "Something went wrong. Maybe buffer full exhausted.",
@@ -260,7 +261,7 @@ class BufferPoolManager(
         try {
             frameId =
                 pageTable[pageId]
-                    ?: throw StorageEngineException.PageNotFoundInCache(
+                    ?: throw StorageEngineException(ErrorCode.PAGE_NOT_FOUND_IN_CACHE,
                         EngineErrorDetail(
                             pageId = pageId,
                             reason = "Unable to find page in buffer pool",
@@ -287,7 +288,7 @@ class BufferPoolManager(
         try {
             frameId =
                 pageTable[pageId]
-                    ?: throw StorageEngineException.PageNotFoundInCache(
+                    ?: throw StorageEngineException(ErrorCode.PAGE_NOT_FOUND_IN_CACHE,
                         EngineErrorDetail(
                             pageId = pageId,
                             reason = "Unable to find page in buffer pool",
@@ -312,7 +313,7 @@ class BufferPoolManager(
     /**
      * Reclaims [pageId] immediately if it's in the buffer pool (does nothing if it isn't cached —
      * registering it on the disk free list is [StorageManager.deletePage]'s job, done before this
-     * is called). Throws [StorageEngineException.PageInUse] if it's still pinned
+     * is called). Throws [StorageEngineException] ([ErrorCode.PAGE_IN_USE]) if it's still pinned
      * ([Frame.pinCount] > 0) — flushing is the caller's responsibility, so dirtiness isn't checked
      * here.
      */
@@ -324,7 +325,7 @@ class BufferPoolManager(
             frameId = pageTable[pageId] ?: return
             frame = frames[frameId]
             if (frame.pinCount.get() > 0)
-                throw StorageEngineException.PageInUse(
+                throw StorageEngineException(ErrorCode.PAGE_IN_USE,
                     EngineErrorDetail(
                         pageId = pageId,
                         reason = "Page is currently in use (pin count > 0) and cannot be deleted.",

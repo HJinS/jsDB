@@ -2,12 +2,13 @@ package index.btree.node
 
 import config.IndexConfig
 import exception.IndexException
+import helper.shouldThrowCode
 import index.btree.BTreeOptMode
-import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import java.nio.ByteBuffer
 import storageEngine.page.SlottedPage
+import util.ErrorCode
 import util.PageType
 
 /**
@@ -81,7 +82,7 @@ class NodeTest :
             val node = buildLeaf(recordCount = 3)
             `when`("checking isSafeNode for UPDATE without key/value") {
                 then("should throw InvalidSafeCheck") {
-                    shouldThrow<IndexException.InvalidSafeCheck> {
+                    shouldThrowCode<IndexException>(ErrorCode.INVALID_SAFE_CHECK) {
                         node.isSafeNode(BTreeOptMode.UPDATE)
                     }
                 }
