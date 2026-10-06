@@ -2,6 +2,7 @@ package storageEngine.lru
 
 import exception.StorageEngineException
 import util.EngineErrorDetail
+import util.ErrorCode
 
 
 /**
@@ -121,11 +122,11 @@ class GenerationalList(
      * overwritten by [markAllAsYoung] anyway.
      *
      * @return The node removed from the list — the eviction victim.
-     * @throws StorageEngineException.LRUEvict If the list is empty and there's nothing to evict.
+     * @throws StorageEngineException ([ErrorCode.LRU_EVICT]) If the list is empty and there's nothing to evict.
      * */
     fun removeOldest(): LRUNode {
         val node = linkedList.removeLast()
-            ?: throw StorageEngineException.LRUEvict(
+            ?: throw StorageEngineException(ErrorCode.LRU_EVICT,
                 EngineErrorDetail(
                     reason= "Could not evict frame. May be all frame is pinned or buffer pool is empty. " +
                             "young: $youngCount, old: $oldCount, capacity: $capacity"

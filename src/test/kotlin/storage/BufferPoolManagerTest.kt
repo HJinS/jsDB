@@ -1,10 +1,10 @@
 package storage
 
 import config.SimpleConfig
+import helper.shouldThrowCode
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.types.instanceOf
 import io.mockk.Runs
 import io.mockk.clearMocks
 import io.mockk.every
@@ -15,6 +15,7 @@ import storageEngine.BufferPoolManager
 import storageEngine.DiskManager
 import exception.StorageEngineException
 import storageEngine.lru.FrameNodePolicy
+import util.ErrorCode
 import util.INVALID_PAGE_ID
 import util.LockMode
 import java.util.concurrent.CountDownLatch
@@ -78,12 +79,12 @@ class BufferPoolManagerTest: BehaviorSpec({
         }
         `when`("delete page 2L"){
             then("PageInUseException should be thrown"){
-                shouldThrow<StorageEngineException.PageInUse> { bufferPoolManager.deletePage(2L) }
+                shouldThrowCode<StorageEngineException>(ErrorCode.PAGE_IN_USE) { bufferPoolManager.deletePage(2L) }
             }
         }
         `when`("close page 2L"){
             then("PageInUseException should be thrown"){
-                shouldThrow<StorageEngineException.PageInUse> { bufferPoolManager.deletePage(2L) }
+                shouldThrowCode<StorageEngineException>(ErrorCode.PAGE_IN_USE) { bufferPoolManager.deletePage(2L) }
             }
         }
         clearMocks(diskManager)
@@ -107,12 +108,12 @@ class BufferPoolManagerTest: BehaviorSpec({
         }
         `when`("unpin page which doesn't exist"){
             then("should throw PageNotFoundInCacheException"){
-                shouldThrow<StorageEngineException.PageNotFoundInCache> { bufferPoolManager.unpinPage(4L) }
+                shouldThrowCode<StorageEngineException>(ErrorCode.PAGE_NOT_FOUND_IN_CACHE) { bufferPoolManager.unpinPage(4L) }
             }
         }
         `when`("flush page which doesn't exist"){
             then("should throw PageNotFoundInCacheException"){
-                shouldThrow<StorageEngineException.PageNotFoundInCache> { bufferPoolManager.flushPage(4L) }
+                shouldThrowCode<StorageEngineException>(ErrorCode.PAGE_NOT_FOUND_IN_CACHE) { bufferPoolManager.flushPage(4L) }
             }
         }
         `when`("flush page 3"){
@@ -138,8 +139,8 @@ class BufferPoolManagerTest: BehaviorSpec({
         pageLock1.setDirty()
         `when`("fetch page3 with ${LockMode.READ}"){
             then("LRUEvictException error should be thrown because all frame is pinned."){
-                val error = shouldThrow<StorageEngineException.UnExpected>{bufferPoolManager.fetchPage(3L, LockMode.READ)}
-                error.cause shouldBe instanceOf(StorageEngineException.LRUEvict::class)
+                val error = shouldThrowCode<StorageEngineException>(ErrorCode.UNEXPECTED){bufferPoolManager.fetchPage(3L, LockMode.READ)}
+                (error.cause as StorageEngineException).code shouldBe ErrorCode.LRU_EVICT
             }
         }
         `when`("close dirty page lock"){

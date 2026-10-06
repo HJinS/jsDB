@@ -2,7 +2,7 @@ package index.btree
 
 import config.IndexConfig
 import exception.IndexException
-import exception.StorageEngineException
+import exception.catchCode
 import index.btree.node.InternalNode
 import index.btree.node.LeafNode
 import index.btree.node.Node
@@ -17,6 +17,7 @@ import storageEngine.StorageManager
 import storageEngine.page.PageLock
 import storageEngine.page.SlottedPage
 import util.EngineErrorDetail
+import util.ErrorCode
 import util.INVALID_PAGE_ID
 import util.LockMode
 import util.PageType
@@ -134,7 +135,7 @@ class BTree(
             var isUnderflow = false
             val leafLock = lockManager.last
             if (leafNodePageId != leafLock.pageId) {
-                throw IndexException.InvalidTraceObject(
+                throw IndexException(ErrorCode.INVALID_TRACE_OBJECT,
                     EngineErrorDetail(
                         pageId = leafNodePageId,
                         reason =
@@ -196,7 +197,7 @@ class BTree(
         if (isExist) {
             val leafLock = lockManager.last
             if (leafNodePageId != leafLock.pageId) {
-                throw IndexException.InvalidTraceObject(
+                throw IndexException(ErrorCode.INVALID_TRACE_OBJECT,
                     EngineErrorDetail(
                         pageId = leafNodePageId,
                         reason =
@@ -480,16 +481,12 @@ class BTree(
                         val parentPage = SlottedPage(indexConfig, nextTrace.first, parentBuffer)
                         val parentNode = Node.from(indexConfig, parentPage) as InternalNode
                         val leftSiblingPageId =
-                            try {
+                            catchCode(ErrorCode.SLOT_OUT_OF_BOUND, onCaught = { null }) {
                                 parentNode.childPageId(keyIdx - 1)
-                            } catch (_: StorageEngineException.SlotOutOfBound) {
-                                null
                             }
                         val rightSiblingPageId =
-                            try {
+                            catchCode(ErrorCode.SLOT_OUT_OF_BOUND, onCaught = { null }) {
                                 parentNode.childPageId(keyIdx + 1)
-                            } catch (_: StorageEngineException.SlotOutOfBound) {
-                                null
                             }
                         val siblingPageIds = listOf(leftSiblingPageId, rightSiblingPageId)
                         val siblingLocks = mutableListOf<PageLock>()
@@ -600,7 +597,7 @@ class BTree(
                 try {
                     traceNode.pop()
                 } catch (e: EmptyStackException) {
-                    throw IndexException.InvalidTraceStack(
+                    throw IndexException(ErrorCode.INVALID_TRACE_STACK,
                         EngineErrorDetail(
                             reason =
                                 "Unexpected node trace data invalid. IndexName: $name TargetTableName: $targetTable"
@@ -610,7 +607,7 @@ class BTree(
                 }
             var newPageId: Long = INVALID_PAGE_ID
             if (currentPageLock.pageId != currentPageId) {
-                throw IndexException.InvalidTraceObject(
+                throw IndexException(ErrorCode.INVALID_TRACE_OBJECT,
                     EngineErrorDetail(
                         pageId = currentPageId,
                         reason =
@@ -669,7 +666,7 @@ class BTree(
                         }
 
                         else -> {
-                            throw IndexException.InvalidNodeType(
+                            throw IndexException(ErrorCode.INVALID_NODE_TYPE,
                                 EngineErrorDetail(
                                     pageType = node.page.type,
                                     reason = "Invalid node type",
@@ -744,7 +741,7 @@ class BTree(
         operationMode: BTreeOptMode,
     ): Triple<Long, Int, Boolean> {
         if (rootPageId == INVALID_PAGE_ID) {
-            throw IndexException.EmptyTree(
+            throw IndexException(ErrorCode.EMPTY_TREE,
                 EngineErrorDetail(
                     reason =
                         "Search function should be called when the tree is not empty. IndexName: $name TargetTableName: $targetTable"

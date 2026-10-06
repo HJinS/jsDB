@@ -13,6 +13,7 @@ import java.util.Arrays
 import schema.*
 import storageEngine.StorageManager
 import util.EntityType
+import util.ErrorCode
 import util.SQLErrorDetail
 import util.requireOrThrow
 
@@ -113,7 +114,7 @@ class CatalogManager(
             try {
                 ColumnType.valueOf(type)
             } catch (e: IllegalArgumentException) {
-                throw CatalogException.CorruptedRow(
+                throw CatalogException(ErrorCode.CORRUPTED_ROW,
                     SQLErrorDetail(
                         entityType = EntityType.CATALOG_ROW,
                         entityName = CatalogBoot.COLUMN_CATALOG_NAME,
@@ -178,7 +179,7 @@ class CatalogManager(
         val searchkey = tableCatalogKeySerializer.serialize(listOf(tableName))
         val value =
             tableCatalog.search(searchkey)
-                ?: throw CatalogException.UndefinedTable(
+                ?: throw CatalogException(ErrorCode.UNDEFINED_TABLE,
                     SQLErrorDetail(
                         entityType = EntityType.TABLE,
                         entityName = tableName,
@@ -202,7 +203,7 @@ class CatalogManager(
 
         val value = indexCatalog.search(keySerialized)
         requireOrThrow(value != null) {
-            CatalogException.UndefinedObject(
+            CatalogException(ErrorCode.UNDEFINED_OBJECT,
                 SQLErrorDetail(
                     entityType = EntityType.INDEX,
                     entityName = indexName,

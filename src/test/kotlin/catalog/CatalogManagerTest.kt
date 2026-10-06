@@ -4,10 +4,10 @@ import exception.CatalogException
 import config.MidpointLruConfig
 import config.SimpleConfig
 import config.StorageConfig
+import helper.shouldThrowCode
 import schema.ColumnRow
 import schema.ColumnType
 import schema.IndexColumn
-import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.equals.shouldBeEqual
 import io.kotest.matchers.nulls.shouldNotBeNull
@@ -18,6 +18,7 @@ import storageEngine.FreeSpaceManager
 import storageEngine.MetaPageManager
 import storageEngine.StorageManager
 import storageEngine.lru.FrameNodePolicy
+import util.ErrorCode
 import util.MetaPageOffset
 import java.io.File
 import kotlin.random.Random
@@ -113,7 +114,7 @@ class CatalogManagerTest: BehaviorSpec({
         val nullable = false
         `when`("Register new column with invalid column type $invalidColumnType"){
             then("CorruptedRow should be thrown"){
-                shouldThrow<CatalogException.CorruptedRow> { catalogManager.registerNewColumn(
+                shouldThrowCode<CatalogException>(ErrorCode.CORRUPTED_ROW) { catalogManager.registerNewColumn(
                     tableId1, ordinal, columnName1, invalidColumnType, nullable
                 )}
             }
@@ -197,7 +198,7 @@ class CatalogManagerTest: BehaviorSpec({
         val invalidTableName = "test_table_invalid"
         `when`("Update primary index name but there is no such table"){
             then("UndefinedTable should be thrown"){
-                shouldThrow<CatalogException.UndefinedTable> { catalogManager.updatePrimaryIndexName(
+                shouldThrowCode<CatalogException>(ErrorCode.UNDEFINED_TABLE) { catalogManager.updatePrimaryIndexName(
                     invalidTableName, "new index name"
                 ) }
             }
@@ -381,7 +382,7 @@ class CatalogManagerTest: BehaviorSpec({
 
         `when`("encoding an empty list of IndexColumns"){
             then("InvalidDefinition should be thrown"){
-                shouldThrow<CatalogException.InvalidDefinition> { emptyList<IndexColumn>().encodeKeyColumns() }
+                shouldThrowCode<CatalogException>(ErrorCode.INVALID_DEFINITION) { emptyList<IndexColumn>().encodeKeyColumns() }
             }
         }
 
@@ -393,14 +394,14 @@ class CatalogManagerTest: BehaviorSpec({
             val encoded = columns.encodeKeyColumns()
             val truncated = encoded.copyOfRange(0, encoded.size - 3)
             then("CorruptedRow should be thrown"){
-                shouldThrow<CatalogException.CorruptedRow> { truncated.decodeKeyColumns() }
+                shouldThrowCode<CatalogException>(ErrorCode.CORRUPTED_ROW) { truncated.decodeKeyColumns() }
             }
         }
 
         `when`("decoding garbage bytes that don't represent a valid IndexColumn"){
             val garbage = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
             then("CorruptedRow should be thrown"){
-                shouldThrow<CatalogException.CorruptedRow> { garbage.decodeKeyColumns() }
+                shouldThrowCode<CatalogException>(ErrorCode.CORRUPTED_ROW) { garbage.decodeKeyColumns() }
             }
         }
 
@@ -410,10 +411,10 @@ class CatalogManagerTest: BehaviorSpec({
             // VarInt는 각 바이트의 최상위 비트(MSB)가 1이면 "다음 바이트도 이어진다"는 신호인데,
             // 0x80(=1000_0000)은 하위 7비트가 전부 0이면서 MSB만 1이라 "값 없이 계속 이어지기만" 함.
             // 그래서 5바이트를 다 읽어도 안 끝나고 shift가 32를 넘어가서(끝나지 않는 VarInt에 대한 안전장치)
-            // IndexException.VarIntTooLong이 던져지고, 그게 CorruptedRow로 감싸지는지 확인.
+            // IndexException(VAR_INT_TOO_LONG)이 던져지고, 그게 CorruptedRow로 감싸지는지 확인.
             val malformed = byteArrayOf(0x00, 0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0x80.toByte())
             then("CorruptedRow should be thrown"){
-                shouldThrow<CatalogException.CorruptedRow> { malformed.decodeKeyColumns() }
+                shouldThrowCode<CatalogException>(ErrorCode.CORRUPTED_ROW) { malformed.decodeKeyColumns() }
             }
         }
     }

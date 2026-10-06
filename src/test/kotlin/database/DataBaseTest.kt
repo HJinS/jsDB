@@ -5,18 +5,19 @@ import config.SimpleConfig
 import config.StorageConfig
 import exception.DatabaseException
 import exception.TableException
+import helper.shouldThrowCode
 import schema.ColumnType
 import schema.IndexColumn
 import schema.IndexKeySchema
 import schema.Row
 import schema.RowColumn
 import schema.RowSchema
-import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import java.io.File
 import kotlin.uuid.Uuid
+import util.ErrorCode
 
 class DataBaseTest: BehaviorSpec({
     given("A database"){
@@ -37,7 +38,7 @@ class DataBaseTest: BehaviorSpec({
         ))
         `when`("Load non-exist table"){
             then("Should throw an UndefinedTable"){}
-            shouldThrow<CatalogException.UndefinedTable> {
+            shouldThrowCode<CatalogException>(ErrorCode.UNDEFINED_TABLE) {
                 db.loadTable("non-exist-table")
             }
         }
@@ -58,7 +59,7 @@ class DataBaseTest: BehaviorSpec({
             }
 
             then("Creating primary index should throw an exception"){
-                shouldThrow<DatabaseException.DuplicateObject> {
+                shouldThrowCode<DatabaseException>(ErrorCode.DUPLICATE_OBJECT) {
                     db.createIndex(
                         "temp1",
                         null,
@@ -72,7 +73,7 @@ class DataBaseTest: BehaviorSpec({
                 }
             }
             then("Creating primary index with non-existing table name should throw UndefinedTable Exception"){
-                shouldThrow<CatalogException.UndefinedTable> {
+                shouldThrowCode<CatalogException>(ErrorCode.UNDEFINED_TABLE) {
                     db.createIndex(
                         "temp2",
                         null,
@@ -98,7 +99,7 @@ class DataBaseTest: BehaviorSpec({
         val primaryIdxNameNew = "test-table-primary-index-3"
         `when`("Creating a table with duplicated columns"){
             then("DuplicateColumn should be thrown"){
-                shouldThrow<DatabaseException.DuplicateColumn> {
+                shouldThrowCode<DatabaseException>(ErrorCode.DUPLICATE_COLUMN) {
                     db.createTable(
                         tableNameNew,
                         primaryIdxNameNew,
@@ -111,7 +112,7 @@ class DataBaseTest: BehaviorSpec({
         val newTableName3 = "test-table-3"
         `when`("Creating a table with already existing primary index name"){
             then("DuplicateObject should be thrown"){
-                shouldThrow<DatabaseException.DuplicateObject> {
+                shouldThrowCode<DatabaseException>(ErrorCode.DUPLICATE_OBJECT) {
                     db.createTable(
                         newTableName3,
                         primaryIdxName,
@@ -146,7 +147,7 @@ class DataBaseTest: BehaviorSpec({
         ))
         `when`("Create secondary index with invalid name"){
             then("UndefinedColumn should be thrown"){
-                shouldThrow<DatabaseException.UndefinedColumn> {
+                shouldThrowCode<DatabaseException>(ErrorCode.UNDEFINED_COLUMN) {
                     db.createIndex(
                         "invalidIndexName1",
                         primaryIdxName,
@@ -164,7 +165,7 @@ class DataBaseTest: BehaviorSpec({
         ))
         `when`("Create secondary index with invalid type"){
             then("UndefinedColumn should be thrown"){
-                shouldThrow<DatabaseException.UndefinedColumn> {
+                shouldThrowCode<DatabaseException>(ErrorCode.UNDEFINED_COLUMN) {
                     db.createIndex(
                         "invalidIndexName2",
                         primaryIdxName,
@@ -179,7 +180,7 @@ class DataBaseTest: BehaviorSpec({
 
         `when`("Create secondary index with duplicated name"){
             then("DuplicateObject should be thrown"){
-                shouldThrow<DatabaseException.DuplicateObject> {
+                shouldThrowCode<DatabaseException>(ErrorCode.DUPLICATE_OBJECT) {
                     db.createIndex(
                         secondaryIndexName,
                         primaryIdxName,
@@ -195,7 +196,7 @@ class DataBaseTest: BehaviorSpec({
         val secondaryIndexName2 = "temp-idx-2"
         `when`("Create secondary index with non-exist primary index name"){
             then("UndefinedObject should be thrown"){
-                shouldThrow<CatalogException.UndefinedObject> {
+                shouldThrowCode<CatalogException>(ErrorCode.UNDEFINED_OBJECT) {
                     db.createIndex(
                         secondaryIndexName2,
                         "non-existing primary index name",
@@ -217,7 +218,7 @@ class DataBaseTest: BehaviorSpec({
 
         `when`("Load non-exist index"){
             then("UndefinedObject should be thrown"){
-                shouldThrow<CatalogException.UndefinedObject> {
+                shouldThrowCode<CatalogException>(ErrorCode.UNDEFINED_OBJECT) {
                     db.loadIndex("non-existing index")
                 }
             }
@@ -237,7 +238,7 @@ class DataBaseTest: BehaviorSpec({
         // Issue #49: DROP INDEX (secondary only, standalone - table stays)
         `when`("Dropping a non-existent index"){
             then("UndefinedObject should be thrown"){
-                shouldThrow<CatalogException.UndefinedObject> {
+                shouldThrowCode<CatalogException>(ErrorCode.UNDEFINED_OBJECT) {
                     db.dropIndex("non-existing index")
                 }
             }
@@ -245,7 +246,7 @@ class DataBaseTest: BehaviorSpec({
 
         `when`("Dropping the primary index directly"){
             then("DependentObjectsExist should be thrown - only DROP TABLE may remove it"){
-                shouldThrow<DatabaseException.DependentObjectsExist> {
+                shouldThrowCode<DatabaseException>(ErrorCode.DEPENDENT_OBJECTS_STILL_EXIST) {
                     db.dropIndex(primaryIdxName)
                 }
             }
@@ -257,7 +258,7 @@ class DataBaseTest: BehaviorSpec({
         `when`("Dropping the secondary index $secondaryIndexName"){
             db.dropIndex(secondaryIndexName)
             then("it should no longer be loadable"){
-                shouldThrow<CatalogException.UndefinedObject> {
+                shouldThrowCode<CatalogException>(ErrorCode.UNDEFINED_OBJECT) {
                     db.loadIndex(secondaryIndexName)
                 }
             }
@@ -285,12 +286,12 @@ class DataBaseTest: BehaviorSpec({
         `when`("Dropping table $tableName"){
             db.dropTable(tableName)
             then("the table should no longer be loadable"){
-                shouldThrow<CatalogException.UndefinedTable> {
+                shouldThrowCode<CatalogException>(ErrorCode.UNDEFINED_TABLE) {
                     db.loadTable(tableName)
                 }
             }
             then("its primary index should no longer be loadable"){
-                shouldThrow<CatalogException.UndefinedObject> {
+                shouldThrowCode<CatalogException>(ErrorCode.UNDEFINED_OBJECT) {
                     db.loadIndex(primaryIdxName)
                 }
             }
@@ -335,7 +336,7 @@ class DataBaseTest: BehaviorSpec({
 
         `when`("Dropping a column a secondary index references"){
             then("DependentObjectsExist should be thrown"){
-                shouldThrow<DatabaseException.DependentObjectsExist> {
+                shouldThrowCode<DatabaseException>(ErrorCode.DEPENDENT_OBJECTS_STILL_EXIST) {
                     db.dropColumn(tableName, "score")
                 }
             }
@@ -343,7 +344,7 @@ class DataBaseTest: BehaviorSpec({
 
         `when`("Dropping the primary key column"){
             then("DependentObjectsExist should be thrown"){
-                shouldThrow<DatabaseException.DependentObjectsExist> {
+                shouldThrowCode<DatabaseException>(ErrorCode.DEPENDENT_OBJECTS_STILL_EXIST) {
                     db.dropColumn(tableName, "id")
                 }
             }
@@ -351,7 +352,7 @@ class DataBaseTest: BehaviorSpec({
 
         `when`("Dropping a non-existent column"){
             then("UndefinedColumn should be thrown"){
-                shouldThrow<DatabaseException.UndefinedColumn> {
+                shouldThrowCode<DatabaseException>(ErrorCode.UNDEFINED_COLUMN) {
                     db.dropColumn(tableName, "does-not-exist")
                 }
             }
@@ -359,7 +360,7 @@ class DataBaseTest: BehaviorSpec({
 
         `when`("Adding a non-nullable column with no default value"){
             then("NotNullViolation should be thrown"){
-                shouldThrow<DatabaseException.NotNullViolation> {
+                shouldThrowCode<DatabaseException>(ErrorCode.NOT_NULL_VIOLATION) {
                     db.addColumn(tableName, "required", ColumnType.INT.name, nullable = false, defaultValue = null)
                 }
             }
@@ -389,7 +390,7 @@ class DataBaseTest: BehaviorSpec({
 
         `when`("Adding a column whose name already exists"){
             then("DuplicateColumn should be thrown"){
-                shouldThrow<DatabaseException.DuplicateColumn> {
+                shouldThrowCode<DatabaseException>(ErrorCode.DUPLICATE_COLUMN) {
                     db.addColumn(tableName, "score", ColumnType.INT.name, nullable = true, defaultValue = null)
                 }
             }
@@ -461,7 +462,7 @@ class DataBaseTest: BehaviorSpec({
             table.insertRow(Row(columns, listOf(rowCount + 2L, "dup@example.com", null)))
             then("UniqueViolation should be thrown, and no index/catalog row is left behind"){
                 val dupIndexName = "backfill-idx-email-unique"
-                shouldThrow<TableException.UniqueViolation> {
+                shouldThrowCode<TableException>(ErrorCode.UNIQUE_VIOLATION) {
                     db.createIndex(
                         dupIndexName,
                         primaryIdxName,
@@ -471,7 +472,7 @@ class DataBaseTest: BehaviorSpec({
                         keySchema = IndexKeySchema(listOf(IndexColumn("email", ColumnType.STRING, false))),
                     )
                 }
-                shouldThrow<CatalogException.UndefinedObject> {
+                shouldThrowCode<CatalogException>(ErrorCode.UNDEFINED_OBJECT) {
                     db.loadIndex(dupIndexName)
                 }
             }

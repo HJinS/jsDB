@@ -9,13 +9,14 @@ import schema.TableRow
 import exception.CatalogException
 import schema.ColumnType
 import util.EntityType
+import util.ErrorCode
 import util.SQLErrorDetail
 import kotlin.Long
 
 /**
  * `toRow()`: turns a `*Raw` wrapper (a catalog `BTree`'s deserialized `List<Any?>`, positional and
  * untyped) into its typed `schema.*Row` data class, casting each position and reporting any
- * failure (wrong arity, wrong type, unrecognized enum name) as [CatalogException.CorruptedRow]
+ * failure (wrong arity, wrong type, unrecognized enum name) as [CatalogException] ([ErrorCode.CORRUPTED_ROW])
  * rather than letting the raw [ClassCastException]/etc. escape - these bytes only ever come from
  * this same file's `toList()`, so a decode failure means on-disk corruption, not a caller error.
  *
@@ -31,7 +32,7 @@ fun ColumnRaw.toRow(): ColumnRow {
             nullable = values[4] as Boolean
         )
     } catch (e: IndexOutOfBoundsException){
-        throw CatalogException.CorruptedRow(
+        throw CatalogException(ErrorCode.CORRUPTED_ROW,
             SQLErrorDetail(
                 entityType = EntityType.CATALOG_ROW,
                 entityName = CatalogBoot.COLUMN_CATALOG_NAME
@@ -39,7 +40,7 @@ fun ColumnRaw.toRow(): ColumnRow {
             e
         )
     } catch (e: ClassCastException){
-        throw CatalogException.CorruptedRow(
+        throw CatalogException(ErrorCode.CORRUPTED_ROW,
             SQLErrorDetail(
                 entityType = EntityType.CATALOG_ROW,
                 entityName = CatalogBoot.COLUMN_CATALOG_NAME
@@ -47,7 +48,7 @@ fun ColumnRaw.toRow(): ColumnRow {
             e
         )
     } catch (e: IllegalArgumentException){
-        throw CatalogException.CorruptedRow(
+        throw CatalogException(ErrorCode.CORRUPTED_ROW,
             SQLErrorDetail(
                 entityType = EntityType.CATALOG_ROW,
                 entityName = CatalogBoot.COLUMN_CATALOG_NAME
@@ -65,7 +66,7 @@ fun TableRaw.toRow(): TableRow {
             primaryIndexName = values[2] as String?
         )
     } catch (e: IndexOutOfBoundsException){
-        throw CatalogException.CorruptedRow(
+        throw CatalogException(ErrorCode.CORRUPTED_ROW,
             SQLErrorDetail(
                 entityType = EntityType.CATALOG_ROW,
                 entityName = CatalogBoot.TABLE_CATALOG_NAME
@@ -73,7 +74,7 @@ fun TableRaw.toRow(): TableRow {
             e
         )
     } catch (e: ClassCastException){
-        throw CatalogException.CorruptedRow(
+        throw CatalogException(ErrorCode.CORRUPTED_ROW,
             SQLErrorDetail(
                 entityType = EntityType.CATALOG_ROW,
                 entityName = CatalogBoot.TABLE_CATALOG_NAME
@@ -95,7 +96,7 @@ fun IndexRaw.toRow(): IndexRow {
             keyColumns = (values[6] as ByteArray).decodeKeyColumns()
         )
     } catch (e: IndexOutOfBoundsException){
-        throw CatalogException.CorruptedRow(
+        throw CatalogException(ErrorCode.CORRUPTED_ROW,
             SQLErrorDetail(
                 entityType = EntityType.CATALOG_ROW,
                 entityName = CatalogBoot.INDEX_CATALOG_NAME
@@ -103,7 +104,7 @@ fun IndexRaw.toRow(): IndexRow {
             e
         )
     } catch (e: ClassCastException){
-        throw CatalogException.CorruptedRow(
+        throw CatalogException(ErrorCode.CORRUPTED_ROW,
             SQLErrorDetail(
                 entityType = EntityType.CATALOG_ROW,
                 entityName = CatalogBoot.INDEX_CATALOG_NAME

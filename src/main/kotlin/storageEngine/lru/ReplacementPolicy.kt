@@ -1,5 +1,7 @@
 package storageEngine.lru
 
+import util.ErrorCode
+
 /**
  * Decides which buffer pool [storageEngine.page.Frame] to evict when a new page needs one,
  * tracking frames purely by `frameId` (no knowledge of pages/disk — that's
@@ -11,7 +13,7 @@ interface ReplacementPolicy {
      * Picks an eviction victim and removes it from tracking.
      *
      * @return The evicted frame id.
-     * @throws exception.StorageEngineException.LRUEvict If nothing is evictable (every tracked
+     * @throws exception.StorageEngineException ([ErrorCode.LRU_EVICT]) If nothing is evictable (every tracked
      *   frame is pinned, or nothing is tracked at all).
      * */
     fun evict(): Int

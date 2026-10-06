@@ -2,6 +2,7 @@ package storage
 
 import config.SimpleConfig
 import config.StorageConfig
+import helper.shouldThrowCode
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -10,6 +11,7 @@ import exception.StorageEngineException
 import java.io.File
 import java.nio.ByteBuffer
 import kotlin.uuid.Uuid
+import util.ErrorCode
 
 
 class DiskManagerTest: BehaviorSpec({
@@ -43,7 +45,7 @@ class DiskManagerTest: BehaviorSpec({
         `when`("read page from an empty disk"){
             val buffer = ByteBuffer.allocate(PAGE_SIZE)
             then("should throw an InvalidReadOffsetException"){
-                shouldThrow<StorageEngineException.InvalidReadOffset> { diskManager.readPage(0, buffer) }
+                shouldThrowCode<StorageEngineException>(ErrorCode.INVALID_READ_OFFSET) { diskManager.readPage(0, buffer) }
             }
         }
 
@@ -60,7 +62,7 @@ class DiskManagerTest: BehaviorSpec({
         `when`("read page 1 from empty database file"){
             val buffer = ByteBuffer.allocate(PAGE_SIZE)
             then("should throw an InvalidReadOffsetException"){
-                shouldThrow<StorageEngineException.InvalidReadOffset> { diskManager.readPage(1, buffer) }
+                shouldThrowCode<StorageEngineException>(ErrorCode.INVALID_READ_OFFSET) { diskManager.readPage(1, buffer) }
             }
         }
         `when`("write data"){

@@ -1,42 +1,11 @@
 package exception
 
+import util.ErrorCode
 import util.SQLErrorDetail
-import util.SqlState
 
-/** Failures from [database.Table]'s row CRUD and range-scan API — the one caller-triggerable layer among these five exception hierarchies (bad `ORDER BY`, uniqueness, missing row), plus [CorruptedIndex] for a genuine storage-level inconsistency. */
-sealed class TableException(
-    sqlState: SqlState,
-    detail: SQLErrorDetail,
-    cause: Throwable? = null
-): RuntimeException(detail.toMessage(sqlState), cause) {
-
-    class RowNotFound(detail: SQLErrorDetail, cause: Throwable? = null):
-        TableException(SqlState.NO_DATA, detail, cause)
-
-    class UniqueViolation(detail: SQLErrorDetail, cause: Throwable? = null):
-        TableException(SqlState.UNIQUE_VIOLATION, detail, cause)
-
-    class NegativeLimit(detail: SQLErrorDetail, cause: Throwable? = null):
-        TableException(SqlState.INVALID_ROW_COUNT_IN_LIMIT_CLAUSE, detail, cause)
-
-    class NegativeOffset(detail: SQLErrorDetail, cause: Throwable? = null):
-        TableException(SqlState.INVALID_ROW_COUNT_IN_RESULT_OFFSET_CLAUSE, detail, cause)
-
-    class UndefinedIndex(detail: SQLErrorDetail, cause: Throwable? = null):
-        TableException(SqlState.UNDEFINED_OBJECT, detail, cause)
-
-    class TooManyOrderColumns(detail: SQLErrorDetail, cause: Throwable? = null):
-        TableException(SqlState.INVALID_COLUMN_REFERENCE, detail, cause)
-
-    class OrderColumnMismatch(detail: SQLErrorDetail, cause: Throwable? = null):
-        TableException(SqlState.INVALID_COLUMN_REFERENCE, detail, cause)
-
-    class UnsupportedSortDirection(detail: SQLErrorDetail, cause: Throwable? = null):
-        TableException(SqlState.INVALID_COLUMN_REFERENCE, detail, cause)
-
-    class CorruptedIndex(detail: SQLErrorDetail, cause: Throwable? = null):
-        TableException(SqlState.INTERNAL_ERROR, detail, cause)
-
-    class PrimaryKeyUpdateNotSupported(detail: SQLErrorDetail, cause: Throwable? = null):
-        TableException(SqlState.FEATURE_NOT_SUPPORTED, detail, cause)
-}
+/** Failures from [database.Table]'s row CRUD and range-scan API - the one caller-triggerable layer among these five exception hierarchies (bad `ORDER BY`, uniqueness, missing row, negative LIMIT/OFFSET), plus [ErrorCode.CORRUPTED_INDEX] for a genuine storage-level inconsistency. Which failure it is, is told by [code]. */
+class TableException(
+    override val code: ErrorCode,
+    override val detail: SQLErrorDetail,
+    cause: Throwable? = null,
+) : RuntimeException(detail.toMessage(code), cause), CodedException

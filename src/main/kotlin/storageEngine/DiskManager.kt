@@ -7,6 +7,7 @@ import util.EngineErrorDetail
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
+import util.ErrorCode
 
 /**
  * Raw fixed-size-page file I/O — the bottom of the storage stack, wrapped by
@@ -32,7 +33,7 @@ class DiskManager(storageConfig: StorageConfig, indexConfig: IndexConfig) {
         val offset = pageId * pageSize
         while(pageData.hasRemaining()){
             val result = fileChannel.read(pageData, offset + pageData.position())
-            if(result == -1) throw StorageEngineException.InvalidReadOffset(
+            if(result == -1) throw StorageEngineException(ErrorCode.INVALID_READ_OFFSET,
                 EngineErrorDetail(
                     pageId = pageId,
                     reason = "PageId not exist"
@@ -66,7 +67,7 @@ class DiskManager(storageConfig: StorageConfig, indexConfig: IndexConfig) {
     fun getNumPages(): Long{
         val size = fileChannel.size()
         if(size % pageSize != 0L)
-            throw StorageEngineException.FileCorrupted(
+            throw StorageEngineException(ErrorCode.FILE_CORRUPTED,
                 EngineErrorDetail(
                     reason = "File size $size is not a multiple of pageSize $pageSize."
                 )

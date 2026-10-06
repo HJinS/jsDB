@@ -6,6 +6,7 @@ import index.serializer.BinaryRowSerializer
 import schema.ColumnType
 import schema.IndexColumn
 import util.EntityType
+import util.ErrorCode
 import util.SQLErrorDetail
 
 private val indexColumnSerializer = BinaryRowSerializer(CatalogBoot.INDEX_COLUMN_ROW)
@@ -18,7 +19,7 @@ private val indexColumnSerializer = BinaryRowSerializer(CatalogBoot.INDEX_COLUMN
  * [BinaryRowSerializer]'s own null-bitmap-prefixed layout, so no extra length framing is needed).
  * */
 fun List<IndexColumn>.encodeKeyColumns(): ByteArray {
-    if (this.isEmpty()) throw CatalogException.InvalidDefinition(
+    if (this.isEmpty()) throw CatalogException(ErrorCode.INVALID_DEFINITION,
         SQLErrorDetail(entityType = EntityType.INDEX, reason = "must have at least one key column")
     )
     val rows = this.map { column ->
@@ -34,7 +35,7 @@ fun List<IndexColumn>.encodeKeyColumns(): ByteArray {
  * at a time, advancing by each call's consumed-byte count, until the whole blob is read.
  *
  * Any decode failure (truncated bytes, an unrecognized [ColumnType] name, wrong field types) is
- * treated as catalog corruption ([CatalogException.CorruptedRow]) rather than propagated as-is,
+ * treated as catalog corruption ([CatalogException] ([ErrorCode.CORRUPTED_ROW])) rather than propagated as-is,
  * since these bytes only ever come from [encodeKeyColumns]'s own output.
  * */
 fun ByteArray.decodeKeyColumns(): List<IndexColumn> {
@@ -54,7 +55,7 @@ fun ByteArray.decodeKeyColumns(): List<IndexColumn> {
                 collationStrength = raw[4] as Int?,
             )
         } catch (e: IndexOutOfBoundsException){
-            throw CatalogException.CorruptedRow(
+            throw CatalogException(ErrorCode.CORRUPTED_ROW,
                 SQLErrorDetail(
                     entityType = EntityType.CATALOG_ROW,
                     entityName = CatalogBoot.INDEX_CATALOG_NAME
@@ -62,7 +63,7 @@ fun ByteArray.decodeKeyColumns(): List<IndexColumn> {
                 e
             )
         } catch (e: ClassCastException){
-            throw CatalogException.CorruptedRow(
+            throw CatalogException(ErrorCode.CORRUPTED_ROW,
                 SQLErrorDetail(
                     entityType = EntityType.CATALOG_ROW,
                     entityName = CatalogBoot.INDEX_CATALOG_NAME
@@ -70,7 +71,7 @@ fun ByteArray.decodeKeyColumns(): List<IndexColumn> {
                 e
             )
         } catch (e: IllegalArgumentException){
-            throw CatalogException.CorruptedRow(
+            throw CatalogException(ErrorCode.CORRUPTED_ROW,
                 SQLErrorDetail(
                     entityType = EntityType.CATALOG_ROW,
                     entityName = CatalogBoot.INDEX_CATALOG_NAME
@@ -78,7 +79,7 @@ fun ByteArray.decodeKeyColumns(): List<IndexColumn> {
                 e
             )
         } catch (e: IndexException){
-            throw CatalogException.CorruptedRow(
+            throw CatalogException(ErrorCode.CORRUPTED_ROW,
                 SQLErrorDetail(
                     entityType = EntityType.CATALOG_ROW,
                     entityName = CatalogBoot.INDEX_CATALOG_NAME

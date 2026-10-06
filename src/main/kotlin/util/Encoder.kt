@@ -65,7 +65,7 @@ fun decodeVarInt(bytes: ByteArray, offset: Int = 0): Pair<Int, Int> {
     while (true) {
         // Check whether we've run past the end of the array.
         if (pos >= bytes.size)
-            throw IndexException.PositionOutOfBounds(
+            throw IndexException(ErrorCode.POSITION_OUT_OF_BOUNDS,
                 EngineErrorDetail(
                     reason = "Position $pos should be less than total byte size ${bytes.size}."
                 )
@@ -86,7 +86,7 @@ fun decodeVarInt(bytes: ByteArray, offset: Int = 0): Pair<Int, Int> {
 
         // Guard against excessive data that would overflow a 32-bit Int.
         if (shift >= 32) {
-            throw IndexException.VarIntTooLong(EngineErrorDetail(reason = "VarInt is too long"))
+            throw IndexException(ErrorCode.VAR_INT_TOO_LONG, EngineErrorDetail(reason = "VarInt is too long"))
         }
     }
     return result to (pos - offset)
@@ -275,7 +275,7 @@ fun ByteArray.decodeSortableBoolean(): Boolean {
 fun ByteArray.decodeSortableUUID(): Uuid{
     val unEscaped = unescapeZeroBytes(this)
     if(unEscaped.size != 16)
-        throw IndexException.InvalidUUIDLength(
+        throw IndexException(ErrorCode.INVALID_UUID_LENGTH,
             EngineErrorDetail(
                 reason = "UUID should be 16 bytes, but got ${unEscaped.size}"
             )

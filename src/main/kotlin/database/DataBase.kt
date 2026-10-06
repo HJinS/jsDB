@@ -27,6 +27,7 @@ import storageEngine.MetaPageManager
 import storageEngine.StorageManager
 import storageEngine.lru.FrameNodePolicy
 import util.EntityType
+import util.ErrorCode
 import util.INVALID_PAGE_ID
 import util.MetaPageOffset
 import util.PRIMARY_KEY_IDX_NAME_PREFIX
@@ -123,19 +124,19 @@ class DataBase(private val config: SimpleConfig) {
         lock.write { 
             val resolved = catalogManager.resolveIndex(indexName)
             requireOrThrow(resolved == null) {
-                DatabaseException.DuplicateObject(
+                DatabaseException(ErrorCode.DUPLICATE_OBJECT,
                     SQLErrorDetail(entityType = EntityType.INDEX, entityName = indexName)
                 )
             }
             val tableData = catalogManager.resolveTable(tableName)
             requireOrThrow(tableData != null) {
-                CatalogException.UndefinedTable(
+                CatalogException(ErrorCode.UNDEFINED_TABLE,
                     SQLErrorDetail(entityType = EntityType.TABLE, entityName = tableName)
                 )
             }
             if (isPrimary) {
                 requireOrThrow(tableData.primaryIndexName == null) {
-                    DatabaseException.DuplicateObject(
+                    DatabaseException(ErrorCode.DUPLICATE_OBJECT,
                         SQLErrorDetail(entityType = EntityType.PRIMARY_INDEX, tableName = tableName)
                     )
                 }
@@ -150,7 +151,7 @@ class DataBase(private val config: SimpleConfig) {
                 }
 
             requireOrThrow(invalidColumns.isEmpty()) {
-                DatabaseException.UndefinedColumn(
+                DatabaseException(ErrorCode.UNDEFINED_COLUMN,
                     SQLErrorDetail(
                         entityType = EntityType.INDEX_KEY_COLUMN,
                         entityName = indexName,
@@ -207,7 +208,7 @@ class DataBase(private val config: SimpleConfig) {
                                 .sortedWith(Arrays::compareUnsigned)
                         for (i in 1 until sortedKeys.size) {
                             requireOrThrow(!(sortedKeys[i - 1] contentEquals sortedKeys[i])) {
-                                TableException.UniqueViolation(
+                                TableException(ErrorCode.UNIQUE_VIOLATION,
                                     SQLErrorDetail(
                                         entityType = EntityType.INDEX,
                                         entityName = indexName,
@@ -260,13 +261,13 @@ class DataBase(private val config: SimpleConfig) {
         lock.read{
             val indexData = catalogManager.resolveIndex(indexName)
             requireOrThrow(indexData != null) {
-                CatalogException.UndefinedObject(
+                CatalogException(ErrorCode.UNDEFINED_OBJECT,
                     SQLErrorDetail(entityType = EntityType.INDEX, entityName = indexName)
                 )
             }
             val targetTableData = catalogManager.resolveTable(indexData.tableName)
             requireOrThrow(targetTableData != null) {
-                CatalogException.UndefinedTable(
+                CatalogException(ErrorCode.UNDEFINED_TABLE,
                     SQLErrorDetail(entityType = EntityType.TABLE, entityName = indexData.tableName)
                 )
             }
@@ -310,7 +311,7 @@ class DataBase(private val config: SimpleConfig) {
         lock.write { 
             val resolved = catalogManager.resolveTable(tableName)
             requireOrThrow(resolved == null) {
-                DatabaseException.DuplicateTable(
+                DatabaseException(ErrorCode.DUPLICATE_TABLE,
                     SQLErrorDetail(entityType = EntityType.TABLE, entityName = tableName)
                 )
             }
@@ -322,7 +323,7 @@ class DataBase(private val config: SimpleConfig) {
                     .keys
                     .toList()
             requireOrThrow(duplicateNames.isEmpty()) {
-                DatabaseException.DuplicateColumn(
+                DatabaseException(ErrorCode.DUPLICATE_COLUMN,
                     SQLErrorDetail(
                         entityType = EntityType.COLUMN,
                         tableName = tableName,
@@ -335,7 +336,7 @@ class DataBase(private val config: SimpleConfig) {
             var primaryKeyColumns = columns.rowColumns.filter { it.primaryKeyOrder != null }
             val nullablePkColumns = primaryKeyColumns.filter { it.nullable }
             requireOrThrow(nullablePkColumns.isEmpty()) {
-                DatabaseException.NotNullViolation(
+                DatabaseException(ErrorCode.NOT_NULL_VIOLATION,
                     SQLErrorDetail(
                         entityType = EntityType.PRIMARY_KEY,
                         tableName = tableName,
@@ -387,12 +388,12 @@ class DataBase(private val config: SimpleConfig) {
         lock.read { 
             val tableData =
                 catalogManager.resolveTable(tableName)
-                    ?: throw CatalogException.UndefinedTable(
+                    ?: throw CatalogException(ErrorCode.UNDEFINED_TABLE,
                         SQLErrorDetail(entityType = EntityType.TABLE, entityName = tableName)
                     )
             val primaryIdxName =
                 tableData.primaryIndexName
-                    ?: throw DatabaseException.UndefinedObject(
+                    ?: throw DatabaseException(ErrorCode.UNDEFINED_OBJECT,
                         SQLErrorDetail(entityType = EntityType.PRIMARY_INDEX, tableName = tableName)
                     )
             val primaryIdxHandle = loadIndex(primaryIdxName)
@@ -417,12 +418,12 @@ class DataBase(private val config: SimpleConfig) {
         lock.write { 
             val tableData =
                 catalogManager.resolveTable(tableName)
-                    ?: throw CatalogException.UndefinedTable(
+                    ?: throw CatalogException(ErrorCode.UNDEFINED_TABLE,
                         SQLErrorDetail(entityType = EntityType.TABLE, entityName = tableName)
                     )
             val primaryIdxName =
                 tableData.primaryIndexName
-                    ?: throw DatabaseException.UndefinedObject(
+                    ?: throw DatabaseException(ErrorCode.UNDEFINED_OBJECT,
                         SQLErrorDetail(entityType = EntityType.PRIMARY_INDEX, tableName = tableName)
                     )
 
@@ -457,11 +458,11 @@ class DataBase(private val config: SimpleConfig) {
         lock.write { 
             val indexData =
                 catalogManager.resolveIndex(indexName)
-                    ?: throw CatalogException.UndefinedObject(
+                    ?: throw CatalogException(ErrorCode.UNDEFINED_OBJECT,
                         SQLErrorDetail(entityType = EntityType.INDEX, entityName = indexName)
                     )
             requireOrThrow(!indexData.isPrimary) {
-                DatabaseException.DependentObjectsExist(
+                DatabaseException(ErrorCode.DEPENDENT_OBJECTS_STILL_EXIST,
                     SQLErrorDetail(
                         entityType = EntityType.PRIMARY_INDEX,
                         entityName = indexName,
@@ -484,7 +485,7 @@ class DataBase(private val config: SimpleConfig) {
     ) {
         lock.write { 
             requireOrThrow(nullable || defaultValue != null) {
-                DatabaseException.NotNullViolation(
+                DatabaseException(ErrorCode.NOT_NULL_VIOLATION,
                     SQLErrorDetail(
                         entityType = EntityType.COLUMN,
                         entityName = name,
@@ -497,12 +498,12 @@ class DataBase(private val config: SimpleConfig) {
             }
             val tableData =
                 catalogManager.resolveTable(tableName)
-                    ?: throw CatalogException.UndefinedTable(
+                    ?: throw CatalogException(ErrorCode.UNDEFINED_TABLE,
                         SQLErrorDetail(entityType = EntityType.TABLE, entityName = tableName)
                     )
             val primaryIdxName =
                 tableData.primaryIndexName
-                    ?: throw DatabaseException.UndefinedObject(
+                    ?: throw DatabaseException(ErrorCode.UNDEFINED_OBJECT,
                         SQLErrorDetail(entityType = EntityType.PRIMARY_INDEX, tableName = tableName)
                     )
 
@@ -511,7 +512,7 @@ class DataBase(private val config: SimpleConfig) {
             val columns = catalogManager.getColumns(tableId)
 
             requireOrThrow(columns.none { it.name == name }) {
-                DatabaseException.DuplicateColumn(
+                DatabaseException(ErrorCode.DUPLICATE_COLUMN,
                     SQLErrorDetail(
                         entityType = EntityType.COLUMN,
                         entityName = name,
@@ -546,12 +547,12 @@ class DataBase(private val config: SimpleConfig) {
         lock.write{
             val tableData =
                 catalogManager.resolveTable(tableName)
-                    ?: throw CatalogException.UndefinedTable(
+                    ?: throw CatalogException(ErrorCode.UNDEFINED_TABLE,
                         SQLErrorDetail(entityType = EntityType.TABLE, entityName = tableName)
                     )
             val primaryIdxName =
                 tableData.primaryIndexName
-                    ?: throw DatabaseException.UndefinedObject(
+                    ?: throw DatabaseException(ErrorCode.UNDEFINED_OBJECT,
                         SQLErrorDetail(entityType = EntityType.PRIMARY_INDEX, tableName = tableName)
                     )
 
@@ -561,7 +562,7 @@ class DataBase(private val config: SimpleConfig) {
 
             val targetColumn = columns.firstOrNull { it.name == name }
             requireOrThrow(targetColumn != null) {
-                DatabaseException.UndefinedColumn(
+                DatabaseException(ErrorCode.UNDEFINED_COLUMN,
                     SQLErrorDetail(
                         entityType = EntityType.COLUMN,
                         entityName = name,
@@ -575,7 +576,7 @@ class DataBase(private val config: SimpleConfig) {
                     idx.keyColumns.any { it.name == name }
                 }
             requireOrThrow(referencingIndexes.isEmpty()) {
-                DatabaseException.DependentObjectsExist(
+                DatabaseException(ErrorCode.DEPENDENT_OBJECTS_STILL_EXIST,
                     SQLErrorDetail(
                         entityType = EntityType.COLUMN,
                         entityName = name,
@@ -614,7 +615,7 @@ class DataBase(private val config: SimpleConfig) {
     ): ColumnRow {
         val resolved = catalogManager.resolveColumn(tableId, ordinal)
         requireOrThrow(resolved == null) {
-            DatabaseException.DuplicateColumn(
+            DatabaseException(ErrorCode.DUPLICATE_COLUMN,
                 SQLErrorDetail(
                     entityType = EntityType.COLUMN,
                     entityName = name,
@@ -641,13 +642,13 @@ class DataBase(private val config: SimpleConfig) {
         return if (isPrimary) {
             val tableData = catalogManager.resolveTable(tableName)
             requireOrThrow(tableData != null) {
-                CatalogException.UndefinedTable(
+                CatalogException(ErrorCode.UNDEFINED_TABLE,
                     SQLErrorDetail(entityType = EntityType.TABLE, entityName = tableName)
                 )
             }
             val columns = catalogManager.getColumns(tableData.tableId)
             requireOrThrow(columns.isNotEmpty()) {
-                CatalogException.InvalidDefinition(
+                CatalogException(ErrorCode.INVALID_DEFINITION,
                     SQLErrorDetail(
                         entityType = EntityType.TABLE,
                         entityName = tableName,
@@ -660,7 +661,7 @@ class DataBase(private val config: SimpleConfig) {
             val primaryIdxName = primaryIdxName ?: PRIMARY_KEY_IDX_NAME_PREFIX.format(tableName)
             val primaryIndexRow =
                 catalogManager.resolveIndex(primaryIdxName)
-                    ?: throw CatalogException.UndefinedObject(
+                    ?: throw CatalogException(ErrorCode.UNDEFINED_OBJECT,
                         SQLErrorDetail(entityType = EntityType.INDEX, entityName = primaryIdxName)
                     )
             IndexKeySchema(primaryIndexRow.keyColumns).toPrimaryRowSchema()

@@ -1,44 +1,15 @@
 package exception
 
 import util.EngineErrorDetail
-import util.SqlState
+import util.ErrorCode
 
 /**
- * Failures from [index.btree.BTree]/[index.serializer.*] — always [SqlState.INTERNAL_ERROR]:
- * every case here is a structural/logic invariant violation (corrupt trace stack, invalid bytes,
- * wrong node type), never something a caller's query could trigger through normal use.
+ * Failures from [index.btree.BTree]/[index.serializer.*] - every case here is a structural/logic
+ * invariant violation (corrupt trace stack, invalid bytes, wrong node type), never something a
+ * caller's query could trigger through normal use. Which failure it is, is told by [code].
  * */
-sealed class IndexException(
-    detail: EngineErrorDetail,
-    cause: Throwable? = null
-) : RuntimeException(detail.toMessage(SqlState.INTERNAL_ERROR), cause) {
-    class InvalidTraceStack(detail: EngineErrorDetail, cause: Throwable? = null) :
-        IndexException(detail, cause)
-
-    class EmptyTree(detail: EngineErrorDetail, cause: Throwable? = null) :
-        IndexException(detail, cause)
-
-    class InvalidNodeType(detail: EngineErrorDetail, cause: Throwable? = null) :
-        IndexException(detail, cause)
-
-    class InvalidSafeCheck(detail: EngineErrorDetail, cause: Throwable? = null) :
-        IndexException(detail, cause)
-
-    class InvalidBytes(detail: EngineErrorDetail, cause: Throwable? = null) :
-        IndexException(detail, cause)
-
-    class PositionOutOfBounds(detail: EngineErrorDetail, cause: Throwable? = null) :
-        IndexException(detail, cause)
-
-    class VarIntTooLong(detail: EngineErrorDetail, cause: Throwable? = null) :
-        IndexException(detail, cause)
-
-    class InvalidUUIDLength(detail: EngineErrorDetail, cause: Throwable? = null) :
-        IndexException(detail, cause)
-
-    class InvalidTraceObject(detail: EngineErrorDetail, cause: Throwable? = null) :
-        IndexException(detail, cause)
-
-    class LeafNodeNotFound(detail: EngineErrorDetail, cause: Throwable? = null) :
-        IndexException(detail, cause)
-}
+class IndexException(
+    override val code: ErrorCode,
+    override val detail: EngineErrorDetail,
+    cause: Throwable? = null,
+) : RuntimeException(detail.toMessage(code), cause), CodedException
