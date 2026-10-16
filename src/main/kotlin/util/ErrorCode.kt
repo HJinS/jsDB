@@ -50,6 +50,14 @@ enum class ErrorCode(val sqlState: String) {
     INVALID_DEFINITION("42P16"),
     UNDEFINED_TABLE("42P01"),
 
+    // --- sql.lexer / sql.parser: malformed SQL text ---
+    UNTERMINATED_STRING("42601"),
+    UNTERMINATED_QUOTED_IDENTIFIER("42601"),
+    UNTERMINATED_COMMENT("42601"),
+    UNEXPECTED_CHARACTER("42601"),
+    INVALID_NUMBER("42601"),
+    NUMBER_OUT_OF_RANGE("22003"),
+
     // --- index.btree / index.serializer: structural or logic invariant violations ---
     INVALID_TRACE_STACK("XX000"),
     EMPTY_TREE("XX000"),
