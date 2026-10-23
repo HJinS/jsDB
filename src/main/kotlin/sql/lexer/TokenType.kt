@@ -10,7 +10,7 @@ enum class TokenType(val isKeyword: Boolean = false) {
     ON(true), DROP(true), ALTER(true), COLUMN(true), PRIMARY(true), NOT(true),
     NULL(true), AND(true), OR(true), IS(true), IN(true), BETWEEN(true),
     LIKE(true), TRUE(true), FALSE(true), ORDER(true), BY(true),
-    LIMIT(true), OFFSET(true), AS(true),
+    LIMIT(true), OFFSET(true), AS(true), CONSTRAINT(true),
 
     // 기호
     LPAREN, RPAREN, COMMA, SEMICOLON, DOT, STAR, PLUS, MINUS, SLASH, PERCENT, CONCAT,
