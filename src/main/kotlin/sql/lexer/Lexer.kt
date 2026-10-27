@@ -6,11 +6,19 @@ import util.SyntaxErrorDetail
 import util.requireOrThrow
 import java.math.BigDecimal
 
-class Lexer(input: String) {
-    private val cursor = CharCursor(input)
+private val INVISIBLE_TYPES = setOf(
+    Character.CONTROL, Character.FORMAT, Character.SPACE_SEPARATOR, Character.LINE_SEPARATOR,
+    Character.PARAGRAPH_SEPARATOR, Character.UNASSIGNED, Character.SURROGATE, Character.PRIVATE_USE,
+).map { it.toInt() }.toSet()
+
+class Lexer(private val input: String) {
+    private var cursor = CharCursor(input)
     private val tokens = mutableListOf<Token>()
 
+    /** Splits the whole input into tokens, ending with EOF. Every call scans from the start, so it can be repeated. */
     fun tokenize(): List<Token> {
+        cursor = CharCursor(input)
+        tokens.clear()
         while (true) {
             skipWhitespaceAndComments()
             if (cursor.atEnd) {
@@ -32,6 +40,17 @@ class Lexer(input: String) {
 
     private fun emit(type: TokenType, start: Int, value: Any? = null) {
         tokens += Token(type, cursor.slice(start), start, value)
+    }
+
+    /**
+     * How an unexpected character is shown in the error: as itself when it is visible, as its code
+     * point when it is not (a non-breaking space looks exactly like a space, a zero-width space like
+     * nothing at all). [next] only matters for a surrogate pair, i.e. a character outside the BMP.
+     */
+    private fun describeCharacter(char: Char, next: Char): String = when {
+        Character.isHighSurrogate(char) && Character.isLowSurrogate(next) -> "'$char$next'"
+        Character.getType(char) in INVISIBLE_TYPES -> "U+%04X".format(char.code)
+        else -> "'$char'"
     }
 
     private fun isIdentStart(c: Char): Boolean = c.isLetter() || c == '_'
@@ -152,6 +171,12 @@ class Lexer(input: String) {
                 cursor.advance()
             }
         }
+        requireOrThrow(type != TokenType.QUOTED_IDENTIFIER || sb.isNotEmpty()) {
+            SqlSyntaxException(
+                ErrorCode.EMPTY_QUOTED_IDENTIFIER,
+                SyntaxErrorDetail("zero-length quoted identifier", start),
+            )
+        }
         emit(type, start, sb.toString())
     }
 
@@ -207,7 +232,7 @@ class Lexer(input: String) {
         emit(
             type ?: throw SqlSyntaxException(
                 ErrorCode.UNEXPECTED_CHARACTER,
-                SyntaxErrorDetail("unexpected character '$char'", start),
+                SyntaxErrorDetail("unexpected character ${describeCharacter(char, cursor.current)}", start),
             ),
             start,
         )
