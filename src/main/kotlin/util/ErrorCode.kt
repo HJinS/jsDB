@@ -15,6 +15,7 @@ package util
  *   something else still depends on it.
  * - 42 (Syntax Error or Access Rule Violation): duplicate definition, reference to a nonexistent
  *   object, invalid definition.
+ * - 54 (Program Limit Exceeded): a statement too complex to process (e.g. nested too deeply).
  * - XX (Internal Error): a storage-engine- or index-internal failure, or corrupted stored data -
  *   not a SQL-semantic condition a caller's query can trigger through normal use.
  */
@@ -49,6 +50,18 @@ enum class ErrorCode(val sqlState: String) {
     /** The table/index definition is itself structurally invalid (e.g. no key columns at all, no columns at all). */
     INVALID_DEFINITION("42P16"),
     UNDEFINED_TABLE("42P01"),
+
+    // --- sql.lexer / sql.parser: malformed SQL text ---
+    UNTERMINATED_STRING("42601"),
+    UNTERMINATED_QUOTED_IDENTIFIER("42601"),
+    UNTERMINATED_COMMENT("42601"),
+    EMPTY_QUOTED_IDENTIFIER("42601"),
+    UNEXPECTED_CHARACTER("42601"),
+    INVALID_NUMBER("42601"),
+    NUMBER_OUT_OF_RANGE("22003"),
+    UNEXPECTED_TOKEN("42601"),
+    CHAINED_COMPARISON("42601"),
+    NESTING_TOO_DEEP("54001"),
 
     // --- index.btree / index.serializer: structural or logic invariant violations ---
     INVALID_TRACE_STACK("XX000"),
