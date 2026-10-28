@@ -237,8 +237,9 @@ class LexerTest :
 
             `when`("reading the message of an error") {
                 then("it carries the SQLSTATE, the code name, the offset and the reason") {
-                    val e =
-                        shouldThrowCode<SqlSyntaxException>(ErrorCode.UNTERMINATED_STRING) { Lexer("'abc").tokenize() }
+                    val e = shouldThrowCode<SqlSyntaxException>(ErrorCode.UNTERMINATED_STRING) {
+                        Lexer("'abc").tokenize()
+                    }
                     e.message shouldBe "[42601/UNTERMINATED_STRING] at offset 0: unterminated string literal"
                 }
             }
@@ -248,8 +249,10 @@ class LexerTest :
             for (keyword in TokenType.entries.filter { it.isKeyword }) {
                 `when`("lexing ${keyword.name} in lower, upper and mixed case") {
                     then("each spelling becomes the ${keyword.name} token, carrying no value") {
-                        val mixed = keyword.name.mapIndexed { i, c -> if (i % 2 == 0) c.lowercaseChar() else c }
-                            .joinToString("")
+                        val mixed = keyword.name.mapIndexed { i, c ->
+                            if (i % 2 == 0) c.lowercaseChar() else c
+                        }.joinToString("")
+
                         for (spelling in listOf(keyword.name.lowercase(), keyword.name, mixed)) {
                             val result = tokens(spelling)
                             result.map { it.type } shouldBe listOf(keyword, TokenType.EOF)
@@ -276,11 +279,11 @@ class LexerTest :
 
         given("identifier forms") {
             `when`("lexing underscores, digits, dollar signs, mixed case and non-ASCII letters") {
-                val result = tokens("_tmp a_b2 a\$b UserName 이름")
+                val result = tokens($$"_tmp a_b2 a$b UserName 이름")
                 then("each is one identifier whose value is its lowercased name") {
                     result.dropLast(1).map { it.type }.toSet() shouldBe setOf(TokenType.IDENTIFIER)
-                    result.dropLast(1).map { it.value } shouldBe listOf("_tmp", "a_b2", "a\$b", "username", "이름")
-                    result.dropLast(1).map { it.text } shouldBe listOf("_tmp", "a_b2", "a\$b", "UserName", "이름")
+                    result.dropLast(1).map { it.value } shouldBe listOf("_tmp", "a_b2", $$"a$b", "username", "이름")
+                    result.dropLast(1).map { it.text } shouldBe listOf("_tmp", "a_b2", $$"a$b", "UserName", "이름")
                 }
             }
 
