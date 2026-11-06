@@ -6,7 +6,7 @@ import util.EntityType
 import util.ErrorCode
 import util.SQLErrorDetail
 
-fun compareSqlValues(l: Any, r: Any): Int = when{
+fun compareSqlValues(l: Any, r: Any): Int = when {
     l is Number && r is Number -> compareNumbers(l, r)
     l is String && r is String -> l.compareTo(r)
     l is Boolean && r is Boolean -> l.compareTo(r)
@@ -21,14 +21,14 @@ fun compareSqlValues(l: Any, r: Any): Int = when{
 
 private fun isIntegral(n: Number) = n is Byte || n is Short || n is Int || n is Long
 
-private fun toBigDecimal(n: Number): BigDecimal= when(n){
+private fun toBigDecimal(n: Number): BigDecimal = when (n) {
     is BigDecimal -> n
     is Float -> BigDecimal(n.toString())
     is Double -> BigDecimal.valueOf(n)
     else -> BigDecimal.valueOf(n.toLong())
 }
 
-private fun compareNumbers(l: Number, r: Number): Int = 
-    if(isIntegral(l) && isIntegral(r)) l.toLong().compareTo(r.toLong())
+private fun compareNumbers(l: Number, r: Number): Int =
+    if (isIntegral(l) && isIntegral(r)) l.toLong().compareTo(r.toLong())
     else toBigDecimal(l).compareTo(toBigDecimal(r))
 

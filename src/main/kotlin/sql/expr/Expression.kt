@@ -1,9 +1,16 @@
 package sql.expr
 
+import exception.DatabaseException
+import java.math.BigDecimal
 import schema.ColumnType
 import schema.Row
+import util.EntityType
+import util.ErrorCode
+import util.SQLErrorDetail
 
 sealed interface ValueExpr {
+    /** The value's column type, known at bind time; null for the NULL literal, which fits any type. */
+    val type: ColumnType?
     fun eval(row: Row): Any?
 }
 
@@ -11,11 +18,25 @@ sealed interface Predicate {
     fun test(row: Row): TriBool
 }
 
+/** [value] is what the parser produces: Long | BigDecimal | String | Boolean | null. */
 data class LiteralExpr(val value: Any?) : ValueExpr {
+    override val type: ColumnType?
+        get() = when (value) {
+            null -> null
+            is Long -> ColumnType.LONG
+            is BigDecimal -> ColumnType.DOUBLE
+            is String -> ColumnType.STRING
+            is Boolean -> ColumnType.BOOLEAN
+            else -> throw DatabaseException(
+                ErrorCode.UNEXPECTED,
+                SQLErrorDetail(reason = "unexpected literal ${value::class.simpleName}", entityType = EntityType.EXPRESSION)
+            )
+        }
+
     override fun eval(row: Row): Any? = value
 }
 
-data class ColumnExpr(val index: Int, val type: ColumnType) : ValueExpr {
+data class ColumnExpr(val index: Int, override val type: ColumnType) : ValueExpr {
     override fun eval(row: Row): Any? = row.toList()[index]
 }
 

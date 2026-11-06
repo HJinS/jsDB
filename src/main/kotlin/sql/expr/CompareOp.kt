@@ -2,10 +2,10 @@ package sql.expr
 
 import sql.ast.BinaryOp
 
-enum class CompareOp{
+enum class CompareOp {
     EQ, NE, LT, LE, GT, GE;
 
-    fun matches(cmp: Int): Boolean = when(this){
+    fun matches(cmp: Int): Boolean = when (this) {
         EQ -> cmp == 0
         NE -> cmp != 0
         LT -> cmp < 0
@@ -14,8 +14,8 @@ enum class CompareOp{
         GE -> cmp >= 0
     }
 
-    companion object{
-        fun from(op: BinaryOp): CompareOp? = when(op){
+    companion object {
+        fun from(op: BinaryOp): CompareOp? = when (op) {
             BinaryOp.EQ -> EQ
             BinaryOp.NE -> NE
             BinaryOp.LT -> LT

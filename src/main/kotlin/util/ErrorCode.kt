@@ -63,6 +63,12 @@ enum class ErrorCode(val sqlState: String) {
     CHAINED_COMPARISON("42601"),
     NESTING_TOO_DEEP("54001"),
 
+    // --- sql.expr: binding a parsed expression against a table's schema ---
+    /** An operand has the wrong kind of type (e.g. comparing a number to a string, or a value where a condition belongs). */
+    DATATYPE_MISMATCH("42804"),
+    /** The expression is valid SQL but this engine doesn't evaluate it yet (LIKE, arithmetic, concatenation, unary minus). */
+    FEATURE_NOT_SUPPORTED("0A000"),
+
     // --- index.btree / index.serializer: structural or logic invariant violations ---
     INVALID_TRACE_STACK("XX000"),
     EMPTY_TREE("XX000"),
