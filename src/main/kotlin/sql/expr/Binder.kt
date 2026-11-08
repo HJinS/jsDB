@@ -1,6 +1,7 @@
 package sql.expr
 
 import exception.DatabaseException
+import java.math.BigDecimal
 import schema.ColumnType
 import schema.RowSchema
 import sql.ast.Between
@@ -86,7 +87,10 @@ class Binder(private val schema: RowSchema) {
             ColumnExpr(idx, schema.rowColumns[idx].type)
         }
 
-        is Unary -> throw if (expr.op == UnaryOp.NEG) unsupported("unary minus") else mismatch("expected a value but found a condition")
+        is Unary -> when (expr.op) {
+            UnaryOp.NEG -> negatedNumber(value(expr.operand))
+            UnaryOp.NOT -> throw mismatch("expected a value but found a condition")
+        }
 
         is Binary -> {
             val isCondition = expr.op == BinaryOp.AND || expr.op == BinaryOp.OR || CompareOp.from(expr.op) != null
@@ -96,6 +100,16 @@ class Binder(private val schema: RowSchema) {
         is Like -> throw unsupported("LIKE")
 
         is IsNull, is Between, is InList -> throw mismatch("expected a value but found a condition")
+    }
+
+    /**
+     * The parser reads `-1` as unary minus applied to `1`; only that case (a minus in front of a numeric literal) is
+     * folded into a negative literal. Negating a column or a non-number needs arithmetic, which isn't supported.
+     */
+    private fun negatedNumber(operand: ValueExpr): ValueExpr = when (val v = (operand as? LiteralExpr)?.value) {
+        is Long -> LiteralExpr(-v)
+        is BigDecimal -> LiteralExpr(v.negate())
+        else -> throw unsupported("unary minus on anything but a numeric literal")
     }
 
     private fun compare(op: CompareOp, l: ValueExpr, r: ValueExpr): Predicate {
