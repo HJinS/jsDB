@@ -9,5 +9,6 @@ enum class EntityType(val displayName: String) {
     INDEX("index"),
     INDEX_KEY_COLUMN("index key column"),
     CATALOG_ROW("catalog row"),
-    ROW("row")
+    ROW("row"),
+    EXPRESSION("expression")
 }
