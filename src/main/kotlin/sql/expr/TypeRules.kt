@@ -6,6 +6,16 @@ import util.EntityType
 import util.ErrorCode
 import util.SQLErrorDetail
 
+/**
+ * Three-way comparison of two non-NULL values: negative, zero or positive as [l] is less than, equal to or greater
+ * than [r]. Numbers of different classes compare by value (whole numbers as Long, anything fractional as BigDecimal,
+ * so `0.1f` equals `0.1`); strings compare lexicographically; false sorts before true.
+ *
+ * [Binder] rejects incomparable operand types before any row is read, so reaching the `else` means the binder or the
+ * stored data is wrong.
+ *
+ * @throws DatabaseException ([ErrorCode.UNEXPECTED]) if [l] and [r] aren't both numbers, strings or booleans.
+ */
 fun compareSqlValues(l: Any, r: Any): Int = when {
     l is Number && r is Number -> compareNumbers(l, r)
     l is String && r is String -> l.compareTo(r)

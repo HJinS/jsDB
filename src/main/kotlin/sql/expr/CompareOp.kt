@@ -2,9 +2,11 @@ package sql.expr
 
 import sql.ast.BinaryOp
 
+/** The six SQL comparison operators; a [Comparison] applies one to the sign of a three-way comparison of its operands. */
 enum class CompareOp {
     EQ, NE, LT, LE, GT, GE;
 
+    /** Whether this operator holds given [cmp], the negative / zero / positive result of comparing left to right. */
     fun matches(cmp: Int): Boolean = when (this) {
         EQ -> cmp == 0
         NE -> cmp != 0
@@ -15,6 +17,7 @@ enum class CompareOp {
     }
 
     companion object {
+        /** The comparison [op] stands for, or null if [op] isn't a comparison (AND, OR, arithmetic, `||`). */
         fun from(op: BinaryOp): CompareOp? = when (op) {
             BinaryOp.EQ -> EQ
             BinaryOp.NE -> NE
