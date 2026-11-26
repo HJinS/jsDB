@@ -730,8 +730,13 @@ class BTree(
      * - Searching for 5, go P3.
      *
      * @param key Key to find leaf node
+     * @param lowerBound For a range-scan seek: descend and land on the *first* slot `>=` [key]
+     *   ([Node.lowerBound]) instead of the slot [Node.search] finds. The two differ only when [key]
+     *   is stored more than once (a non-unique index): equal separators then send the search left,
+     *   and the leaf index is the first duplicate, not whichever one a binary search hit (#77).
+     *   Insert/delete keep the default, since they only need *a* place for [key].
      * @see Node.search
-     * @see Node.search
+     * @see Node.lowerBound
      */
     private fun searchLeafNode(
         key: ByteArray,
@@ -739,6 +744,7 @@ class BTree(
         traceNode: Stack<Triple<Long, Int, PageLock>>,
         lockManager: LockManager,
         operationMode: BTreeOptMode,
+        lowerBound: Boolean = false,
     ): Triple<Long, Int, Boolean> {
         if (rootPageId == INVALID_PAGE_ID) {
             throw IndexException(ErrorCode.EMPTY_TREE,
@@ -761,17 +767,22 @@ class BTree(
                 val currentNode = Node.from(indexConfig, currentPage)
                 if (currentNode.isSafeNode(operationMode, key, value)) isSafeToUnlockAncestor = true
 
-                val result = currentNode.search(key)
                 if (currentNode.isLeaf) {
+                    if (lowerBound) {
+                        val idx = currentNode.lowerBound(key)
+                        val isExist = idx < currentPage.recordCount && currentPage.getData(idx).first.contentEquals(key)
+                        return Triple(pageIdCursor, idx, isExist)
+                    }
                     val (searchIdx, isExist) = currentNode.search(key, true)
                     return Triple(pageIdCursor, searchIdx, isExist)
                 } else {
                     val currentInternalNode = currentNode as InternalNode
-                    val nextPageId = currentInternalNode.childPageId(result.first)
+                    val childIdx = if (lowerBound) currentNode.lowerBound(key) else currentNode.search(key).first
+                    val nextPageId = currentInternalNode.childPageId(childIdx)
                     val nextLock = storageManager.fetchPage(nextPageId, lockManager.lockMode)
                     if (isSafeToUnlockAncestor) lockManager.releaseAncestor(currentLock)
                     lockManager.push(nextLock)
-                    traceNode.push(Triple(nextPageId, result.first, nextLock))
+                    traceNode.push(Triple(nextPageId, childIdx, nextLock))
                     pageIdCursor = nextPageId
                 }
             }
@@ -886,10 +897,10 @@ class BTree(
                 return null
             }
         }
-        // First slot with key >= boundary (lower-bound). FORWARD's result is already the answer;
-        // BACKWARD's result points one slot past it, hence the -1.
+        // First slot with key >= boundary (lower-bound), even when the boundary is stored many times.
+        // FORWARD's result is already the answer; BACKWARD's result points one slot past it, hence the -1.
         val (pageId, keyIdx, _) =
-            searchLeafNode(key, null, traceNode, lockManager, BTreeOptMode.SELECT)
+            searchLeafNode(key, null, traceNode, lockManager, BTreeOptMode.SELECT, lowerBound = true)
         val idx = if (direction == ScanDirection.FORWARD) keyIdx else keyIdx - 1
         return SearchPosition(pageId, idx)
     }

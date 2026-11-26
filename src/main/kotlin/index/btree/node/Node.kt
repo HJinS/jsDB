@@ -72,6 +72,14 @@ abstract class Node(
         get() = page.recordCount
 
     /**
+     * The first slot whose key is `>=` [key] (see [SlottedPage.lowerBound]). In a leaf that is where a
+     * range scan starts; in an internal node it is also the child to descend into, since child `i`
+     * sits left of separator `i` - so equal separators send the search *left*, to where the first
+     * duplicate lives, instead of right as [search] does.
+     * */
+    fun lowerBound(key: ByteArray): Int = page.lowerBound(key)
+
+    /**
      * Find value or child pointer using key.
      *
      * If find the path to the leaf node, go down to idx+1 (if exists).

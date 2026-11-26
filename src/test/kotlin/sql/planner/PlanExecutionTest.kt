@@ -57,8 +57,8 @@ class PlanExecutionTest : BehaviorSpec({
 
     /**
      * 120 rows where no index key repeats: `b` is distinct (or NULL for id 1..6, each with a different `a`), and `a` is
-     * NULL only where `b` is distinct. NULLs are still there for ranges to leak, but no scan can hit the duplicate-key
-     * seek bug (#77), so any mismatch on this table is the planner's fault.
+     * NULL only where `b` is distinct. NULLs are still there for ranges to leak. The counterpart of [duplicateRows]:
+     * scans here never have to step over equal keys.
      */
     val distinctKeyRows: List<Row> = (1L..120L).map { id ->
         Row(
@@ -231,17 +231,26 @@ class PlanExecutionTest : BehaviorSpec({
             }
         }
 
-        // Disabled until #77 is fixed: a B-tree bug, not a planner one. A forward scan whose seek key is *exactly* a
-        // stored key that has duplicates (a non-unique index) starts partway through those duplicates and skips some
-        // rows. With 80 rows the duplicates span leaf pages, so e.g. `b = 5` returns 2 of its 6 rows. Exclusive lower
-        // bounds (seek key is a successor), upper-only ranges and prefix bounds (a prefix key is shorter than, so never
-        // equal to, a stored key) are not affected.
+        // Seeks that land exactly on a key stored many times: they used to start partway through the duplicates (#77).
         `when`("the scan has to seek onto duplicate keys") {
-            xthen("it returns what a full scan + filter + sort returns") {
+            then("it returns what a full scan + filter + sort returns") {
                 for (sql in listOf(
                     "select * from t where b = 5",
                     "select * from t where b >= 2 and b <= 6",
+                    "select * from t where b >= 0",
+                    "select * from t where a = 1 and b = 3",
+                    "select * from t where a = 1 and b >= 3 and b < 8",
                 )) check(t, sql)
+            }
+        }
+
+        // Random queries on this duplicate-heavy table too; backward scans skipped until #78 is fixed (see below).
+        `when`("hundreds of random queries are planned and run, forward scans only") {
+            then("every one returns what a full scan + filter + sort returns") {
+                val randomQueries = Random(77).let { random -> List(400) { randomQuery(random, table = "t", bValues = -2..12) } }
+                val forward = randomQueries.filterNot { scansBackward(t.table, it) }
+                withClue("most queries should still run") { (forward.size > randomQueries.size / 2) shouldBe true }
+                for (sql in forward) check(t, sql)
             }
         }
     }
@@ -321,14 +330,14 @@ private fun scansBackward(table: Table, sql: String): Boolean {
 }
 
 /**
- * A random `select * from u ...`: one to three AND-ed terms (mostly index-friendly comparisons, some that only a
+ * A random `select * from [table] ...`: one to three AND-ed terms (mostly index-friendly comparisons, some that only a
  * Filter can handle), an optional ORDER BY of up to two columns in any direction, and sometimes LIMIT / OFFSET.
  */
-private fun randomQuery(random: Random): String {
+private fun randomQuery(random: Random, table: String = "u", bValues: IntRange = -5..125): String {
     fun literal(column: String): String = when (column) {
         "a" -> if (random.nextInt(10) == 0) listOf("2.0", "2.5", "-1")[random.nextInt(3)] else random.nextInt(-1, 7).toString()
         "name" -> listOf("'kim'", "'lee'", "'park'", "'choi'", "'a'", "'zz'")[random.nextInt(6)]
-        else -> random.nextInt(-5, 126).toString() // b, id
+        else -> random.nextInt(bValues.first, bValues.last + 1).toString() // b, id
     }
 
     fun comparison(): String {
@@ -346,7 +355,7 @@ private fun randomQuery(random: Random): String {
         else -> comparison()
     }
 
-    val sql = StringBuilder("select * from u")
+    val sql = StringBuilder("select * from $table")
     val terms = random.nextInt(4)
     if (terms > 0) sql.append(" where ").append(List(terms) { term() }.joinToString(" and "))
 
