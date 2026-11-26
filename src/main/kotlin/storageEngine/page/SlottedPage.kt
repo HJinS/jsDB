@@ -190,6 +190,21 @@ open class SlottedPage(
     }
 
     /**
+     * The first slot whose key is `>=` [key], or [recordCount] if every key is smaller. Unlike
+     * [binarySearch], which returns *a* matching slot, this lands on the **first** of several equal
+     * keys - what a range scan needs on a non-unique index, where one key is stored many times (#77).
+     * */
+    fun lowerBound(key: ByteArray): Int {
+        var low = 0
+        var high = recordCount
+        while (low < high) {
+            val mid = (low + high) ushr 1
+            if (Arrays.compareUnsigned(getData(mid).first, key) < 0) low = mid + 1 else high = mid
+        }
+        return low
+    }
+
+    /**
      * Standard binary search over the slot array by key bytes.
      *
      * @return The matching slot index, or `-(insertionPoint + 1)` if [key] isn't present
