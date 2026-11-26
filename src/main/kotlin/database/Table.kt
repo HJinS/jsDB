@@ -236,6 +236,12 @@ class Table(
                     false,
                 )
             }
+            // A stop bound that exists but serialized to null has no successor: its group (a DESC NULL) is the
+            // tree's right end. As FORWARD's inclusive upper that excludes nothing, so scanning on unbounded is
+            // right; as BACKWARD's exclusive lower it excludes everything, so there is nothing to return.
+            if (end.value != null && serializedEndBound == null && scanDirection == ScanDirection.BACKWARD) {
+                return emptyList()
+            }
             val cursor =
                 index.btree.search(serializedStartBound, scanDirection, start.value != null) ?: return emptyList()
             val result = mutableListOf<Row>()

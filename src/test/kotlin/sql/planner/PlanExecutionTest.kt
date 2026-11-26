@@ -148,6 +148,7 @@ class PlanExecutionTest : BehaviorSpec({
         // equality prefix, then a range on the next column
         "select * from t where a = 1",
         "select * from t where a = 1 and b = 3",
+        "select * from t where a = 2 order by name", // used to seek onto the (a=2, b=NULL) key when prefixes were padded
         "select * from t where a = 1 and b > 3",
         "select * from t where a = 1 and b <= 3",
         "select * from t where a = 1 and b >= 3 and b < 8",
@@ -230,17 +231,16 @@ class PlanExecutionTest : BehaviorSpec({
             }
         }
 
-        // Disabled until #77 is fixed: a B-tree bug, not a planner one. A forward scan whose seek key is *exactly* a stored key that has
-        // duplicates (a non-unique index) starts partway through those duplicates and skips some rows. With 80 rows
-        // the duplicates span leaf pages, so e.g. `b = 5` returns 2 of its 6 rows. In the last query the prefix [2]
-        // is padded with 0x00, which is also how `b = NULL` is encoded, so the seek key equals an (a=2, b=NULL) key.
-        // Exclusive lower bounds (seek key is a successor) and upper-only ranges are not affected.
+        // Disabled until #77 is fixed: a B-tree bug, not a planner one. A forward scan whose seek key is *exactly* a
+        // stored key that has duplicates (a non-unique index) starts partway through those duplicates and skips some
+        // rows. With 80 rows the duplicates span leaf pages, so e.g. `b = 5` returns 2 of its 6 rows. Exclusive lower
+        // bounds (seek key is a successor), upper-only ranges and prefix bounds (a prefix key is shorter than, so never
+        // equal to, a stored key) are not affected.
         `when`("the scan has to seek onto duplicate keys") {
             xthen("it returns what a full scan + filter + sort returns") {
                 for (sql in listOf(
                     "select * from t where b = 5",
                     "select * from t where b >= 2 and b <= 6",
-                    "select * from t where a = 2 order by name",
                 )) check(t, sql)
             }
         }
@@ -267,6 +267,35 @@ class PlanExecutionTest : BehaviorSpec({
         `when`("hundreds of random queries are planned and run, backward scans included") {
             xthen("every one returns what a full scan + filter + sort returns") {
                 for (sql in randomQueries) check(u, sql)
+            }
+        }
+    }
+
+    // `a = 1` on (a, b DESC) pins only the prefix, so the scan starts from a [1] prefix bound - the shape #76 broke.
+    given("a table whose only secondary index is (a, b DESC), with keys that never repeat") {
+        val w = table("w", distinctKeyRows, "idx_w_a_bdesc" to listOf(asc("a"), desc("b")))
+        val randomQueries = Random(76).let { random -> List(400) { randomQuery(random) } }
+
+        `when`("prefix queries on it are planned and run") {
+            then("they return what a full scan + filter + sort returns") {
+                for (sql in listOf(
+                    "select * from w where a = 1",
+                    "select * from w where a = 1 and b > 40",
+                    "select * from w where a = 1 and b <= 40",
+                    "select * from w where a = 1 order by b desc",
+                    "select * from w where a >= 2",
+                    "select * from w where a < 3",
+                    "select * from w where a > 1 and a <= 4 order by a",
+                )) check(w, sql)
+            }
+        }
+
+        // Backward scans skipped until #78 is fixed, as above.
+        `when`("hundreds of random queries are planned and run, forward scans only") {
+            then("every one returns what a full scan + filter + sort returns") {
+                val forward = randomQueries.filterNot { scansBackward(w.table, it) }
+                withClue("most queries should still run") { (forward.size > randomQueries.size / 2) shouldBe true }
+                for (sql in forward) check(w, sql)
             }
         }
     }

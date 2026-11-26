@@ -226,7 +226,7 @@ class CatalogManager(
      * `(tableId, ordinal)`, so a forward scan naturally comes out in ordinal order).
      *
      * Implemented as a prefix scan rather than [getIndexes]'s full [BTree.traverse]: `seek` is
-     * `(tableId)` (padded, so it sorts at-or-below every `(tableId, *)` row) and `stop` is
+     * `(tableId)` (a prefix, so it sorts at-or-below every `(tableId, *)` row) and `stop` is
      * `(tableId)`'s successor via `serializeUpper` (the first key that's definitely past every
      * `(tableId, *)` row) — see `docs/index/range-scan-design.md` for why this pattern needs no
      * predecessor and works regardless of which ordinals actually exist.
