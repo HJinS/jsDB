@@ -10,6 +10,7 @@ import schema.Bound
 import schema.ColumnOrder
 import schema.IndexColumn
 import schema.IndexHandle
+import schema.IndexRow
 import schema.Row
 import schema.RowSchema
 import util.EntityType
@@ -38,11 +39,13 @@ private val logger = KotlinLogging.logger {}
  * @property secondaryIndexes Every other index on this table, keyed by index name.
  */
 class Table(
-    private val rowSchema: RowSchema,
+    val rowSchema: RowSchema,
     private val primaryIndex: IndexHandle,
     private val secondaryIndexes: Map<String, IndexHandle>,
     private val readLock: Lock,
 ) {
+
+    val indexes: List<IndexRow> get() = listOf(primaryIndex.metadata) + secondaryIndexes.values.map { it.metadata }
 
     /**
      * Inserts [row] into the primary index and every secondary index.
@@ -58,7 +61,8 @@ class Table(
         readLock.withLock {
             val violatedColumns = row.checkNullViolations()
             requireOrThrow(violatedColumns.isEmpty()) {
-                DatabaseException(ErrorCode.NOT_NULL_VIOLATION,
+                DatabaseException(
+                    ErrorCode.NOT_NULL_VIOLATION,
                     SQLErrorDetail(
                         entityType = EntityType.COLUMN,
                         tableName = primaryIndex.metadata.tableName,
@@ -70,7 +74,8 @@ class Table(
             val primaryKey = primaryIndex.extractKey(row)
             val primarySerialized = primaryIndex.keySerializer.serialize(primaryKey)
             if (primaryTree.search(primarySerialized) != null)
-                throw TableException(ErrorCode.UNIQUE_VIOLATION,
+                throw TableException(
+                    ErrorCode.UNIQUE_VIOLATION,
                     SQLErrorDetail(
                         entityType = EntityType.PRIMARY_INDEX,
                         entityName = primaryIndex.metadata.indexName,
@@ -83,7 +88,8 @@ class Table(
                 val indexKey = handle.extractKey(row)
                 val indexSerialized = handle.keySerializer.serialize(indexKey)
                 if (handle.metadata.isUnique && handle.btree.search(indexSerialized) != null) {
-                    throw TableException(ErrorCode.UNIQUE_VIOLATION,
+                    throw TableException(
+                        ErrorCode.UNIQUE_VIOLATION,
                         SQLErrorDetail(
                             entityType = EntityType.INDEX,
                             entityName = handle.metadata.indexName,
@@ -187,7 +193,8 @@ class Table(
         offset: Int? = null,
     ): List<Row> {
         requireOrThrow(limit == null || limit >= 0) {
-            TableException(ErrorCode.NEGATIVE_LIMIT,
+            TableException(
+                ErrorCode.NEGATIVE_LIMIT,
                 SQLErrorDetail(
                     reason = "LIMIT must not be negative (got $limit)",
                     entityType = EntityType.TABLE,
@@ -196,7 +203,8 @@ class Table(
             )
         }
         requireOrThrow(offset == null || offset >= 0) {
-            TableException(ErrorCode.NEGATIVE_OFFSET,
+            TableException(
+                ErrorCode.NEGATIVE_OFFSET,
                 SQLErrorDetail(
                     reason = "OFFSET must not be negative (got $offset)",
                     entityType = EntityType.TABLE,
@@ -336,7 +344,8 @@ class Table(
             val primaryTree = primaryIndex.btree
             val newPkKeySerialized = primaryIndex.keySerializer.serialize(primaryIndex.extractKey(newRow))
             val oldRow = primaryTree.search(newPkKeySerialized)?.let { extractData(primaryIndex, it) }
-                ?: throw TableException(ErrorCode.ROW_NOT_FOUND,
+                ?: throw TableException(
+                    ErrorCode.ROW_NOT_FOUND,
                     SQLErrorDetail(
                         entityType = EntityType.ROW,
                         tableName = primaryIndex.metadata.tableName,
@@ -448,7 +457,8 @@ class Table(
             val keySerialized = primaryIndex.keySerializer.serialize(key)
             val oldRow =
                 primaryTree.search(keySerialized)?.let { extractData(primaryIndex, it) }
-                    ?: throw TableException(ErrorCode.ROW_NOT_FOUND,
+                    ?: throw TableException(
+                        ErrorCode.ROW_NOT_FOUND,
                         SQLErrorDetail(
                             entityType = EntityType.ROW,
                             tableName = primaryIndex.metadata.tableName,
@@ -656,7 +666,8 @@ class Table(
 
         val freeColumns = keyColumns.drop(equalPrefixLen)
         requireOrThrow(orderBy.size <= freeColumns.size) {
-            TableException(ErrorCode.TOO_MANY_ORDER_COLUMNS,
+            TableException(
+                ErrorCode.TOO_MANY_ORDER_COLUMNS,
                 SQLErrorDetail(
                     entityType = EntityType.INDEX_KEY_COLUMN,
                     reason = "orderBy가 index의범위 컬럼 개수보다 많음",
@@ -669,7 +680,8 @@ class Table(
         val paired = relevant.zip(orderBy)
 
         requireOrThrow(paired.all { (col, order) -> col.name == order.name }) {
-            TableException(ErrorCode.ORDER_COLUMN_MISMATCH,
+            TableException(
+                ErrorCode.ORDER_COLUMN_MISMATCH,
                 SQLErrorDetail(
                     entityType = EntityType.INDEX_KEY_COLUMN,
                     reason = "orderBy는 index의 범위 컬럼 맨 앞부터 순서대로 지정해야 함(중간 생략 불가)",
@@ -685,7 +697,8 @@ class Table(
             allMatch -> ScanDirection.FORWARD
             allReversed -> ScanDirection.BACKWARD
             else ->
-                throw TableException(ErrorCode.UNSUPPORTED_SORT_DIRECTION,
+                throw TableException(
+                    ErrorCode.UNSUPPORTED_SORT_DIRECTION,
                     SQLErrorDetail(
                         entityType = EntityType.INDEX_KEY_COLUMN,
                         reason = "인덱스 선언과 일부만 일치하는 정렬 방향은 지원하지 않음",
@@ -705,7 +718,8 @@ class Table(
             ?: run {
                 if (primaryIndex.metadata.indexName == indexName) primaryIndex
                 else
-                    throw TableException(ErrorCode.UNDEFINED_INDEX,
+                    throw TableException(
+                        ErrorCode.UNDEFINED_INDEX,
                         SQLErrorDetail(
                             entityType = EntityType.INDEX,
                             entityName = indexName,
@@ -732,7 +746,8 @@ class Table(
                 val primaryKey = index.valueSerializer.deserialize(value).first
                 val primaryKeySerialized = primaryIndex.keySerializer.serialize(primaryKey)
                 primaryIndex.btree.search(primaryKeySerialized)
-                    ?: throw TableException(ErrorCode.CORRUPTED_INDEX,
+                    ?: throw TableException(
+                        ErrorCode.CORRUPTED_INDEX,
                         SQLErrorDetail(
                             entityType = EntityType.INDEX,
                             entityName = index.metadata.indexName,
@@ -757,7 +772,8 @@ class Table(
     private fun validateUpdate(key: List<Any?>, newRow: Row) {
         val violatedColumns = newRow.checkNullViolations()
         requireOrThrow(violatedColumns.isEmpty()) {
-            DatabaseException(ErrorCode.NOT_NULL_VIOLATION,
+            DatabaseException(
+                ErrorCode.NOT_NULL_VIOLATION,
                 SQLErrorDetail(
                     entityType = EntityType.COLUMN,
                     tableName = primaryIndex.metadata.tableName,
@@ -769,7 +785,8 @@ class Table(
         val newPkKeySerialized =
             primaryIndex.keySerializer.serialize(primaryIndex.extractKey(newRow))
         requireOrThrow(Arrays.compareUnsigned(oldPkKeySerialized, newPkKeySerialized) == 0) {
-            TableException(ErrorCode.PRIMARY_KEY_UPDATE_NOT_SUPPORTED,
+            TableException(
+                ErrorCode.PRIMARY_KEY_UPDATE_NOT_SUPPORTED,
                 SQLErrorDetail(
                     reason = "primary key columns cannot be updated yet",
                     entityType = EntityType.PRIMARY_KEY,
@@ -806,7 +823,8 @@ class Table(
                         newKeySerialized
                     ) == null
                 ) {
-                    TableException(ErrorCode.UNIQUE_VIOLATION,
+                    TableException(
+                        ErrorCode.UNIQUE_VIOLATION,
                         SQLErrorDetail(
                             entityType = EntityType.INDEX,
                             entityName = handle.metadata.indexName,

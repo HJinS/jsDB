@@ -16,6 +16,15 @@ enum class CompareOp {
         GE -> cmp >= 0
     }
 
+    /** The operator that means the same with the operands swapped: `5 < a` is `a > 5`. Not the negation. */
+    fun flipped(): CompareOp = when (this) {
+        EQ, NE -> this
+        LT -> GT
+        LE -> GE
+        GT -> LT
+        GE -> LE
+    }
+
     companion object {
         /** The comparison [op] stands for, or null if [op] isn't a comparison (AND, OR, arithmetic, `||`). */
         fun from(op: BinaryOp): CompareOp? = when (op) {
