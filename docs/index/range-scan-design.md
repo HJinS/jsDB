@@ -54,7 +54,7 @@ return null  // 상한 없음 (unbounded)
 > - BACKWARD: `candidate < boundary`면 멈춤
 > - open/closed: **어떤 boundary 생성 함수를 쓰느냐**로만 표현.
 
-- `serialize(v)` = `Lo(v)`: v로 시작하는 가장 작은 실제 키(남은 컬럼은 최솟값 padding)
+- `serialize(v)` = `Lo(v)`: v로 시작하는 모든 실제 키 이하인 지점. 빠진 컬럼에는 아무것도 붙이지 않는다(바이트 배열은 자기로 시작하는 더 긴 배열보다 항상 작고, 각 컬럼 인코딩은 terminator로 끝나므로 prefix 그대로가 그룹의 하한). 저장 키는 항상 전체 컬럼이라 prefix 키와 바이트가 같아질 일도 없다
 - `serializeUpper(v)` = `Hi(v)`: v 그룹 전체를 지나 바로 다음 지점(successor, null 가능)
 
 **seek 위치**(스캔 시작점):
@@ -94,7 +94,7 @@ return null  // 상한 없음 (unbounded)
 | jsDB (수정 후)       | 최솟값(MySQL/SQLite 컨벤션) | FIRST | LAST      |
 
 [BaseKeySerializer.kt](../../src/main/kotlin/index/serializer/BaseKeySerializer.kt) `packKeyItem()`의 `if(key==null) return byteArrayOf(...)`가 desc 반전 단계보다 먼저 return돼서 asc/desc 상관없이 항상 `0x00`이던 버그를 `if(descending) 0xFF else 0x00`으로 수정.
-`MultiColumnKeySerializer`가 prefix 생략 시 쓰는 패딩(desc면 `0xFF`)과도 일관성이 맞춰졌다.
+이때 `MultiColumnKeySerializer`가 prefix 생략 시 쓰는 패딩도 desc면 `0xFF`로 맞췄는데, 이건 잘못이었다(#76). NULL 바이트는 "정렬 위치"이고 패딩은 "그룹의 하한"이라 역할이 다르다. desc의 `0xFF`는 일반 값(`0xFE…`)보다 뒤라서, `(a ASC, b DESC)`에서 `[1]`로 시작하는 스캔이 `a = 1`의 일반 값 행을 전부 건너뛰었다. 지금은 패딩 자체를 쓰지 않는다(위 `serialize(v)` 설명 참고).
 
 ### DESC 처리는 인코딩 단계에서 이미 끝남
 

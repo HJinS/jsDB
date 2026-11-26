@@ -16,28 +16,24 @@ class MultiColumnKeySerializer(schema: IndexKeySchema) : BaseKeySerializer<List<
      * is byte-comparable exactly like the full key (each column's own encoding is already
      * byte-comparable and ASC/DESC-aware; concatenation preserves column-priority ordering).
      *
-     * [key] may have **fewer** columns than the schema (a prefix / equality search on a leading
-     * subset). When it does, exactly one padding byte is appended for the first missing column —
-     * `0x00` (ASC) or `0xFF` (DESC) — the same byte [packKeyItem] uses for an explicit `null`, and
-     * for the same reason: it's the smallest byte any real encoding for that column could start
-     * with, so this key sorts at-or-below every full key sharing [key] as a prefix. No bytes are
-     * added for columns after that; the loop stops there.
+     * [key] may have **fewer** columns than the schema: a prefix, used only as a search bound (keys
+     * written to an index always carry every column, see `IndexHandle.extractKey`). Nothing is added
+     * for the missing columns. A byte sequence sorts before every longer one that starts with it, and
+     * each column's encoding ends in a terminator, so a prefix key already sorts at or before every
+     * full key sharing it and after every key of an earlier group - and, being shorter, is never
+     * byte-equal to any stored key.
+     *
+     * (It used to be padded with the missing column's NULL byte, `0xFF` for DESC, which sorts after
+     * every non-NULL DESC value - #76.)
      * */
     override fun serialize(key: List<Any?>): ByteArray {
         require(key.size <= schema.indexColumns.size) { "Too many key values for schema" }
         var totalByteSize = 0
         val tempArray = ArrayList<ByteArray>(schema.indexColumns.size)
-        for (idx in schema.indexColumns.indices) {
-            if (idx >= key.size) {
-                val padding = if (schema.indexColumns[idx].descending) byteArrayOf(0xFF.toByte()) else byteArrayOf(0x00.toByte())
-                tempArray.add(padding)
-                totalByteSize += 1
-                break
-            } else {
-                val packed = packKeyItem(key[idx], schema.indexColumns[idx])
-                tempArray.add(packed)
-                totalByteSize += packed.size
-            }
+        for (idx in key.indices) {
+            val packed = packKeyItem(key[idx], schema.indexColumns[idx])
+            tempArray.add(packed)
+            totalByteSize += packed.size
         }
 
         val resultArray = ByteArray(totalByteSize)
@@ -90,21 +86,17 @@ class MultiColumnKeySerializer(schema: IndexKeySchema) : BaseKeySerializer<List<
     }
 
     /**
-     * Unpacks [bytes] column by column via [unpackKeyItem]. Stops early (returning whatever
-     * columns were recovered so far) if it runs out of bytes partway through a column — this
-     * happens for a padded/prefix key produced by [serialize] with fewer columns than the schema,
-     * which is not expected to round-trip back to the original column count.
+     * Unpacks [bytes] column by column via [unpackKeyItem], stopping when the bytes run out, so a
+     * prefix key from [serialize] comes back as exactly its prefix values (`[1]` stays `[1]`, not
+     * `[1, null]`). A [serializeUpper] result is comparison-only and isn't meant to be decoded.
      * */
     override fun deserialize(bytes: ByteArray): List<Any?> {
         val unpackedKeys = mutableListOf<Any?>()
         var offset = 0
 
         for (column in schema.indexColumns) {
-            val (value, consumed) = try {
-                unpackKeyItem(bytes, offset, column)
-            } catch (_: IndexOutOfBoundsException) {
-                break
-            }
+            if (offset >= bytes.size) break
+            val (value, consumed) = unpackKeyItem(bytes, offset, column)
             unpackedKeys.add(value)
             offset += consumed
         }

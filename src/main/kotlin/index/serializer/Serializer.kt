@@ -11,9 +11,8 @@ interface KeySerializer<K> {
     fun serialize(key: K): ByteArray
 
     /**
-     * Inverse of [serialize]. Not guaranteed to round-trip for bytes this didn't produce — e.g. a
-     * padded prefix key from a multi-column implementation may decode to fewer columns than
-     * expected (see [MultiColumnKeySerializer.deserialize]).
+     * Inverse of [serialize]. Not guaranteed to round-trip for bytes this didn't produce, such as a
+     * [serializeUpper] result (see [MultiColumnKeySerializer.deserialize]).
      * */
     fun deserialize(bytes: ByteArray): K
 
