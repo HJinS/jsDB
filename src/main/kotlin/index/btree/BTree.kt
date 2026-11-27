@@ -135,7 +135,8 @@ class BTree(
             var isUnderflow = false
             val leafLock = lockManager.last
             if (leafNodePageId != leafLock.pageId) {
-                throw IndexException(ErrorCode.INVALID_TRACE_OBJECT,
+                throw IndexException(
+                    ErrorCode.INVALID_TRACE_OBJECT,
                     EngineErrorDetail(
                         pageId = leafNodePageId,
                         reason =
@@ -197,7 +198,8 @@ class BTree(
         if (isExist) {
             val leafLock = lockManager.last
             if (leafNodePageId != leafLock.pageId) {
-                throw IndexException(ErrorCode.INVALID_TRACE_OBJECT,
+                throw IndexException(
+                    ErrorCode.INVALID_TRACE_OBJECT,
                     EngineErrorDetail(
                         pageId = leafNodePageId,
                         reason =
@@ -480,25 +482,21 @@ class BTree(
                     parentLock.asWriteView { parentBuffer ->
                         val parentPage = SlottedPage(indexConfig, nextTrace.first, parentBuffer)
                         val parentNode = Node.from(indexConfig, parentPage) as InternalNode
-                        val leftSiblingPageId =
-                            catchCode(ErrorCode.SLOT_OUT_OF_BOUND, onCaught = { null }) {
-                                parentNode.childPageId(keyIdx - 1)
-                            }
-                        val rightSiblingPageId =
-                            catchCode(ErrorCode.SLOT_OUT_OF_BOUND, onCaught = { null }) {
-                                parentNode.childPageId(keyIdx + 1)
-                            }
+                        val leftSiblingPageId = catchCode(ErrorCode.SLOT_OUT_OF_BOUND, onCaught = { null }) {
+                            parentNode.childPageId(keyIdx - 1)
+                        }
+                        val rightSiblingPageId = catchCode(ErrorCode.SLOT_OUT_OF_BOUND, onCaught = { null }) {
+                            parentNode.childPageId(keyIdx + 1)
+                        }
                         val siblingPageIds = listOf(leftSiblingPageId, rightSiblingPageId)
                         val siblingLocks = mutableListOf<PageLock>()
                         for (siblingId in siblingPageIds) {
                             if (siblingId != null && !isDone) {
-                                val siblingLock =
-                                    storageManager.fetchPage(siblingId, lockManager.lockMode)
+                                val siblingLock = storageManager.fetchPage(siblingId, lockManager.lockMode)
                                 lockManager.push(siblingLock)
                                 siblingLocks.add(siblingLock)
                                 siblingLock.asWriteView { siblingBuffer ->
-                                    val siblingPage =
-                                        SlottedPage(indexConfig, siblingId, siblingBuffer)
+                                    val siblingPage = SlottedPage(indexConfig, siblingId, siblingBuffer)
                                     val siblingNode = Node.from(indexConfig, siblingPage)
                                     if (siblingNode.hasSurplusKey) {
                                         currentNode.redistribute(siblingNode, parentNode, keyIdx)
@@ -613,7 +611,8 @@ class BTree(
                 try {
                     traceNode.pop()
                 } catch (e: EmptyStackException) {
-                    throw IndexException(ErrorCode.INVALID_TRACE_STACK,
+                    throw IndexException(
+                        ErrorCode.INVALID_TRACE_STACK,
                         EngineErrorDetail(
                             reason =
                                 "Unexpected node trace data invalid. IndexName: $name TargetTableName: $targetTable"
@@ -623,7 +622,8 @@ class BTree(
                 }
             var newPageId: Long = INVALID_PAGE_ID
             if (currentPageLock.pageId != currentPageId) {
-                throw IndexException(ErrorCode.INVALID_TRACE_OBJECT,
+                throw IndexException(
+                    ErrorCode.INVALID_TRACE_OBJECT,
                     EngineErrorDetail(
                         pageId = currentPageId,
                         reason =
@@ -655,9 +655,10 @@ class BTree(
                             // The new leaf goes between node and its old right neighbour, whose left link has to
                             // move to the new leaf too (#78).
                             val oldSiblingLock =
-                                if (oldSiblingPageId == INVALID_PAGE_ID) null
-                                else storageManager.fetchPage(oldSiblingPageId, lockManager.lockMode)
-                                    .also { lockManager.push(it) }
+                                if (oldSiblingPageId == INVALID_PAGE_ID) null else storageManager.fetchPage(
+                                    oldSiblingPageId,
+                                    lockManager.lockMode
+                                ).also { lockManager.push(it) }
                             newLock.asWriteView { newBuffer ->
                                 newPageId = newLock.pageId
                                 val newPage = SlottedPage(indexConfig, newPageId, newBuffer)
@@ -698,7 +699,8 @@ class BTree(
                         }
 
                         else -> {
-                            throw IndexException(ErrorCode.INVALID_NODE_TYPE,
+                            throw IndexException(
+                                ErrorCode.INVALID_NODE_TYPE,
                                 EngineErrorDetail(
                                     pageType = node.page.type,
                                     reason = "Invalid node type",
@@ -779,7 +781,8 @@ class BTree(
         lowerBound: Boolean = false,
     ): Triple<Long, Int, Boolean> {
         if (rootPageId == INVALID_PAGE_ID) {
-            throw IndexException(ErrorCode.EMPTY_TREE,
+            throw IndexException(
+                ErrorCode.EMPTY_TREE,
                 EngineErrorDetail(
                     reason =
                         "Search function should be called when the tree is not empty. IndexName: $name TargetTableName: $targetTable"
