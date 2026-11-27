@@ -523,8 +523,24 @@ class BTree(
                                                 siblingBuffer,
                                             )
                                         val siblingNode = Node.from(indexConfig, siblingPage)
-                                        val (_, rightPageId) =
+                                        val (leftPageId, rightPageId) =
                                             currentNode.merge(siblingNode, parentNode, keyIdx)
+                                        // A leaf merge only repoints left.right; the leaf after the deleted one
+                                        // still points back at it, so repoint its left link too (#78).
+                                        val leftNode =
+                                            if (leftPageId == currentLock.pageId) currentNode else siblingNode
+                                        if (leftNode is LeafNode && leftNode.next != INVALID_PAGE_ID) {
+                                            val newRightPageId = leftNode.next
+                                            val newRightLock =
+                                                storageManager.fetchPage(newRightPageId, lockManager.lockMode)
+                                            lockManager.push(newRightLock)
+                                            newRightLock.asWriteView { newRightBuffer ->
+                                                val newRightPage =
+                                                    SlottedPage(indexConfig, newRightPageId, newRightBuffer)
+                                                val newRightNode = Node.from(indexConfig, newRightPage) as LeafNode
+                                                leftNode.linkNewRightNode(newRightNode)
+                                            }
+                                        }
                                         isMerged = true
                                         val victimPageLock: PageLock =
                                             if (rightPageId == currentLock.pageId) currentLock
@@ -630,10 +646,18 @@ class BTree(
                 val nodeSplitData =
                     when (node) {
                         is LeafNode -> {
+                            val oldSiblingPageId = node.next
                             val nodeSplitData = node.split()
                             val newLock =
                                 storageManager.newPage(PageType.LEAF_NODE, lockManager.lockMode)
+                            // Pushed first: checkOverflowAndSplitFirst reads the new leaf's lock at this position.
                             lockManager.push(newLock)
+                            // The new leaf goes between node and its old right neighbour, whose left link has to
+                            // move to the new leaf too (#78).
+                            val oldSiblingLock =
+                                if (oldSiblingPageId == INVALID_PAGE_ID) null
+                                else storageManager.fetchPage(oldSiblingPageId, lockManager.lockMode)
+                                    .also { lockManager.push(it) }
                             newLock.asWriteView { newBuffer ->
                                 newPageId = newLock.pageId
                                 val newPage = SlottedPage(indexConfig, newPageId, newBuffer)
@@ -642,7 +666,15 @@ class BTree(
                                     nodeSplitData.splitKeys,
                                     nodeSplitData.splitValues,
                                 )
-                                node.linkNewSiblingNode(newNode)
+                                if (oldSiblingLock == null) {
+                                    node.linkNewSiblingNode(newNode, null)
+                                } else {
+                                    oldSiblingLock.asWriteView { buffer ->
+                                        val oldSiblingPage = SlottedPage(indexConfig, oldSiblingPageId, buffer)
+                                        val oldSiblingNode = Node.from(indexConfig, oldSiblingPage) as LeafNode
+                                        node.linkNewSiblingNode(newNode, oldSiblingNode)
+                                    }
+                                }
                                 nodeSplitData
                             }
                         }

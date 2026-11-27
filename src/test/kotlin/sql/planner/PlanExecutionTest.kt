@@ -244,13 +244,11 @@ class PlanExecutionTest : BehaviorSpec({
             }
         }
 
-        // Random queries on this duplicate-heavy table too; backward scans skipped until #78 is fixed (see below).
-        `when`("hundreds of random queries are planned and run, forward scans only") {
+        // Random queries on this duplicate-heavy table too.
+        `when`("hundreds of random queries are planned and run") {
             then("every one returns what a full scan + filter + sort returns") {
                 val randomQueries = Random(77).let { random -> List(400) { randomQuery(random, table = "t", bValues = -2..12) } }
-                val forward = randomQueries.filterNot { scansBackward(t.table, it) }
-                withClue("most queries should still run") { (forward.size > randomQueries.size / 2) shouldBe true }
-                for (sql in forward) check(t, sql)
+                for (sql in randomQueries) check(t, sql)
             }
         }
     }
@@ -261,20 +259,10 @@ class PlanExecutionTest : BehaviorSpec({
         // Fixed seed, so a failure always reproduces; the SQL and the plan are in the failure message.
         val randomQueries = Random(55).let { random -> List(400) { randomQuery(random) } }
 
-        // Backward index scans are skipped here until #78 is fixed: a leaf split never repoints the old right neighbour's left-sibling
-        // link at the new leaf (LeafNode.linkNewSiblingNode), so walking left jumps over the new leaf's rows. On this
-        // table `order by b` (a backward walk of the b DESC index) returns 88 of 120 rows. Forward scans are fine.
-        `when`("hundreds of random queries are planned and run, forward scans only") {
+        // Includes backward index scans: before #78 was fixed, `order by b` (a backward walk of the b DESC index)
+        // returned 88 of these 120 rows, because a leaf split left the old right neighbour's left link stale.
+        `when`("hundreds of random queries are planned and run") {
             then("every one returns what a full scan + filter + sort returns") {
-                val forward = randomQueries.filterNot { scansBackward(u.table, it) }
-                withClue("most queries should still run") { (forward.size > randomQueries.size / 2) shouldBe true }
-                for (sql in forward) check(u, sql)
-            }
-        }
-
-        // Disabled until #78 is fixed (see above).
-        `when`("hundreds of random queries are planned and run, backward scans included") {
-            xthen("every one returns what a full scan + filter + sort returns") {
                 for (sql in randomQueries) check(u, sql)
             }
         }
@@ -299,35 +287,13 @@ class PlanExecutionTest : BehaviorSpec({
             }
         }
 
-        // Backward scans skipped until #78 is fixed, as above.
-        `when`("hundreds of random queries are planned and run, forward scans only") {
+        `when`("hundreds of random queries are planned and run") {
             then("every one returns what a full scan + filter + sort returns") {
-                val forward = randomQueries.filterNot { scansBackward(w.table, it) }
-                withClue("most queries should still run") { (forward.size > randomQueries.size / 2) shouldBe true }
-                for (sql in forward) check(w, sql)
+                for (sql in randomQueries) check(w, sql)
             }
         }
     }
 })
-
-/** Whether [sql]'s plan walks an index backward: its first ORDER BY column runs against the key's declared direction. */
-private fun scansBackward(table: Table, sql: String): Boolean {
-    val select = SqlParser.parse(sql) as Select
-    var plan = Planner(table.rowSchema, table.indexes).plan(select, select.where?.let { bind(it, table.rowSchema) })
-    while (true) {
-        plan = when (plan) {
-            is Limit -> plan.child
-            is Sort -> plan.child
-            is Filter -> plan.child
-            is FullScan -> return false
-            is IndexScan -> {
-                val first = plan.orderBy.firstOrNull() ?: return false
-                val index = table.indexes.first { it.indexName == plan.indexName }
-                return index.keyColumns.first { it.name == first.name }.descending != first.descending
-            }
-        }
-    }
-}
 
 /**
  * A random `select * from [table] ...`: one to three AND-ed terms (mostly index-friendly comparisons, some that only a
