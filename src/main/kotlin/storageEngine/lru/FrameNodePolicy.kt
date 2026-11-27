@@ -90,4 +90,10 @@ class FrameNodePolicy(
             node.isPinned = true
         }
     }
+
+    override fun remove(frameId: Int) {
+        val node = map[frameId]
+        map.remove(frameId)
+        node?.let { generationalList.remove(it) }
+    }
 }

@@ -30,10 +30,10 @@ import kotlin.uuid.Uuid
  * follows right links, so it's the reference). Entries are compared as (key, id) pairs, so even among duplicates a
  * skipped leaf shows up.
  *
- * The pool is large on purpose: freed pages get reused, and with evictions that hits #82 instead.
+ * The pool is small on purpose, so merges free pages that later splits reuse while evictions happen (#82).
  */
 class BTreeSiblingLinkTest : BehaviorSpec({
-    val config = SimpleConfig(StorageConfig(dbPath = "test-btree-sibling-link-${Uuid.random()}.db", poolSize = 10000))
+    val config = SimpleConfig(StorageConfig(dbPath = "test-btree-sibling-link-${Uuid.random()}.db", poolSize = 32))
     lateinit var diskManager: DiskManager
     lateinit var storageManager: StorageManager
 
