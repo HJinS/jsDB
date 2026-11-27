@@ -183,17 +183,31 @@ class BufferPoolManager(
 
         globalLatch.lock()
         try {
-            frameId = getFreeFrameId()
+            // #82: pageId may still be cached - e.g. a freed page FreeSpaceManager.getFreePageID just read for the
+            // free list's next pointer. A second frame for it would let the old one's eviction drop the new
+            // mapping, so the old frame is reused instead. Checked before anything changes: nothing to undo.
+            val cachedFrameId = pageTable[pageId]
+            if (cachedFrameId != null && frames[cachedFrameId].pinCount.get() > 0)
+                throw StorageEngineException(ErrorCode.PAGE_IN_USE,
+                    EngineErrorDetail(
+                        pageId = pageId,
+                        reason = "Page is currently in use (pin count > 0) and cannot be allocated again.",
+                    )
+                )
+            frameId = cachedFrameId ?: getFreeFrameId()
             frame = frames[frameId]
             frame.latch.writeLock().lock()
             val currentPageId = frame.pageId.get()
-            if (frame.isDirty.get() && currentPageId != INVALID_PAGE_ID) {
+            // The old copy of pageId itself is about to be overwritten, so it's never written back.
+            if (frame.isDirty.get() && currentPageId != INVALID_PAGE_ID && currentPageId != pageId) {
                 victimPageId = currentPageId
             }
             pageTable.remove(currentPageId)
             pageTable[pageId] = frameId
             frame.pinCount.set(1)
             replacer.pin(frameId)
+        } catch (e: StorageEngineException) {
+            throw e
         } catch (e: Exception) {
             throw StorageEngineException(ErrorCode.UNEXPECTED,
                 EngineErrorDetail(
@@ -333,6 +347,7 @@ class BufferPoolManager(
                 )
             frame.latch.writeLock().lock()
             try {
+                replacer.remove(frameId)
                 pageTable.remove(pageId)
                 frame.pageId.set(INVALID_PAGE_ID)
                 frame.pinCount.set(0)

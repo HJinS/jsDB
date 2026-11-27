@@ -26,4 +26,7 @@ interface ReplacementPolicy {
 
     /** Marks [frameId] as pinned (in use), excluding it from [evict] until [unpin]. */
     fun pin(frameId: Int)
+
+    /** Forgets [frameId] entirely (for a frame going back to the free list); a later [pin] registers it afresh. */
+    fun remove(frameId: Int)
 }
