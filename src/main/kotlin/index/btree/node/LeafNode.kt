@@ -60,13 +60,15 @@ class LeafNode(
     }
 
     /**
-     * Update the linked list of the leaf node.
+     * Links [siblingNode], the new right half of a split, in between this leaf and [originalSiblingNode] (this leaf's
+     * right neighbour before the split, or null if it had none), in both directions.
      * */
-    fun linkNewSiblingNode(siblingNode: LeafNode) {
+    fun linkNewSiblingNode(siblingNode: LeafNode, originalSiblingNode: LeafNode?) {
         val nextTemp = page.rightSiblingPageId
         siblingNode.page.rightSiblingPageId = nextTemp
         siblingNode.page.leftSiblingPageId = this.page.pageId
         page.rightSiblingPageId = siblingNode.page.pageId
+        originalSiblingNode?.let { it.page.leftSiblingPageId = siblingNode.pageId }
     }
 
     override fun deleteAllData(): Pair<List<ByteArray>, List<ByteArray>> {
@@ -134,7 +136,6 @@ class LeafNode(
      * */
     override fun merge(targetNode: Node, parentNode: InternalNode, keyIdx: Int): Pair<Long, Long> {
         orderNode(targetNode, parentNode, keyIdx).let { (separationKey, lNode, rNode) ->
-
             val leftNode = lNode as LeafNode
             val rightNode = rNode as LeafNode
             val (rKey, rValue) = rightNode.deleteAllData()
@@ -145,5 +146,13 @@ class LeafNode(
             parentNode.deleteData(separationKey)
             return leftNode.pageId to rightNode.pageId
         }
+    }
+
+    /**
+     * Points [rightNode]'s left link back at this leaf. After a merge, [merge] has already set this leaf's right link
+     * to [rightNode]; the caller has to fetch [rightNode] to finish the other direction, since it's a third page.
+     */
+    fun linkNewRightNode(rightNode: LeafNode) {
+        rightNode.page.leftSiblingPageId = this.pageId
     }
 }

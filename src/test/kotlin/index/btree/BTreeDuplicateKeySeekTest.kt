@@ -90,10 +90,9 @@ class BTreeDuplicateKeySeekTest : BehaviorSpec({
                 }
             }
 
-            // Disabled until #78 is fixed: duplicates make middle leaves split too (an insert descends to whichever
-            // equal separator the search hits), and a split leaves the old right neighbour's left link stale, so a
-            // long backward walk skips leaves. The seek position itself is checked above.
-            xthen("every entry < the key comes back") {
+            // #78: duplicates make middle leaves split too (an insert descends to whichever equal separator the
+            // search hits), so this long backward walk needs every left link to be right.
+            then("every entry < the key comes back") {
                 for (v in 0 until keyCount) withClue("seek to $v") {
                     tree.seek(v, ScanDirection.BACKWARD).size shouldBe v * duplicates
                 }

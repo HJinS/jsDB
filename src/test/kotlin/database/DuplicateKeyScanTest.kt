@@ -6,6 +6,7 @@ import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import schema.Bound
+import schema.ColumnOrder
 import schema.ColumnType
 import schema.IndexColumn
 import schema.IndexKeySchema
@@ -20,8 +21,8 @@ import kotlin.uuid.Uuid
  * a scan that starts *exactly* on a stored key used to land on whichever duplicate a binary search hit, skipping the
  * ones before it.
  *
- * Only forward scans: the rows go in out of key order, so leaves split in the middle and backward walks would hit
- * #78 instead. Backward seeks onto duplicates are covered in `BTreeTest`.
+ * Scans run both ways: the rows go in out of key order, so leaves split in the middle, and a backward walk also
+ * needs every left sibling link to be right (#78).
  */
 class DuplicateKeyScanTest : BehaviorSpec({
     val dbPath = "test-duplicate-key-scan-${Uuid.random()}.db"
@@ -124,12 +125,12 @@ class DuplicateKeyScanTest : BehaviorSpec({
         }).flatMap { listOf(Bound(it, true), Bound(it, false)) }
 
         for ((name, keyColumns) in indexes) {
-            `when`("scanning $name forward with every combination of bounds") {
+            `when`("scanning $name forward and backward with every combination of bounds") {
                 then("each scan returns exactly the rows in range, in index order") {
                     val usable = bounds.filter { (it.value?.size ?: 0) <= keyColumns.size }
                     val failures = mutableListOf<String>()
                     for (lower in usable) for (upper in usable) {
-                        val want = rows.filter { row ->
+                        val inRange = rows.filter { row ->
                             val lowerOk = lower.value?.let { v ->
                                 val c = compareToBound(row, v, keyColumns); if (lower.isInclusive) c >= 0 else c > 0
                             } ?: true
@@ -138,12 +139,25 @@ class DuplicateKeyScanTest : BehaviorSpec({
                             } ?: true
                             lowerOk && upperOk
                         }.sortedWith { x, y -> compareToBound(x, keyColumns.map { y[it.name] }, keyColumns) }
-                        val got = table.selectByRange(name, lower, upper, emptyList())
 
-                        // Rows with the same key may come in any order, so compare the key sequence and the id set.
-                        fun keys(rows: List<Row>) = rows.map { row -> keyColumns.map { row[it.name] } }
-                        if (keys(got) != keys(want) || ids(got).sorted() != ids(want).sorted()) {
-                            failures += "lower=$lower upper=$upper: expected ${want.size} rows but got ${got.size}"
+                        // Backward needs an ORDER BY on the first free key column, against its declared direction.
+                        val pinned = (lower.value ?: emptyList()).zip(upper.value ?: emptyList())
+                            .takeWhile { (l, u) -> l == u }.size
+                        val free = keyColumns.drop(pinned).firstOrNull()
+                        val directions = listOfNotNull(
+                            false to emptyList<ColumnOrder>(),
+                            free?.let { true to listOf(ColumnOrder(it.name, !it.descending)) },
+                        )
+                        for ((backward, orderBy) in directions) {
+                            val want = if (backward) inRange.reversed() else inRange
+                            val got = table.selectByRange(name, lower, upper, orderBy)
+
+                            // Rows with the same key may come in any order, so compare the key sequence and the id set.
+                            fun keys(rows: List<Row>) = rows.map { row -> keyColumns.map { row[it.name] } }
+                            if (keys(got) != keys(want) || ids(got).sorted() != ids(want).sorted()) {
+                                failures += "lower=$lower upper=$upper ${if (backward) "BACKWARD" else "FORWARD"}: " +
+                                    "expected ${want.size} rows but got ${got.size}"
+                            }
                         }
                     }
                     withClue("${failures.size} scans were wrong, e.g.\n" + failures.take(15).joinToString("\n")) {
